@@ -5,13 +5,23 @@ import { prisma } from "@/app/lib/prisma";
 
 const estados = [
   "Nuevo lead",
-  "Contactado",
+  "Visitado",
   "Presupuesto enviado",
   "Aceptado",
-  "En curso",
-  "Finalizado",
-  "Archivado",
-];
+  "En fabricación",
+  "Instalado",
+  "Perdido",
+] as const;
+
+const estadoStyles: Record<(typeof estados)[number], string> = {
+  "Nuevo lead": "bg-sky-100 text-sky-900 ring-sky-200",
+  Visitado: "bg-indigo-100 text-indigo-900 ring-indigo-200",
+  "Presupuesto enviado": "bg-amber-100 text-amber-950 ring-amber-200",
+  Aceptado: "bg-emerald-100 text-emerald-900 ring-emerald-200",
+  "En fabricación": "bg-violet-100 text-violet-900 ring-violet-200",
+  Instalado: "bg-teal-100 text-teal-900 ring-teal-200",
+  Perdido: "bg-rose-100 text-rose-900 ring-rose-200",
+};
 
 const inputClass =
   "w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-950 outline-none transition placeholder:text-neutral-400 focus:border-emerald-700 focus:ring-2 focus:ring-emerald-100";
@@ -37,20 +47,64 @@ function requiredString(formData: FormData, key: string) {
   return value;
 }
 
+function estadoValue(formData: FormData) {
+  const value = optionalString(formData, "estado") ?? "Nuevo lead";
+  if (!estados.includes(value as (typeof estados)[number])) {
+    throw new Error("Estado no valido.");
+  }
+
+  return value;
+}
+
+function optionalDate(formData: FormData, key: string) {
+  const value = optionalString(formData, key);
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) {
+    throw new Error(`La fecha ${key} no es valida.`);
+  }
+
+  return date;
+}
+
+function presupuestoValue(formData: FormData) {
+  const value = optionalString(formData, "presupuesto");
+  if (!value) {
+    return null;
+  }
+
+  const normalized = value.replace(",", ".");
+  if (!/^\d+(\.\d{1,2})?$/.test(normalized)) {
+    throw new Error("El presupuesto debe ser un importe valido.");
+  }
+
+  return normalized;
+}
+
+function clienteData(formData: FormData) {
+  return {
+    nombre: requiredString(formData, "nombre"),
+    telefono: optionalString(formData, "telefono"),
+    email: optionalString(formData, "email"),
+    direccion: optionalString(formData, "direccion"),
+    localidad: optionalString(formData, "localidad"),
+    tipoTrabajo: optionalString(formData, "tipoTrabajo"),
+    presupuesto: presupuestoValue(formData),
+    fechaAlta: optionalDate(formData, "fechaAlta") ?? new Date(),
+    fechaSeguimiento: optionalDate(formData, "fechaSeguimiento"),
+    estado: estadoValue(formData),
+    observaciones: optionalString(formData, "observaciones"),
+  };
+}
+
 async function createCliente(formData: FormData) {
   "use server";
 
   await prisma.cliente.create({
-    data: {
-      nombre: requiredString(formData, "nombre"),
-      telefono: optionalString(formData, "telefono"),
-      email: optionalString(formData, "email"),
-      direccion: optionalString(formData, "direccion"),
-      localidad: optionalString(formData, "localidad"),
-      tipoTrabajo: optionalString(formData, "tipoTrabajo"),
-      estado: optionalString(formData, "estado") ?? "Nuevo lead",
-      observaciones: optionalString(formData, "observaciones"),
-    },
+    data: clienteData(formData),
   });
 
   revalidatePath("/clientes");
@@ -66,28 +120,52 @@ async function updateCliente(formData: FormData) {
 
   await prisma.cliente.update({
     where: { id },
-    data: {
-      nombre: requiredString(formData, "nombre"),
-      telefono: optionalString(formData, "telefono"),
-      email: optionalString(formData, "email"),
-      direccion: optionalString(formData, "direccion"),
-      localidad: optionalString(formData, "localidad"),
-      tipoTrabajo: optionalString(formData, "tipoTrabajo"),
-      estado: optionalString(formData, "estado") ?? "Nuevo lead",
-      observaciones: optionalString(formData, "observaciones"),
-    },
+    data: clienteData(formData),
   });
 
   revalidatePath("/clientes");
 }
 
-async function getClientes() {
+async function getClientes(query: string) {
   return prisma.cliente.findMany({
-    orderBy: { updatedAt: "desc" },
+    where: query
+      ? {
+          OR: [
+            { nombre: { contains: query, mode: "insensitive" } },
+            { telefono: { contains: query, mode: "insensitive" } },
+          ],
+        }
+      : undefined,
+    orderBy: { fechaAlta: "desc" },
   });
 }
 
+async function getResumen() {
+  const [
+    leads,
+    presupuestosEnviados,
+    aceptados,
+    enFabricacion,
+    instalados,
+  ] = await Promise.all([
+    prisma.cliente.count(),
+    prisma.cliente.count({ where: { estado: "Presupuesto enviado" } }),
+    prisma.cliente.count({ where: { estado: "Aceptado" } }),
+    prisma.cliente.count({ where: { estado: "En fabricación" } }),
+    prisma.cliente.count({ where: { estado: "Instalado" } }),
+  ]);
+
+  return {
+    leads,
+    presupuestosEnviados,
+    aceptados,
+    enFabricacion,
+    instalados,
+  };
+}
+
 type Cliente = Awaited<ReturnType<typeof getClientes>>[number];
+type Resumen = Awaited<ReturnType<typeof getResumen>>;
 
 function Field({
   label,
@@ -95,12 +173,14 @@ function Field({
   type = "text",
   defaultValue,
   required,
+  step,
 }: {
   label: string;
   name: string;
   type?: string;
   defaultValue?: string | null;
   required?: boolean;
+  step?: string;
 }) {
   return (
     <label className="flex flex-col gap-1.5">
@@ -111,20 +191,23 @@ function Field({
         type={type}
         defaultValue={defaultValue ?? ""}
         required={required}
+        step={step}
       />
     </label>
   );
 }
 
 function EstadoSelect({ defaultValue }: { defaultValue?: string | null }) {
+  const current: (typeof estados)[number] = estados.includes(
+    defaultValue as (typeof estados)[number],
+  )
+    ? (defaultValue as (typeof estados)[number])
+    : "Nuevo lead";
+
   return (
     <label className="flex flex-col gap-1.5">
       <span className={labelClass}>Estado</span>
-      <select
-        className={inputClass}
-        name="estado"
-        defaultValue={defaultValue ?? "Nuevo lead"}
-      >
+      <select className={inputClass} name="estado" defaultValue={current}>
         {estados.map((estado) => (
           <option key={estado} value={estado}>
             {estado}
@@ -181,6 +264,25 @@ function ClienteForm({
           name="tipoTrabajo"
           defaultValue={cliente?.tipoTrabajo}
         />
+        <Field
+          label="Presupuesto (€)"
+          name="presupuesto"
+          type="number"
+          step="0.01"
+          defaultValue={cliente?.presupuesto?.toString()}
+        />
+        <Field
+          label="Fecha de alta"
+          name="fechaAlta"
+          type="date"
+          defaultValue={toDateInputValue(cliente?.fechaAlta)}
+        />
+        <Field
+          label="Fecha de seguimiento"
+          name="fechaSeguimiento"
+          type="date"
+          defaultValue={toDateInputValue(cliente?.fechaSeguimiento)}
+        />
         <EstadoSelect defaultValue={cliente?.estado} />
       </div>
       <label className="flex flex-col gap-1.5">
@@ -203,7 +305,15 @@ function ClienteForm({
   );
 }
 
-function formatDate(date: Date) {
+function toDateInputValue(date?: Date | null) {
+  return date ? date.toISOString().slice(0, 10) : "";
+}
+
+function formatDate(date?: Date | null) {
+  if (!date) {
+    return "-";
+  }
+
   return new Intl.DateTimeFormat("es-ES", {
     day: "2-digit",
     month: "2-digit",
@@ -211,16 +321,92 @@ function formatDate(date: Date) {
   }).format(date);
 }
 
-function EmptyState() {
+function formatCurrency(value: Cliente["presupuesto"]) {
+  if (!value) {
+    return "-";
+  }
+
+  return new Intl.NumberFormat("es-ES", {
+    style: "currency",
+    currency: "EUR",
+  }).format(Number(value));
+}
+
+function estadoClass(estado: string) {
+  return (
+    estadoStyles[estado as (typeof estados)[number]] ??
+    "bg-neutral-100 text-neutral-800 ring-neutral-200"
+  );
+}
+
+function EmptyState({ hasSearch }: { hasSearch: boolean }) {
   return (
     <div className="rounded-md border border-dashed border-neutral-300 bg-white p-8 text-center">
       <p className="text-base font-semibold text-neutral-950">
-        Todavia no hay clientes
+        {hasSearch ? "No hay clientes con esa busqueda" : "Todavia no hay clientes"}
       </p>
       <p className="mt-2 text-sm text-neutral-500">
-        Crea el primer registro desde el formulario superior.
+        {hasSearch
+          ? "Prueba con otro nombre o telefono."
+          : "Crea el primer registro desde el formulario superior."}
       </p>
     </div>
+  );
+}
+
+function ResumenComercial({ resumen }: { resumen: Resumen }) {
+  const items = [
+    ["Leads", resumen.leads],
+    ["Presupuestos enviados", resumen.presupuestosEnviados],
+    ["Aceptados", resumen.aceptados],
+    ["En fabricacion", resumen.enFabricacion],
+    ["Instalados", resumen.instalados],
+  ] as const;
+
+  return (
+    <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      {items.map(([label, value]) => (
+        <div
+          key={label}
+          className="rounded-md border border-neutral-300 bg-white px-4 py-3 shadow-sm"
+        >
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
+            {label}
+          </p>
+          <p className="mt-2 text-2xl font-semibold text-neutral-950">{value}</p>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+function SearchForm({ query }: { query: string }) {
+  return (
+    <form action="/clientes" className="flex flex-col gap-3 sm:flex-row">
+      <input
+        className={inputClass}
+        name="q"
+        type="search"
+        defaultValue={query}
+        placeholder="Buscar por nombre o telefono"
+      />
+      <div className="flex gap-2">
+        <button
+          type="submit"
+          className="inline-flex h-10 items-center justify-center rounded-md bg-neutral-950 px-4 text-sm font-semibold text-white transition hover:bg-neutral-800"
+        >
+          Buscar
+        </button>
+        {query ? (
+          <Link
+            href="/clientes"
+            className="inline-flex h-10 items-center justify-center rounded-md border border-neutral-300 px-4 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
+          >
+            Limpiar
+          </Link>
+        ) : null}
+      </div>
+    </form>
   );
 }
 
@@ -232,24 +418,24 @@ function ClienteDetails({ cliente }: { cliente: Cliente }) {
         <dd>{cliente.telefono || "-"}</dd>
       </div>
       <div>
-        <dt className="font-medium text-neutral-500">Email</dt>
-        <dd>{cliente.email || "-"}</dd>
+        <dt className="font-medium text-neutral-500">Presupuesto</dt>
+        <dd>{formatCurrency(cliente.presupuesto)}</dd>
       </div>
       <div>
-        <dt className="font-medium text-neutral-500">Direccion</dt>
-        <dd>{cliente.direccion || "-"}</dd>
+        <dt className="font-medium text-neutral-500">Alta</dt>
+        <dd>{formatDate(cliente.fechaAlta)}</dd>
+      </div>
+      <div>
+        <dt className="font-medium text-neutral-500">Seguimiento</dt>
+        <dd>{formatDate(cliente.fechaSeguimiento)}</dd>
+      </div>
+      <div>
+        <dt className="font-medium text-neutral-500">Trabajo</dt>
+        <dd>{cliente.tipoTrabajo || "-"}</dd>
       </div>
       <div>
         <dt className="font-medium text-neutral-500">Localidad</dt>
         <dd>{cliente.localidad || "-"}</dd>
-      </div>
-      <div>
-        <dt className="font-medium text-neutral-500">Tipo de trabajo</dt>
-        <dd>{cliente.tipoTrabajo || "-"}</dd>
-      </div>
-      <div>
-        <dt className="font-medium text-neutral-500">Actualizado</dt>
-        <dd>{formatDate(cliente.updatedAt)}</dd>
       </div>
     </dl>
   );
@@ -261,35 +447,46 @@ function ClientesTable({ clientes }: { clientes: Cliente[] }) {
       <table className="w-full border-collapse text-left text-sm">
         <thead className="bg-neutral-100 text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
           <tr>
+            <th className="px-4 py-3">Alta</th>
             <th className="px-4 py-3">Cliente</th>
-            <th className="px-4 py-3">Contacto</th>
+            <th className="px-4 py-3">Telefono</th>
             <th className="px-4 py-3">Trabajo</th>
+            <th className="px-4 py-3">Presupuesto</th>
+            <th className="px-4 py-3">Seguimiento</th>
             <th className="px-4 py-3">Estado</th>
-            <th className="px-4 py-3">Actualizado</th>
             <th className="px-4 py-3 text-right">Acciones</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-neutral-200">
           {clientes.map((cliente) => (
             <tr key={cliente.id} className="align-top">
+              <td className="whitespace-nowrap px-4 py-4 text-neutral-700">
+                {formatDate(cliente.fechaAlta)}
+              </td>
               <td className="px-4 py-4">
                 <p className="font-semibold text-neutral-950">{cliente.nombre}</p>
                 <p className="mt-1 text-neutral-500">{cliente.localidad || "-"}</p>
               </td>
               <td className="px-4 py-4 text-neutral-700">
-                <p>{cliente.telefono || "-"}</p>
-                <p className="mt-1">{cliente.email || "-"}</p>
+                {cliente.telefono || "-"}
               </td>
               <td className="px-4 py-4 text-neutral-700">
                 {cliente.tipoTrabajo || "-"}
               </td>
+              <td className="whitespace-nowrap px-4 py-4 font-semibold text-neutral-950">
+                {formatCurrency(cliente.presupuesto)}
+              </td>
+              <td className="whitespace-nowrap px-4 py-4 text-neutral-700">
+                {formatDate(cliente.fechaSeguimiento)}
+              </td>
               <td className="px-4 py-4">
-                <span className="inline-flex rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900">
+                <span
+                  className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${estadoClass(
+                    cliente.estado,
+                  )}`}
+                >
                   {cliente.estado}
                 </span>
-              </td>
-              <td className="px-4 py-4 text-neutral-700">
-                {formatDate(cliente.updatedAt)}
               </td>
               <td className="px-4 py-4 text-right">
                 <details className="group">
@@ -327,10 +524,14 @@ function ClientesCards({ clientes }: { clientes: Cliente[] }) {
                 {cliente.nombre}
               </h2>
               <p className="mt-1 text-sm text-neutral-500">
-                {cliente.localidad || "Sin localidad"}
+                Alta: {formatDate(cliente.fechaAlta)}
               </p>
             </div>
-            <span className="inline-flex w-fit rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900">
+            <span
+              className={`inline-flex w-fit rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${estadoClass(
+                cliente.estado,
+              )}`}
+            >
               {cliente.estado}
             </span>
           </div>
@@ -360,10 +561,20 @@ function ClientesCards({ clientes }: { clientes: Cliente[] }) {
   );
 }
 
-export default async function ClientesPage() {
+type ClientesPageProps = {
+  searchParams: Promise<{ q?: string | string[] }>;
+};
+
+export default async function ClientesPage({ searchParams }: ClientesPageProps) {
   await connection();
 
-  const clientes = await getClientes();
+  const params = await searchParams;
+  const queryParam = Array.isArray(params.q) ? params.q[0] : params.q;
+  const query = queryParam?.trim() ?? "";
+  const [clientes, resumen] = await Promise.all([
+    getClientes(query),
+    getResumen(),
+  ]);
 
   return (
     <main className="min-h-screen bg-neutral-100 px-5 py-6 text-neutral-950 sm:px-8">
@@ -377,13 +588,15 @@ export default async function ClientesPage() {
               Volver al panel
             </Link>
             <h1 className="mt-3 text-3xl font-semibold tracking-normal text-neutral-950">
-              Clientes
+              Gestor comercial Carpinteria Juanser
             </h1>
             <p className="mt-2 text-sm text-neutral-600">
-              {clientes.length} registros en cartera
+              {clientes.length} registros visibles ordenados por fecha de alta
             </p>
           </div>
         </header>
+
+        <ResumenComercial resumen={resumen} />
 
         <section className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
           <div className="mb-5">
@@ -395,8 +608,14 @@ export default async function ClientesPage() {
         </section>
 
         <section className="grid gap-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-neutral-950">Listado</h2>
+          <div className="grid gap-3 md:grid-cols-[1fr_minmax(320px,520px)] md:items-end">
+            <div>
+              <h2 className="text-lg font-semibold text-neutral-950">Listado</h2>
+              <p className="mt-1 text-sm text-neutral-500">
+                Tabla comercial por fecha, estado y seguimiento.
+              </p>
+            </div>
+            <SearchForm query={query} />
           </div>
           {clientes.length > 0 ? (
             <>
@@ -404,7 +623,7 @@ export default async function ClientesPage() {
               <ClientesCards clientes={clientes} />
             </>
           ) : (
-            <EmptyState />
+            <EmptyState hasSearch={Boolean(query)} />
           )}
         </section>
       </div>

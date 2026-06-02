@@ -15,6 +15,9 @@ model Cliente {
   direccion     String?
   localidad     String?
   tipoTrabajo   String?
+  presupuesto      Decimal? @db.Decimal(12, 2)
+  fechaAlta        DateTime @default(now())
+  fechaSeguimiento DateTime?
   observaciones String?
   estado        String   @default("Nuevo lead")
   createdAt     DateTime @default(now())
