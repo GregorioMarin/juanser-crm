@@ -27,9 +27,12 @@ const inputClass =
   "w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-950 outline-none transition placeholder:text-neutral-400 focus:border-emerald-700 focus:ring-2 focus:ring-emerald-100";
 
 const labelClass = "text-sm font-medium text-neutral-700";
-const maxImageSize = 5 * 1024 * 1024;
+const maxImageSize = 10 * 1024 * 1024;
+const maxVideoSize = 100 * 1024 * 1024;
 const allowedImageTypes = ["image/jpeg", "image/png", "image/webp"];
-const allowedExtensions = ["jpg", "jpeg", "png", "webp"];
+const allowedVideoTypes = ["video/mp4", "video/quicktime", "video/webm"];
+const allowedImageExtensions = ["jpg", "jpeg", "png", "webp"];
+const allowedVideoExtensions = ["mp4", "mov", "webm"];
 const fotoTipos = ["CLIENTE", "JUANSER"] as const;
 const presupuestoEstados = ["PENDIENTE", "ACEPTADO", "RECHAZADO"] as const;
 
@@ -67,7 +70,7 @@ function requiredId(formData: FormData, key: string) {
 function requiredFotoTipo(formData: FormData) {
   const value = optionalString(formData, "tipo");
   if (!fotoTipos.includes(value as FotoTipo)) {
-    throw new Error("Tipo de imagen no valido.");
+    throw new Error("Tipo de archivo no valido.");
   }
 
   return value as FotoTipo;
@@ -172,26 +175,37 @@ function presupuestoLineasData(formData: FormData) {
   return lineas;
 }
 
-function requiredImageFile(formData: FormData) {
-  const file = formData.get("imagen");
+function requiredMediaFile(formData: FormData) {
+  const file = formData.get("archivo");
   if (!(file instanceof File) || file.size === 0) {
-    throw new Error("Selecciona una imagen.");
-  }
-
-  if (file.size > maxImageSize) {
-    throw new Error("La imagen no puede superar 5 MB.");
-  }
-
-  if (!allowedImageTypes.includes(file.type)) {
-    throw new Error("Solo se aceptan imagenes jpg, jpeg, png o webp.");
+    throw new Error("Selecciona un archivo.");
   }
 
   const extension = file.name.split(".").pop()?.toLowerCase();
-  if (!extension || !allowedExtensions.includes(extension)) {
-    throw new Error("Extension de imagen no valida.");
+  const isImage =
+    Boolean(extension && allowedImageExtensions.includes(extension)) &&
+    allowedImageTypes.includes(file.type);
+  const isVideo =
+    Boolean(extension && allowedVideoExtensions.includes(extension)) &&
+    allowedVideoTypes.includes(file.type);
+
+  if (!isImage && !isVideo) {
+    throw new Error("Solo se aceptan imagenes jpg, jpeg, png, webp o videos mp4, mov, webm.");
   }
 
-  return { file, extension };
+  if (isImage && file.size > maxImageSize) {
+    throw new Error("La imagen no puede superar 10 MB.");
+  }
+
+  if (isVideo && file.size > maxVideoSize) {
+    throw new Error("El video no puede superar 100 MB.");
+  }
+
+  return {
+    file,
+    extension: extension as string,
+    tipoArchivo: isVideo ? ("VIDEO" as const) : ("IMAGEN" as const),
+  };
 }
 
 function uploadFolder(tipo: FotoTipo) {
@@ -344,7 +358,7 @@ async function uploadFotoCliente(formData: FormData) {
   const clienteId = requiredId(formData, "clienteId");
   const tipo = requiredFotoTipo(formData);
   const descripcion = optionalString(formData, "descripcion");
-  const { file, extension } = requiredImageFile(formData);
+  const { file, extension, tipoArchivo } = requiredMediaFile(formData);
 
   const cliente = await prisma.cliente.findUnique({
     where: { id: clienteId },
@@ -369,7 +383,7 @@ async function uploadFotoCliente(formData: FormData) {
   );
   const savedFile = await stat(filePath);
   if (!savedFile.isFile() || savedFile.size === 0) {
-    throw new Error("La imagen no se ha guardado correctamente.");
+    throw new Error("El archivo no se ha guardado correctamente.");
   }
 
   await prisma.fotoCliente.create({
@@ -379,12 +393,16 @@ async function uploadFotoCliente(formData: FormData) {
       url: relativeUrl,
       nombreArchivo: file.name,
       descripcion,
+      mimeType: file.type,
+      tamanoBytes: savedFile.size,
+      tipoArchivo,
     },
   });
 
-  console.info("FotoCliente subida", {
+  console.info("Archivo multimedia de cliente subido", {
     clienteId,
     tipo,
+    tipoArchivo,
     url: relativeUrl,
     filePath,
     size: savedFile.size,
@@ -393,9 +411,13 @@ async function uploadFotoCliente(formData: FormData) {
     clienteId,
     tipo: tipo === "CLIENTE" ? "IMAGEN_CLIENTE_SUBIDA" : "IMAGEN_JUANSER_SUBIDA",
     descripcion:
-      tipo === "CLIENTE"
-        ? "Imagen aportada por el cliente subida"
-        : "Imagen/propuesta de Juanser subida",
+      tipoArchivo === "VIDEO"
+        ? tipo === "CLIENTE"
+          ? "Vídeo aportado por el cliente subido"
+          : "Vídeo/propuesta de Juanser subido"
+        : tipo === "CLIENTE"
+          ? "Imagen aportada por el cliente subida"
+          : "Imagen/propuesta de Juanser subida",
   });
 
   revalidatePath(`/clientes/${clienteId}`);
@@ -414,7 +436,7 @@ async function deleteFotoCliente(formData: FormData) {
     },
   });
   if (!foto) {
-    throw new Error("Imagen no encontrada.");
+    throw new Error("Archivo no encontrado.");
   }
 
   const expectedPrefix = `/uploads/clientes/${clienteId}/`;
@@ -498,6 +520,23 @@ function formatCurrency(value: unknown) {
     style: "currency",
     currency: "EUR",
   }).format(Number(value));
+}
+
+function formatFileSize(bytes?: number | null) {
+  if (!bytes) {
+    return "-";
+  }
+
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+
+  const kb = bytes / 1024;
+  if (kb < 1024) {
+    return `${kb.toFixed(1)} KB`;
+  }
+
+  return `${(kb / 1024).toFixed(1)} MB`;
 }
 
 function displayTipoCliente(
@@ -584,17 +623,17 @@ function FotoUploadForm({ clienteId }: { clienteId: number }) {
         <label className="flex flex-col gap-1.5">
           <span className={labelClass}>Tipo</span>
           <select className={inputClass} name="tipo" defaultValue="CLIENTE">
-            <option value="CLIENTE">Imagen aportada por el cliente</option>
+            <option value="CLIENTE">Archivo aportado por el cliente</option>
             <option value="JUANSER">Propuesta de Juanser</option>
           </select>
         </label>
         <label className="flex flex-col gap-1.5">
-          <span className={labelClass}>Imagen</span>
+          <span className={labelClass}>Archivo multimedia</span>
           <input
             className={inputClass}
-            name="imagen"
+            name="archivo"
             type="file"
-            accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+            accept=".jpg,.jpeg,.png,.webp,.mp4,.mov,.webm,image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm"
             required
           />
         </label>
@@ -606,14 +645,14 @@ function FotoUploadForm({ clienteId }: { clienteId: number }) {
           name="descripcion"
           type="text"
           maxLength={180}
-          placeholder="Ejemplo: hueco actual, render IA, acabado roble claro"
+          placeholder="Ejemplo: hueco actual, video de funcionamiento, render IA"
         />
       </label>
       <button
         type="submit"
         className="inline-flex h-10 w-fit items-center justify-center rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:bg-emerald-800"
       >
-        Subir imagen
+        Subir archivo
       </button>
     </form>
   );
@@ -630,7 +669,7 @@ function FotosGaleria({
   title: string;
   subtitle: string;
 }) {
-  const fotos = cliente.fotos.filter((foto) => foto.tipo === tipo);
+  const archivos = cliente.fotos.filter((foto) => foto.tipo === tipo);
 
   return (
     <section className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
@@ -640,19 +679,19 @@ function FotosGaleria({
           <p className="mt-1 text-sm text-neutral-500">{subtitle}</p>
         </div>
         <span className="text-sm font-semibold text-neutral-700">
-          {fotos.length} imagenes
+          {archivos.length} archivos
         </span>
       </div>
 
-      {fotos.length > 0 ? (
+      {archivos.length > 0 ? (
         <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {fotos.map((foto) => (
+          {archivos.map((foto) => (
             <FotoCard key={foto.id} clienteId={cliente.id} foto={foto} />
           ))}
         </div>
       ) : (
         <p className="mt-4 rounded-md border border-dashed border-neutral-300 px-4 py-6 text-sm text-neutral-500">
-          No hay imagenes en esta seccion.
+          No hay archivos en esta seccion.
         </p>
       )}
     </section>
@@ -969,10 +1008,18 @@ function FotoCard({
   foto: ClienteDetalle["fotos"][number];
 }) {
   const validUrl = validPublicUploadUrl(foto.url, clienteId);
+  const isVideo = foto.tipoArchivo === "VIDEO";
 
   return (
     <article className="overflow-hidden rounded-md border border-neutral-200 bg-neutral-50">
-      {validUrl ? (
+      {validUrl && isVideo ? (
+        <video
+          className="h-44 w-full bg-neutral-950 object-contain"
+          src={foto.url}
+          controls
+          preload="metadata"
+        />
+      ) : validUrl ? (
         <a href={foto.url} target="_blank" rel="noreferrer">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -983,7 +1030,7 @@ function FotoCard({
         </a>
       ) : (
         <div className="flex h-44 w-full flex-col items-center justify-center bg-rose-50 px-4 text-center text-rose-800">
-          <p className="text-sm font-semibold">Imagen no disponible</p>
+          <p className="text-sm font-semibold">Archivo no disponible</p>
           <p className="mt-1 break-all text-xs text-rose-700">
             URL invalida o antigua
           </p>
@@ -997,6 +1044,14 @@ function FotoCard({
           <p className="mt-1 text-xs text-neutral-500">
             {formatDateTime(foto.createdAt)}
           </p>
+          <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold">
+            <span className="rounded-full bg-neutral-200 px-2 py-1 text-neutral-700">
+              {isVideo ? "Vídeo" : "Imagen"}
+            </span>
+            <span className="rounded-full bg-neutral-200 px-2 py-1 text-neutral-700">
+              {formatFileSize(foto.tamanoBytes)}
+            </span>
+          </div>
           {foto.descripcion ? (
             <p className="mt-2 text-sm text-neutral-700">{foto.descripcion}</p>
           ) : null}
@@ -1171,10 +1226,10 @@ function ClienteFicha({ cliente }: { cliente: ClienteDetalle }) {
       <section className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
         <div className="mb-4">
           <h2 className="text-xl font-semibold text-neutral-950">
-            Gestion de imagenes
+            Archivos / multimedia
           </h2>
           <p className="mt-1 text-sm text-neutral-500">
-            Sube fotos del cliente o propuestas visuales de Juanser.
+            Sube fotos, videos del cliente o propuestas visuales de Juanser.
           </p>
         </div>
         <FotoUploadForm clienteId={cliente.id} />
@@ -1187,14 +1242,14 @@ function ClienteFicha({ cliente }: { cliente: ClienteDetalle }) {
       <FotosGaleria
         cliente={cliente}
         tipo="CLIENTE"
-        title="Imagenes del cliente"
-        subtitle="Fotos del hueco actual, muebles a reparar, medidas, ideas o referencias."
+        title="Archivos aportados por el cliente"
+        subtitle="Fotos o videos del hueco actual, muebles a reparar, medidas, ideas o referencias."
       />
       <FotosGaleria
         cliente={cliente}
         tipo="JUANSER"
         title="Propuestas de Juanser"
-        subtitle="Renders IA, bocetos, disenos, acabados y simulaciones."
+        subtitle="Renders IA, bocetos, disenos, videos, acabados y simulaciones."
       />
     </section>
   );

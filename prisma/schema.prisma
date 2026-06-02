@@ -12,6 +12,11 @@ enum FotoTipo {
   JUANSER
 }
 
+enum ArchivoClienteTipo {
+  IMAGEN
+  VIDEO
+}
+
 enum PresupuestoEstado {
   PENDIENTE
   ACEPTADO
@@ -67,17 +72,21 @@ model Seguimiento {
 }
 
 model FotoCliente {
-  id            Int      @id @default(autoincrement())
+  id            Int                @id @default(autoincrement())
   clienteId     Int
   tipo          FotoTipo
   url           String
   nombreArchivo String
   descripcion   String?
-  createdAt     DateTime @default(now())
-  cliente       Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  mimeType      String?
+  tamanoBytes   Int                @default(0)
+  tipoArchivo   ArchivoClienteTipo @default(IMAGEN)
+  createdAt     DateTime           @default(now())
+  cliente       Cliente            @relation(fields: [clienteId], references: [id], onDelete: Cascade)
 
   @@index([clienteId])
   @@index([tipo])
+  @@index([tipoArchivo])
 }
 
 model Presupuesto {

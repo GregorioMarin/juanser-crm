@@ -4,13 +4,24 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-const imageExtensions = new Set(["jpg", "jpeg", "png", "webp"]);
+const clienteExtensions = new Set([
+  "jpg",
+  "jpeg",
+  "png",
+  "webp",
+  "mp4",
+  "mov",
+  "webm",
+]);
 const documentExtensions = new Set(["pdf", "xlsx", "docx"]);
 const contentTypes: Record<string, string> = {
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
   png: "image/png",
   webp: "image/webp",
+  mp4: "video/mp4",
+  mov: "video/quicktime",
+  webm: "video/webm",
   pdf: "application/pdf",
   xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -55,7 +66,7 @@ function resolveUploadPath(segments: string[]) {
   const fileName = scope === "clientes" ? fourthSegment : thirdSegment;
   const extension = fileName.split(".").pop()?.toLowerCase();
   const allowedExtensions =
-    scope === "clientes" ? imageExtensions : documentExtensions;
+    scope === "clientes" ? clienteExtensions : documentExtensions;
   if (!extension || !allowedExtensions.has(extension)) {
     return null;
   }
