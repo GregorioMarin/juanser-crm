@@ -589,9 +589,7 @@ async function getCliente(id: number) {
       seguimientos: {
         orderBy: { fecha: "desc" },
       },
-      fotos: {
-        orderBy: { createdAt: "desc" },
-      },
+      fotos: true,
       presupuestos: {
         orderBy: { fecha: "desc" },
         include: {
@@ -798,6 +796,57 @@ function FotosGaleria({
           No hay archivos en esta seccion.
         </p>
       )}
+    </section>
+  );
+}
+
+function MultimediaDebugPanel({ cliente }: { cliente: ClienteDetalle }) {
+  return (
+    <section className="rounded-md border border-amber-300 bg-amber-50 p-5 text-sm text-amber-950 shadow-sm">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-amber-950">
+            Diagnostico multimedia
+          </h2>
+          <p className="mt-1 font-semibold">
+            Fotos cargadas: {cliente.fotos.length}
+          </p>
+        </div>
+        <span className="font-semibold">
+          Array fuente: cliente.fotos
+        </span>
+      </div>
+
+      <div className="mt-4 overflow-x-auto rounded-md border border-amber-200 bg-white">
+        <table className="w-full min-w-[680px] border-collapse text-left">
+          <thead className="bg-amber-100 text-xs font-semibold uppercase tracking-[0.12em] text-amber-900">
+            <tr>
+              <th className="px-3 py-2">ID</th>
+              <th className="px-3 py-2">tipo</th>
+              <th className="px-3 py-2">tipoArchivo</th>
+              <th className="px-3 py-2">URL</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-amber-100">
+            {cliente.fotos.length > 0 ? (
+              cliente.fotos.map((foto) => (
+                <tr key={foto.id}>
+                  <td className="px-3 py-2 font-semibold">{foto.id}</td>
+                  <td className="px-3 py-2">{foto.tipo}</td>
+                  <td className="px-3 py-2">{foto.tipoArchivo || "IMAGEN"}</td>
+                  <td className="break-all px-3 py-2">{foto.url || "-"}</td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={4} className="px-3 py-5 text-center text-amber-800">
+                  cliente.fotos no contiene elementos.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }
@@ -1350,13 +1399,7 @@ function ClienteFicha({ cliente }: { cliente: ClienteDetalle }) {
         <FotoUploadForm clienteId={cliente.id} />
       </section>
 
-      <PresupuestosSection cliente={cliente} />
-
-      <HistorialActividad cliente={cliente} />
-
-      <div className="rounded-md border border-neutral-300 bg-white px-5 py-3 text-sm font-semibold text-neutral-800 shadow-sm">
-        Total archivos: {cliente.fotos.length}
-      </div>
+      <MultimediaDebugPanel cliente={cliente} />
 
       <FotosGaleria
         cliente={cliente}
@@ -1370,6 +1413,10 @@ function ClienteFicha({ cliente }: { cliente: ClienteDetalle }) {
         title="Propuestas de Juanser"
         subtitle="Renders IA, bocetos, disenos, videos, acabados y simulaciones."
       />
+
+      <PresupuestosSection cliente={cliente} />
+
+      <HistorialActividad cliente={cliente} />
     </section>
   );
 }
