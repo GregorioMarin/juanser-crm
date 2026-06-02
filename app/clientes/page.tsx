@@ -173,6 +173,27 @@ async function getSeguimientosPendientes() {
   });
 }
 
+async function getSeguimientosFuturos() {
+  return prisma.cliente.findMany({
+    where: {
+      fechaSeguimiento: {
+        gt: endOfToday(),
+      },
+      estado: {
+        notIn: ["Instalado", "Perdido"],
+      },
+    },
+    orderBy: { fechaSeguimiento: "asc" },
+    select: {
+      id: true,
+      nombre: true,
+      telefono: true,
+      estado: true,
+      fechaSeguimiento: true,
+    },
+  });
+}
+
 async function getResumen() {
   const [
     leads,
@@ -201,6 +222,7 @@ type Cliente = Awaited<ReturnType<typeof getClientes>>[number];
 type SeguimientoPendiente = Awaited<
   ReturnType<typeof getSeguimientosPendientes>
 >[number];
+type SeguimientoFuturo = Awaited<ReturnType<typeof getSeguimientosFuturos>>[number];
 type Resumen = Awaited<ReturnType<typeof getResumen>>;
 
 function Field({
@@ -491,6 +513,83 @@ function SeguimientosPendientes({
   );
 }
 
+function SeguimientosFuturos({ clientes }: { clientes: SeguimientoFuturo[] }) {
+  return (
+    <section className="rounded-md border border-neutral-300 bg-white shadow-sm">
+      <div className="flex flex-col gap-2 border-b border-neutral-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-neutral-950">
+            Seguimientos futuros
+          </h2>
+          <p className="mt-1 text-sm text-neutral-500">
+            Proximas llamadas, visitas o revisiones comerciales.
+          </p>
+        </div>
+        <span className="text-sm font-semibold text-neutral-700">
+          {clientes.length} futuros
+        </span>
+      </div>
+
+      {clientes.length > 0 ? (
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-left text-sm">
+            <thead className="bg-neutral-100 text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
+              <tr>
+                <th className="px-4 py-3">Cliente</th>
+                <th className="px-4 py-3">Telefono</th>
+                <th className="px-4 py-3">Estado</th>
+                <th className="px-4 py-3">Seguimiento</th>
+                <th className="px-4 py-3 text-right">Ficha</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-200">
+              {clientes.map((cliente) => (
+                <tr key={cliente.id} className="align-top">
+                  <td className="px-4 py-4">
+                    <Link
+                      href={`/clientes/${cliente.id}`}
+                      className="font-semibold text-neutral-950 transition hover:text-emerald-800"
+                    >
+                      {cliente.nombre}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-4 text-neutral-700">
+                    {cliente.telefono || "-"}
+                  </td>
+                  <td className="px-4 py-4">
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${estadoClass(
+                        cliente.estado,
+                      )}`}
+                    >
+                      {cliente.estado}
+                    </span>
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-4 text-neutral-700">
+                    {formatDate(cliente.fechaSeguimiento)}
+                  </td>
+                  <td className="px-4 py-4 text-right">
+                    <Link
+                      href={`/clientes/${cliente.id}`}
+                      className="inline-flex h-9 items-center justify-center rounded-md border border-neutral-300 px-3 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
+                    >
+                      Ver ficha
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="px-5 py-6 text-sm text-neutral-500">
+          No hay seguimientos futuros programados.
+        </p>
+      )}
+    </section>
+  );
+}
+
 function ResumenComercial({ resumen }: { resumen: Resumen }) {
   const items = [
     ["Leads", resumen.leads],
@@ -716,11 +815,13 @@ export default async function ClientesPage({ searchParams }: ClientesPageProps) 
   const params = await searchParams;
   const queryParam = Array.isArray(params.q) ? params.q[0] : params.q;
   const query = queryParam?.trim() ?? "";
-  const [clientes, seguimientosPendientes, resumen] = await Promise.all([
-    getClientes(query),
-    getSeguimientosPendientes(),
-    getResumen(),
-  ]);
+  const [clientes, seguimientosPendientes, seguimientosFuturos, resumen] =
+    await Promise.all([
+      getClientes(query),
+      getSeguimientosPendientes(),
+      getSeguimientosFuturos(),
+      getResumen(),
+    ]);
 
   return (
     <main className="min-h-screen bg-neutral-100 px-5 py-6 text-neutral-950 sm:px-8">
@@ -745,6 +846,8 @@ export default async function ClientesPage({ searchParams }: ClientesPageProps) 
         <ResumenComercial resumen={resumen} />
 
         <SeguimientosPendientes clientes={seguimientosPendientes} />
+
+        <SeguimientosFuturos clientes={seguimientosFuturos} />
 
         <section className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
           <div className="mb-5">
