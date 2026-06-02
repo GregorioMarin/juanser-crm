@@ -115,6 +115,12 @@ export default async function Home() {
             >
               Kanban
             </Link>
+            <Link
+              href="/proveedores"
+              className="inline-flex h-11 items-center justify-center rounded-md border border-neutral-300 bg-white px-5 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
+            >
+              Proveedores
+            </Link>
           </div>
         </header>
 

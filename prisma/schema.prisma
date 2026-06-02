@@ -134,3 +134,22 @@ model ActividadCliente {
   @@index([fecha])
   @@index([tipo])
 }
+
+model Proveedor {
+  id            Int      @id @default(autoincrement())
+  nombre        String
+  telefono      String?
+  email         String?
+  web           String?
+  categoria     String?
+  contacto      String?
+  direccion     String?
+  observaciones String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([nombre])
+  @@index([categoria])
+  @@index([contacto])
+  @@index([telefono])
+}
