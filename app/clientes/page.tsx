@@ -464,7 +464,12 @@ function ClientesTable({ clientes }: { clientes: Cliente[] }) {
                 {formatDate(cliente.fechaAlta)}
               </td>
               <td className="px-4 py-4">
-                <p className="font-semibold text-neutral-950">{cliente.nombre}</p>
+                <Link
+                  href={`/clientes/${cliente.id}`}
+                  className="font-semibold text-neutral-950 transition hover:text-emerald-800"
+                >
+                  {cliente.nombre}
+                </Link>
                 <p className="mt-1 text-neutral-500">{cliente.localidad || "-"}</p>
               </td>
               <td className="px-4 py-4 text-neutral-700">
@@ -520,9 +525,12 @@ function ClientesCards({ clientes }: { clientes: Cliente[] }) {
         >
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-neutral-950">
+              <Link
+                href={`/clientes/${cliente.id}`}
+                className="text-lg font-semibold text-neutral-950 transition hover:text-emerald-800"
+              >
                 {cliente.nombre}
-              </h2>
+              </Link>
               <p className="mt-1 text-sm text-neutral-500">
                 Alta: {formatDate(cliente.fechaAlta)}
               </p>

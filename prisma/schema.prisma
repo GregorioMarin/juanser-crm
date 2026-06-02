@@ -8,18 +8,29 @@ datasource db {
 }
 
 model Cliente {
-  id            Int      @id @default(autoincrement())
-  nombre        String
-  telefono      String?
-  email         String?
-  direccion     String?
-  localidad     String?
-  tipoTrabajo   String?
+  id               Int           @id @default(autoincrement())
+  nombre           String
+  telefono         String?
+  email            String?
+  direccion        String?
+  localidad        String?
+  tipoTrabajo      String?
   presupuesto      Decimal? @db.Decimal(12, 2)
   fechaAlta        DateTime @default(now())
   fechaSeguimiento DateTime?
-  observaciones String?
-  estado        String   @default("Nuevo lead")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  observaciones    String?
+  estado           String        @default("Nuevo lead")
+  seguimientos     Seguimiento[]
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+}
+
+model Seguimiento {
+  id        Int      @id @default(autoincrement())
+  clienteId Int
+  fecha     DateTime @default(now())
+  nota      String
+  cliente   Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  @@index([clienteId])
 }
