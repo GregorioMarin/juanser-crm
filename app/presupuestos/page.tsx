@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { connection } from "next/server";
 import { prisma } from "@/app/lib/prisma";
+import { DeletePresupuestoForm } from "./delete-presupuesto-form";
 
 const estados = ["PENDIENTE", "ACEPTADO", "RECHAZADO"] as const;
 const inputClass =
@@ -22,6 +23,24 @@ function estadoFromParam(value?: string | string[]) {
 function queryFromParam(value?: string | string[]) {
   const raw = Array.isArray(value) ? value[0] : value;
   return raw?.trim() ?? "";
+}
+
+function successFromParam(value?: string | string[]) {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return raw === "1";
+}
+
+function presupuestosReturnPath(query: string, estado: PresupuestoEstado | null) {
+  const params = new URLSearchParams();
+  if (query) {
+    params.set("q", query);
+  }
+  if (estado) {
+    params.set("estado", estado);
+  }
+
+  const queryString = params.toString();
+  return queryString ? `/presupuestos?${queryString}` : "/presupuestos";
 }
 
 async function getPresupuestos(query: string, estado: PresupuestoEstado | null) {
@@ -185,7 +204,21 @@ function Filtros({
   );
 }
 
-function PresupuestosTable({ presupuestos }: { presupuestos: Presupuesto[] }) {
+function SuccessMessage() {
+  return (
+    <div className="rounded-md border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-semibold text-emerald-900 shadow-sm">
+      Presupuesto eliminado correctamente.
+    </div>
+  );
+}
+
+function PresupuestosTable({
+  presupuestos,
+  returnTo,
+}: {
+  presupuestos: Presupuesto[];
+  returnTo: string;
+}) {
   return (
     <div className="overflow-hidden rounded-md border border-neutral-300 bg-white shadow-sm">
       <table className="w-full border-collapse text-left text-sm">
@@ -253,10 +286,15 @@ function PresupuestosTable({ presupuestos }: { presupuestos: Presupuesto[] }) {
                     <Link
                       href={`/presupuestos/${presupuesto.id}/pdf/ver`}
                       target="_blank"
+                      rel="noreferrer"
                       className="inline-flex h-9 items-center justify-center rounded-md border border-neutral-300 px-3 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
                     >
                       Ver PDF
                     </Link>
+                    <DeletePresupuestoForm
+                      presupuestoId={presupuesto.id}
+                      returnTo={returnTo}
+                    />
                   </div>
                 </td>
               </tr>
@@ -275,7 +313,11 @@ function PresupuestosTable({ presupuestos }: { presupuestos: Presupuesto[] }) {
 }
 
 type PresupuestosPageProps = {
-  searchParams: Promise<{ q?: string | string[]; estado?: string | string[] }>;
+  searchParams: Promise<{
+    q?: string | string[];
+    estado?: string | string[];
+    presupuestoEliminado?: string | string[];
+  }>;
 };
 
 export default async function PresupuestosPage({
@@ -286,6 +328,7 @@ export default async function PresupuestosPage({
   const params = await searchParams;
   const query = queryFromParam(params.q);
   const estado = estadoFromParam(params.estado);
+  const returnTo = presupuestosReturnPath(query, estado);
   const [presupuestos, totales] = await Promise.all([
     getPresupuestos(query, estado),
     getTotales(),
@@ -317,9 +360,11 @@ export default async function PresupuestosPage({
           </Link>
         </header>
 
+        {successFromParam(params.presupuestoEliminado) ? <SuccessMessage /> : null}
+
         <TotalesResumen totales={totales} />
         <Filtros query={query} estado={estado} />
-        <PresupuestosTable presupuestos={presupuestos} />
+        <PresupuestosTable presupuestos={presupuestos} returnTo={returnTo} />
       </div>
     </main>
   );

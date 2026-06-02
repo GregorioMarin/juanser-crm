@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { prisma } from "@/app/lib/prisma";
+import { DeletePresupuestoForm } from "@/app/presupuestos/delete-presupuesto-form";
 
 export const runtime = "nodejs";
 
@@ -525,6 +526,19 @@ function DetailItem({
   );
 }
 
+function successFromParam(value?: string | string[]) {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return raw === "1";
+}
+
+function SuccessMessage() {
+  return (
+    <div className="rounded-md border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-semibold text-emerald-900 shadow-sm">
+      Presupuesto eliminado correctamente.
+    </div>
+  );
+}
+
 function FotoUploadForm({ clienteId }: { clienteId: number }) {
   return (
     <form
@@ -841,10 +855,15 @@ function PresupuestosSection({ cliente }: { cliente: ClienteDetalle }) {
                       <Link
                         href={`/presupuestos/${presupuesto.id}/pdf/ver`}
                         target="_blank"
+                        rel="noreferrer"
                         className="inline-flex h-9 items-center justify-center rounded-md bg-neutral-950 px-3 text-sm font-semibold text-white transition hover:bg-neutral-800"
                       >
                         Ver PDF
                       </Link>
+                      <DeletePresupuestoForm
+                        presupuestoId={presupuesto.id}
+                        returnTo={`/clientes/${cliente.id}`}
+                      />
                     </div>
                   </td>
                 </tr>
@@ -1076,12 +1095,16 @@ function ClienteFicha({ cliente }: { cliente: ClienteDetalle }) {
 
 type ClientePageProps = {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ presupuestoEliminado?: string | string[] }>;
 };
 
-export default async function ClientePage({ params }: ClientePageProps) {
+export default async function ClientePage({
+  params,
+  searchParams,
+}: ClientePageProps) {
   await connection();
 
-  const { id: rawId } = await params;
+  const [{ id: rawId }, search] = await Promise.all([params, searchParams]);
   const id = Number(rawId);
   if (!Number.isInteger(id) || id < 1) {
     notFound();
@@ -1111,6 +1134,8 @@ export default async function ClientePage({ params }: ClientePageProps) {
             </p>
           </div>
         </header>
+
+        {successFromParam(search.presupuestoEliminado) ? <SuccessMessage /> : null}
 
         <ClienteFicha cliente={cliente} />
       </div>
