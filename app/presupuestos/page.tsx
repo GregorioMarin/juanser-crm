@@ -2,6 +2,7 @@ import Link from "next/link";
 import { connection } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { DeletePresupuestoForm } from "./delete-presupuesto-form";
+import { WhatsAppPresupuestoLink } from "./whatsapp-presupuesto-link";
 
 const estados = ["PENDIENTE", "ACEPTADO", "RECHAZADO"] as const;
 const inputClass =
@@ -291,6 +292,13 @@ function PresupuestosTable({
                     >
                       Ver PDF
                     </Link>
+                    <WhatsAppPresupuestoLink
+                      nombreCliente={presupuesto.cliente.nombre}
+                      telefono={presupuesto.cliente.telefono}
+                      numero={presupuesto.numero}
+                      titulo={presupuesto.titulo}
+                      totalConIva={Number(presupuesto.totalConIva)}
+                    />
                     <DeletePresupuestoForm
                       presupuestoId={presupuesto.id}
                       returnTo={returnTo}

@@ -7,6 +7,7 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { DeletePresupuestoForm } from "@/app/presupuestos/delete-presupuesto-form";
+import { WhatsAppPresupuestoLink } from "@/app/presupuestos/whatsapp-presupuesto-link";
 
 export const runtime = "nodejs";
 
@@ -860,6 +861,13 @@ function PresupuestosSection({ cliente }: { cliente: ClienteDetalle }) {
                       >
                         Ver PDF
                       </Link>
+                      <WhatsAppPresupuestoLink
+                        nombreCliente={cliente.nombre}
+                        telefono={cliente.telefono}
+                        numero={presupuesto.numero}
+                        titulo={presupuesto.titulo}
+                        totalConIva={Number(presupuesto.totalConIva)}
+                      />
                       <DeletePresupuestoForm
                         presupuestoId={presupuesto.id}
                         returnTo={`/clientes/${cliente.id}`}
