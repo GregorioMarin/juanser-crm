@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 
 export type MultimediaUploadState = {
   status: "idle" | "success" | "error";
@@ -27,14 +28,16 @@ export function MultimediaUploadForm({
     formData: FormData,
   ) => Promise<MultimediaUploadState>;
 }) {
+  const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const [state, formAction, pending] = useActionState(action, initialState);
 
   useEffect(() => {
     if (state.status === "success") {
       formRef.current?.reset();
+      router.refresh();
     }
-  }, [state.status]);
+  }, [router, state.status]);
 
   return (
     <form

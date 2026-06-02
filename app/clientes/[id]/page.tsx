@@ -273,6 +273,15 @@ function validatePublicUploadUrl(url: string, clienteId: number) {
   }
 }
 
+function assertPublicUploadUrl(url: string, clienteId: number) {
+  const expectedPrefix = `/api/uploads/clientes/${clienteId}/`;
+  if (!url.startsWith(expectedPrefix)) {
+    throw new Error("La URL publica generada no apunta a uploads de clientes.");
+  }
+
+  validatePublicUploadUrl(url, clienteId);
+}
+
 function uploadFilePathFromUrl(url: string, clienteId: number) {
   if (!validPublicUploadUrl(url, clienteId)) {
     return null;
@@ -399,7 +408,16 @@ async function uploadFotoCliente(
     const uploadDir = persistentUploadsDir(clienteId, tipo);
     const filePath = path.join(uploadDir, fileName);
 
-    validatePublicUploadUrl(relativeUrl, clienteId);
+    assertPublicUploadUrl(relativeUrl, clienteId);
+    console.info("Preparando subida multimedia de cliente", {
+      clienteId,
+      nombreArchivo: file.name,
+      mimeType: file.type,
+      tamanoBytes: file.size,
+      tipoArchivo,
+      rutaFisica: filePath,
+      urlPublica: relativeUrl,
+    });
     await mkdir(uploadDir, { recursive: true });
     await writeFile(filePath, Buffer.from(await file.arrayBuffer()));
     const savedFile = await stat(filePath);
@@ -419,6 +437,35 @@ async function uploadFotoCliente(
         tipoArchivo,
       },
     });
+    if (foto.tipoArchivo !== tipoArchivo) {
+      throw new Error("El tipo de archivo no se ha guardado correctamente.");
+    }
+
+    const fotoEnFicha = await prisma.cliente.findUnique({
+      where: { id: clienteId },
+      select: {
+        fotos: {
+          where: { id: foto.id },
+          select: {
+            id: true,
+            url: true,
+            tipoArchivo: true,
+            tamanoBytes: true,
+          },
+        },
+      },
+    });
+    const archivoVisibleEnConsulta = fotoEnFicha?.fotos[0];
+    if (!archivoVisibleEnConsulta) {
+      throw new Error("El archivo se ha guardado, pero no aparece en la consulta de la ficha.");
+    }
+
+    if (
+      archivoVisibleEnConsulta.url !== relativeUrl ||
+      archivoVisibleEnConsulta.tipoArchivo !== tipoArchivo
+    ) {
+      throw new Error("El registro creado no coincide con el archivo subido.");
+    }
 
     console.info("Archivo multimedia de cliente subido", {
       clienteId,
@@ -426,10 +473,13 @@ async function uploadFotoCliente(
       tipo,
       nombreArchivo: file.name,
       mimeType: file.type,
-      tamanoBytes: savedFile.size,
+      tamanoBytes: file.size,
+      tamanoRealDisco: savedFile.size,
+      tamanoBytesRegistro: foto.tamanoBytes,
       tipoArchivo,
-      url: relativeUrl,
-      filePath,
+      urlPublica: relativeUrl,
+      rutaFisica: filePath,
+      visibleEnConsultaFicha: true,
     });
     await registrarActividadCliente({
       clienteId,
