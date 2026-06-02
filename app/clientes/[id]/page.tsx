@@ -267,6 +267,32 @@ function validPublicUploadUrl(url: string | null | undefined, clienteId?: number
   return url.startsWith(expectedPrefix) && !hasSystemPathShape(url);
 }
 
+function renderablePublicUploadUrl(
+  url: string | null | undefined,
+  clienteId: number,
+) {
+  if (!url) {
+    return false;
+  }
+
+  if (validPublicUploadUrl(url, clienteId)) {
+    return true;
+  }
+
+  try {
+    const parsedUrl = new URL(url);
+    const expectedPrefix = `/api/uploads/clientes/${clienteId}/`;
+
+    return (
+      (parsedUrl.protocol === "https:" || parsedUrl.protocol === "http:") &&
+      parsedUrl.pathname.startsWith(expectedPrefix) &&
+      !parsedUrl.pathname.includes("\\")
+    );
+  } catch {
+    return false;
+  }
+}
+
 function validatePublicUploadUrl(url: string, clienteId: number) {
   if (!validPublicUploadUrl(url, clienteId)) {
     throw new Error("URL publica de imagen no valida.");
@@ -1058,19 +1084,19 @@ function FotoCard({
   clienteId: number;
   foto: ClienteDetalle["fotos"][number];
 }) {
-  const validUrl = validPublicUploadUrl(foto.url, clienteId);
   const isVideo = foto.tipoArchivo === "VIDEO";
+  const canRenderFile = renderablePublicUploadUrl(foto.url, clienteId);
 
   return (
     <article className="overflow-hidden rounded-md border border-neutral-200 bg-neutral-50">
-      {validUrl && isVideo ? (
+      {canRenderFile && isVideo ? (
         <video
-          className="h-44 w-full bg-neutral-950 object-contain"
-          src={foto.url}
           controls
           preload="metadata"
+          src={foto.url}
+          className="h-44 w-full bg-neutral-950 object-contain"
         />
-      ) : validUrl ? (
+      ) : canRenderFile ? (
         <a href={foto.url} target="_blank" rel="noreferrer">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -1111,7 +1137,7 @@ function FotoCard({
               Vídeo temporal: eliminar cuando ya no sea necesario.
             </p>
           ) : null}
-          {!validUrl ? (
+          {!canRenderFile ? (
             <p className="mt-2 break-all text-xs text-rose-700">
               {foto.url || "Sin URL guardada"}
             </p>
@@ -1124,7 +1150,7 @@ function FotoCard({
             type="submit"
             className="inline-flex h-9 items-center justify-center rounded-md border border-rose-200 px-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-50"
           >
-            {validUrl ? "Eliminar" : "Eliminar registro invalido"}
+            {canRenderFile ? "Eliminar" : "Eliminar registro invalido"}
           </button>
         </form>
       </div>
