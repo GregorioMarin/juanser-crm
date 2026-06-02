@@ -34,6 +34,7 @@ export function MultimediaUploadForm({
 
   useEffect(() => {
     if (state.status === "success") {
+      console.info("Subida multimedia completada: refrescando ficha con router.refresh()");
       formRef.current?.reset();
       router.refresh();
     }

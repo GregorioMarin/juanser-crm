@@ -583,7 +583,7 @@ async function deleteFotoCliente(formData: FormData) {
 }
 
 async function getCliente(id: number) {
-  return prisma.cliente.findUnique({
+  const cliente = await prisma.cliente.findUnique({
     where: { id },
     include: {
       seguimientos: {
@@ -605,6 +605,20 @@ async function getCliente(id: number) {
       },
     },
   });
+
+  console.info("Ficha cliente multimedia cargada", {
+    clienteId: id,
+    totalFotosCargadas: cliente?.fotos.length ?? 0,
+    idsCargados: cliente?.fotos.map((foto) => foto.id) ?? [],
+    tiposArchivo: cliente?.fotos.map((foto) => ({
+      id: foto.id,
+      tipo: foto.tipo,
+      tipoArchivo: foto.tipoArchivo,
+      url: foto.url,
+    })) ?? [],
+  });
+
+  return cliente;
 }
 
 type ClienteDetalle = NonNullable<Awaited<ReturnType<typeof getCliente>>>;
@@ -747,6 +761,19 @@ function FotosGaleria({
   subtitle: string;
 }) {
   const archivos = cliente.fotos.filter((foto) => foto.tipo === tipo);
+
+  console.info("Galeria multimedia renderizada", {
+    clienteId: cliente.id,
+    seccion: tipo,
+    totalFotosFicha: cliente.fotos.length,
+    totalArchivosSeccion: archivos.length,
+    archivos: archivos.map((foto) => ({
+      id: foto.id,
+      tipo: foto.tipo,
+      tipoArchivo: foto.tipoArchivo,
+      url: foto.url,
+    })),
+  });
 
   return (
     <section className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
@@ -1087,6 +1114,12 @@ function FotoCard({
   const isVideo = foto.tipoArchivo === "VIDEO";
   const canRenderFile = renderablePublicUploadUrl(foto.url, clienteId);
 
+  console.info("Renderizando multimedia", {
+    id: foto.id,
+    tipoArchivo: foto.tipoArchivo,
+    url: foto.url,
+  });
+
   return (
     <article className="overflow-hidden rounded-md border border-neutral-200 bg-neutral-50">
       {canRenderFile && isVideo ? (
@@ -1320,6 +1353,10 @@ function ClienteFicha({ cliente }: { cliente: ClienteDetalle }) {
       <PresupuestosSection cliente={cliente} />
 
       <HistorialActividad cliente={cliente} />
+
+      <div className="rounded-md border border-neutral-300 bg-white px-5 py-3 text-sm font-semibold text-neutral-800 shadow-sm">
+        Total archivos: {cliente.fotos.length}
+      </div>
 
       <FotosGaleria
         cliente={cliente}
