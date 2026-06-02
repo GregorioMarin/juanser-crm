@@ -256,9 +256,12 @@ function ProveedoresTable({ proveedores }: { proveedores: Proveedor[] }) {
             return (
               <tr key={proveedor.id} className="align-top">
                 <td className="px-4 py-4">
-                  <p className="font-semibold text-neutral-950">
+                  <Link
+                    href={`/proveedores/${proveedor.id}`}
+                    className="font-semibold text-neutral-950 transition hover:text-emerald-800"
+                  >
                     {proveedor.nombre}
-                  </p>
+                  </Link>
                   <p className="mt-1 text-neutral-500">
                     {proveedor.direccion || "-"}
                   </p>
@@ -308,6 +311,12 @@ function ProveedoresTable({ proveedores }: { proveedores: Proveedor[] }) {
                         />
                       </div>
                     </details>
+                    <Link
+                      href={`/proveedores/${proveedor.id}`}
+                      className="inline-flex h-9 items-center justify-center rounded-md border border-neutral-300 px-3 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
+                    >
+                      Abrir ficha
+                    </Link>
                     <DeleteProveedorForm proveedorId={proveedor.id} />
                   </div>
                 </td>
@@ -330,9 +339,12 @@ function ProveedoresCards({ proveedores }: { proveedores: Proveedor[] }) {
         >
           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-neutral-950">
+              <Link
+                href={`/proveedores/${proveedor.id}`}
+                className="text-lg font-semibold text-neutral-950 transition hover:text-emerald-800"
+              >
                 {proveedor.nombre}
-              </h2>
+              </Link>
               <p className="mt-1 text-sm text-neutral-500">
                 {proveedor.categoria || "-"}
               </p>
@@ -359,6 +371,12 @@ function ProveedoresCards({ proveedores }: { proveedores: Proveedor[] }) {
                 />
               </div>
             </details>
+            <Link
+              href={`/proveedores/${proveedor.id}`}
+              className="inline-flex h-9 items-center justify-center rounded-md border border-neutral-300 px-3 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
+            >
+              Abrir ficha
+            </Link>
             <DeleteProveedorForm proveedorId={proveedor.id} />
           </div>
         </article>

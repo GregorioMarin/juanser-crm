@@ -136,7 +136,7 @@ model ActividadCliente {
 }
 
 model Proveedor {
-  id            Int      @id @default(autoincrement())
+  id            Int                  @id @default(autoincrement())
   nombre        String
   telefono      String?
   email         String?
@@ -145,11 +145,41 @@ model Proveedor {
   contacto      String?
   direccion     String?
   observaciones String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  documentos    DocumentoProveedor[]
+  actividades   ActividadProveedor[]
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
 
   @@index([nombre])
   @@index([categoria])
   @@index([contacto])
   @@index([telefono])
+}
+
+model DocumentoProveedor {
+  id          Int       @id @default(autoincrement())
+  proveedorId Int
+  nombre      String
+  tipo        String
+  archivoUrl  String
+  descripcion String?
+  tamanoBytes Int
+  createdAt   DateTime  @default(now())
+  proveedor   Proveedor @relation(fields: [proveedorId], references: [id], onDelete: Cascade)
+
+  @@index([proveedorId])
+  @@index([tipo])
+  @@index([nombre])
+}
+
+model ActividadProveedor {
+  id          Int       @id @default(autoincrement())
+  proveedorId Int
+  fecha       DateTime  @default(now())
+  descripcion String
+  createdAt   DateTime  @default(now())
+  proveedor   Proveedor @relation(fields: [proveedorId], references: [id], onDelete: Cascade)
+
+  @@index([proveedorId])
+  @@index([fecha])
 }

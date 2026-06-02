@@ -4,12 +4,16 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-const allowedExtensions = new Set(["jpg", "jpeg", "png", "webp"]);
+const imageExtensions = new Set(["jpg", "jpeg", "png", "webp"]);
+const documentExtensions = new Set(["pdf", "xlsx", "docx"]);
 const contentTypes: Record<string, string> = {
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
   png: "image/png",
   webp: "image/webp",
+  pdf: "application/pdf",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 };
 
 function uploadsRootDir() {
@@ -27,24 +31,31 @@ function isSafeSegment(segment: string) {
 }
 
 function resolveUploadPath(segments: string[]) {
-  if (segments.length !== 4 || !segments.every(isSafeSegment)) {
+  if (!segments.every(isSafeSegment)) {
     return null;
   }
 
-  const [scope, clienteId, tipo, fileName] = segments;
-  if (scope !== "clientes") {
+  const [scope, recordId, thirdSegment, fourthSegment] = segments;
+  if (scope === "clientes") {
+    if (segments.length !== 4 || !/^\d+$/.test(recordId)) {
+      return null;
+    }
+
+    if (thirdSegment !== "cliente" && thirdSegment !== "juanser") {
+      return null;
+    }
+  } else if (scope === "proveedores") {
+    if (segments.length !== 3 || !/^\d+$/.test(recordId)) {
+      return null;
+    }
+  } else {
     return null;
   }
 
-  if (!/^\d+$/.test(clienteId)) {
-    return null;
-  }
-
-  if (tipo !== "cliente" && tipo !== "juanser") {
-    return null;
-  }
-
+  const fileName = scope === "clientes" ? fourthSegment : thirdSegment;
   const extension = fileName.split(".").pop()?.toLowerCase();
+  const allowedExtensions =
+    scope === "clientes" ? imageExtensions : documentExtensions;
   if (!extension || !allowedExtensions.has(extension)) {
     return null;
   }
