@@ -198,13 +198,6 @@ function requiredMediaFile(formData: FormData) {
       ? "IMAGEN"
       : null;
 
-  console.info("Validando archivo multimedia de cliente", {
-    nombreArchivo: file.name,
-    mimeType: file.type,
-    tamanoBytes: file.size,
-    tipoArchivoDetectado,
-  });
-
   if (!isImage && !isVideo) {
     throw new Error("Solo se aceptan imagenes jpg, jpeg, png, webp o videos mp4, mov, webm.");
   }
@@ -435,15 +428,6 @@ async function uploadFotoCliente(
     const filePath = path.join(uploadDir, fileName);
 
     assertPublicUploadUrl(relativeUrl, clienteId);
-    console.info("Preparando subida multimedia de cliente", {
-      clienteId,
-      nombreArchivo: file.name,
-      mimeType: file.type,
-      tamanoBytes: file.size,
-      tipoArchivo,
-      rutaFisica: filePath,
-      urlPublica: relativeUrl,
-    });
     await mkdir(uploadDir, { recursive: true });
     await writeFile(filePath, Buffer.from(await file.arrayBuffer()));
     const savedFile = await stat(filePath);
@@ -493,20 +477,6 @@ async function uploadFotoCliente(
       throw new Error("El registro creado no coincide con el archivo subido.");
     }
 
-    console.info("Archivo multimedia de cliente subido", {
-      clienteId,
-      fotoId: foto.id,
-      tipo,
-      nombreArchivo: file.name,
-      mimeType: file.type,
-      tamanoBytes: file.size,
-      tamanoRealDisco: savedFile.size,
-      tamanoBytesRegistro: foto.tamanoBytes,
-      tipoArchivo,
-      urlPublica: relativeUrl,
-      rutaFisica: filePath,
-      visibleEnConsultaFicha: true,
-    });
     await registrarActividadCliente({
       clienteId,
       tipo:
@@ -602,18 +572,6 @@ async function getCliente(id: number) {
         orderBy: { fecha: "desc" },
       },
     },
-  });
-
-  console.info("Ficha cliente multimedia cargada", {
-    clienteId: id,
-    totalFotosCargadas: cliente?.fotos.length ?? 0,
-    idsCargados: cliente?.fotos.map((foto) => foto.id) ?? [],
-    tiposArchivo: cliente?.fotos.map((foto) => ({
-      id: foto.id,
-      tipo: foto.tipo,
-      tipoArchivo: foto.tipoArchivo,
-      url: foto.url,
-    })) ?? [],
   });
 
   return cliente;
@@ -760,19 +718,6 @@ function FotosGaleria({
 }) {
   const archivos = cliente.fotos.filter((foto) => foto.tipo === tipo);
 
-  console.info("Galeria multimedia renderizada", {
-    clienteId: cliente.id,
-    seccion: tipo,
-    totalFotosFicha: cliente.fotos.length,
-    totalArchivosSeccion: archivos.length,
-    archivos: archivos.map((foto) => ({
-      id: foto.id,
-      tipo: foto.tipo,
-      tipoArchivo: foto.tipoArchivo,
-      url: foto.url,
-    })),
-  });
-
   return (
     <section className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
@@ -796,57 +741,6 @@ function FotosGaleria({
           No hay archivos en esta seccion.
         </p>
       )}
-    </section>
-  );
-}
-
-function MultimediaDebugPanel({ cliente }: { cliente: ClienteDetalle }) {
-  return (
-    <section className="rounded-md border border-amber-300 bg-amber-50 p-5 text-sm text-amber-950 shadow-sm">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-amber-950">
-            Diagnostico multimedia
-          </h2>
-          <p className="mt-1 font-semibold">
-            Fotos cargadas: {cliente.fotos.length}
-          </p>
-        </div>
-        <span className="font-semibold">
-          Array fuente: cliente.fotos
-        </span>
-      </div>
-
-      <div className="mt-4 overflow-x-auto rounded-md border border-amber-200 bg-white">
-        <table className="w-full min-w-[680px] border-collapse text-left">
-          <thead className="bg-amber-100 text-xs font-semibold uppercase tracking-[0.12em] text-amber-900">
-            <tr>
-              <th className="px-3 py-2">ID</th>
-              <th className="px-3 py-2">tipo</th>
-              <th className="px-3 py-2">tipoArchivo</th>
-              <th className="px-3 py-2">URL</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-amber-100">
-            {cliente.fotos.length > 0 ? (
-              cliente.fotos.map((foto) => (
-                <tr key={foto.id}>
-                  <td className="px-3 py-2 font-semibold">{foto.id}</td>
-                  <td className="px-3 py-2">{foto.tipo}</td>
-                  <td className="px-3 py-2">{foto.tipoArchivo || "IMAGEN"}</td>
-                  <td className="break-all px-3 py-2">{foto.url || "-"}</td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={4} className="px-3 py-5 text-center text-amber-800">
-                  cliente.fotos no contiene elementos.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
     </section>
   );
 }
@@ -1163,12 +1057,6 @@ function FotoCard({
   const isVideo = foto.tipoArchivo === "VIDEO";
   const canRenderFile = renderablePublicUploadUrl(foto.url, clienteId);
 
-  console.info("Renderizando multimedia", {
-    id: foto.id,
-    tipoArchivo: foto.tipoArchivo,
-    url: foto.url,
-  });
-
   return (
     <article className="overflow-hidden rounded-md border border-neutral-200 bg-neutral-50">
       {canRenderFile && isVideo ? (
@@ -1388,18 +1276,21 @@ function ClienteFicha({ cliente }: { cliente: ClienteDetalle }) {
       </div>
 
       <section className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
-        <div className="mb-4">
-          <h2 className="text-xl font-semibold text-neutral-950">
-            Archivos / multimedia
-          </h2>
-          <p className="mt-1 text-sm text-neutral-500">
-            Sube fotos, videos del cliente o propuestas visuales de Juanser.
-          </p>
+        <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-neutral-950">
+              Archivos / multimedia
+            </h2>
+            <p className="mt-1 text-sm text-neutral-500">
+              Sube fotos, videos del cliente o propuestas visuales de Juanser.
+            </p>
+          </div>
+          <span className="text-sm font-semibold text-neutral-700">
+            {cliente.fotos.length} archivos
+          </span>
         </div>
         <FotoUploadForm clienteId={cliente.id} />
       </section>
-
-      <MultimediaDebugPanel cliente={cliente} />
 
       <FotosGaleria
         cliente={cliente}
