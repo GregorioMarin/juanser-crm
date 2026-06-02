@@ -1,12 +1,38 @@
-import PDFDocument from "pdfkit";
+import {
+  PDFDocument,
+  PDFPage,
+  PDFFont,
+  StandardFonts,
+  rgb,
+} from "pdf-lib";
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 
 export const runtime = "nodejs";
 
+const pageSize: [number, number] = [595.28, 841.89];
 const margin = 48;
+const contentWidth = pageSize[0] - margin * 2;
+const colors = {
+  border: rgb(0.82, 0.82, 0.82),
+  dark: rgb(0.07, 0.09, 0.15),
+  muted: rgb(0.27, 0.27, 0.27),
+  pale: rgb(0.96, 0.96, 0.96),
+  row: rgb(0.98, 0.98, 0.98),
+  white: rgb(1, 1, 1),
+};
 
 type PresupuestoPdf = NonNullable<Awaited<ReturnType<typeof getPresupuesto>>>;
+type PdfFonts = {
+  regular: PDFFont;
+  bold: PDFFont;
+};
+type PdfContext = {
+  doc: PDFDocument;
+  page: PDFPage;
+  fonts: PdfFonts;
+  y: number;
+};
 
 async function getPresupuesto(id: number) {
   return prisma.presupuesto.findUnique({
@@ -21,10 +47,10 @@ async function getPresupuesto(id: number) {
 }
 
 function formatCurrency(value: unknown) {
-  return new Intl.NumberFormat("es-ES", {
-    style: "currency",
-    currency: "EUR",
-  }).format(Number(value ?? 0));
+  return `${new Intl.NumberFormat("es-ES", {
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 2,
+  }).format(Number(value ?? 0))} EUR`;
 }
 
 function formatDate(date: Date) {
@@ -51,292 +77,398 @@ function safeFilename(value: string) {
     .slice(0, 80);
 }
 
-function ensureSpace(doc: PDFKit.PDFDocument, y: number, height: number) {
-  if (y + height <= doc.page.height - margin) {
-    return y;
+function drawText(
+  page: PDFPage,
+  text: string,
+  x: number,
+  yFromTop: number,
+  font: PDFFont,
+  size: number,
+  color = colors.dark,
+) {
+  page.drawText(text, {
+    x,
+    y: page.getHeight() - yFromTop - size,
+    size,
+    font,
+    color,
+  });
+}
+
+function wrapText(text: string, font: PDFFont, size: number, width: number) {
+  const lines: string[] = [];
+
+  text.split(/\r?\n/).forEach((paragraph) => {
+    const words = paragraph.trim().split(/\s+/).filter(Boolean);
+    if (words.length === 0) {
+      lines.push("");
+      return;
+    }
+
+    let current = "";
+    words.forEach((word) => {
+      const next = current ? `${current} ${word}` : word;
+      if (font.widthOfTextAtSize(next, size) <= width) {
+        current = next;
+        return;
+      }
+
+      if (current) {
+        lines.push(current);
+      }
+      current = word;
+    });
+
+    if (current) {
+      lines.push(current);
+    }
+  });
+
+  return lines;
+}
+
+function drawWrappedText(
+  page: PDFPage,
+  text: string,
+  x: number,
+  yFromTop: number,
+  width: number,
+  font: PDFFont,
+  size: number,
+  lineHeight: number,
+  color = colors.dark,
+) {
+  const lines = wrapText(text, font, size, width);
+  lines.forEach((line, index) => {
+    if (line) {
+      drawText(page, line, x, yFromTop + index * lineHeight, font, size, color);
+    }
+  });
+
+  return lines.length * lineHeight;
+}
+
+function addPage(ctx: PdfContext) {
+  ctx.page = ctx.doc.addPage(pageSize);
+  ctx.y = margin;
+}
+
+function ensureSpace(ctx: PdfContext, height: number) {
+  if (ctx.y + height > ctx.page.getHeight() - margin) {
+    addPage(ctx);
+    return true;
   }
 
-  doc.addPage();
-  return margin;
+  return false;
 }
 
-function drawDivider(doc: PDFKit.PDFDocument, y: number) {
-  doc
-    .save()
-    .strokeColor("#d4d4d4")
-    .lineWidth(1)
-    .moveTo(margin, y)
-    .lineTo(doc.page.width - margin, y)
-    .stroke()
-    .restore();
+function drawHeader(ctx: PdfContext, presupuesto: PresupuestoPdf) {
+  const { page, fonts } = ctx;
+
+  drawText(page, "Carpintería Juanser", margin, margin, fonts.bold, 24);
+  drawWrappedText(
+    page,
+    "P.I. San Nicolás, Calle San Nicolás 9 Nave 21, 41500 Alcalá de Guadaíra, Sevilla",
+    margin,
+    82,
+    340,
+    fonts.regular,
+    10,
+    13,
+    colors.muted,
+  );
+  drawText(
+    page,
+    "Teléfonos: 665 13 47 46 / 655 69 39 63",
+    margin,
+    112,
+    fonts.regular,
+    10,
+    colors.muted,
+  );
+
+  page.drawRectangle({
+    x: page.getWidth() - 210,
+    y: page.getHeight() - margin - 76,
+    width: 162,
+    height: 76,
+    color: colors.pale,
+    borderColor: colors.border,
+    borderWidth: 1,
+  });
+  drawText(page, "PRESUPUESTO", page.getWidth() - 190, margin + 16, fonts.bold, 10);
+  drawText(
+    page,
+    presupuesto.numero,
+    page.getWidth() - 190,
+    margin + 36,
+    fonts.bold,
+    13,
+  );
+
+  ctx.y = 146;
 }
 
-function drawHeader(doc: PDFKit.PDFDocument) {
-  doc
-    .fillColor("#111827")
-    .font("Helvetica-Bold")
-    .fontSize(24)
-    .text("Carpintería Juanser", margin, margin);
-
-  doc
-    .font("Helvetica")
-    .fontSize(10)
-    .fillColor("#404040")
-    .text(
-      "P.I. San Nicolás, Calle San Nicolás 9 Nave 21, 41500 Alcalá de Guadaíra, Sevilla",
-      margin,
-      82,
-      { width: 340 },
-    )
-    .text("Teléfonos: 665 13 47 46 / 655 69 39 63", margin, 110);
-
-  doc
-    .roundedRect(doc.page.width - 210, margin, 162, 76, 6)
-    .fillAndStroke("#f5f5f5", "#d4d4d4");
-
-  doc
-    .fillColor("#111827")
-    .font("Helvetica-Bold")
-    .fontSize(10)
-    .text("PRESUPUESTO", doc.page.width - 194, margin + 16, {
-      width: 130,
-      align: "right",
-    });
+function drawIntro(ctx: PdfContext, presupuesto: PresupuestoPdf) {
+  drawWrappedText(
+    ctx.page,
+    presupuesto.titulo,
+    margin,
+    ctx.y,
+    contentWidth,
+    ctx.fonts.bold,
+    16,
+    20,
+  );
+  ctx.y += 26;
+  ctx.y += drawWrappedText(
+    ctx.page,
+    presupuesto.descripcion,
+    margin,
+    ctx.y,
+    contentWidth,
+    ctx.fonts.regular,
+    10,
+    14,
+    colors.muted,
+  );
+  ctx.y += 24;
 }
 
-function drawClienteBlock(
-  doc: PDFKit.PDFDocument,
-  presupuesto: PresupuestoPdf,
-  y: number,
-) {
+function drawClienteBlock(ctx: PdfContext, presupuesto: PresupuestoPdf) {
   const { cliente } = presupuesto;
+  const metaX = ctx.page.getWidth() - 230;
+  ensureSpace(ctx, 116);
 
-  doc
-    .font("Helvetica-Bold")
-    .fontSize(12)
-    .fillColor("#111827")
-    .text("Datos del cliente", margin, y);
+  drawText(ctx.page, "Datos del cliente", margin, ctx.y, ctx.fonts.bold, 12);
+  ctx.y += 20;
 
-  const startY = y + 20;
-  doc
-    .font("Helvetica")
-    .fontSize(10)
-    .fillColor("#404040")
-    .text(cliente.nombre, margin, startY)
-    .text(`Teléfono: ${cliente.telefono || "-"}`, margin, startY + 16)
-    .text(`Email: ${cliente.email || "-"}`, margin, startY + 32)
-    .text(`Dirección: ${cliente.direccion || "-"}`, margin, startY + 48)
-    .text(`Localidad: ${cliente.localidad || "-"}`, margin, startY + 64);
+  [
+    cliente.nombre,
+    `Teléfono: ${cliente.telefono || "-"}`,
+    `Email: ${cliente.email || "-"}`,
+    `Dirección: ${cliente.direccion || "-"}`,
+    `Localidad: ${cliente.localidad || "-"}`,
+  ].forEach((line, index) => {
+    drawText(
+      ctx.page,
+      line,
+      margin,
+      ctx.y + index * 16,
+      index === 0 ? ctx.fonts.bold : ctx.fonts.regular,
+      10,
+      index === 0 ? colors.dark : colors.muted,
+    );
+  });
 
-  const metaX = doc.page.width - 230;
-  doc
-    .font("Helvetica-Bold")
-    .fillColor("#111827")
-    .text(`Número: ${presupuesto.numero}`, metaX, startY, {
-      width: 182,
-      align: "right",
-    })
-    .font("Helvetica")
-    .fillColor("#404040")
-    .text(`Fecha: ${formatDate(presupuesto.fecha)}`, metaX, startY + 18, {
-      width: 182,
-      align: "right",
-    })
-    .text(`Validez: ${presupuesto.validezDias} días`, metaX, startY + 36, {
-      width: 182,
-      align: "right",
-    });
+  [
+    `Número: ${presupuesto.numero}`,
+    `Fecha: ${formatDate(presupuesto.fecha)}`,
+    `Validez: ${presupuesto.validezDias} días`,
+  ].forEach((line, index) => {
+    drawText(
+      ctx.page,
+      line,
+      metaX,
+      ctx.y + index * 18,
+      index === 0 ? ctx.fonts.bold : ctx.fonts.regular,
+      10,
+      index === 0 ? colors.dark : colors.muted,
+    );
+  });
 
-  return startY + 92;
+  ctx.y += 96;
 }
 
-function drawTableHeader(doc: PDFKit.PDFDocument, y: number) {
-  doc.roundedRect(margin, y, doc.page.width - margin * 2, 24, 4).fill("#111827");
-  doc
-    .fillColor("#ffffff")
-    .font("Helvetica-Bold")
-    .fontSize(9)
-    .text("Concepto", margin + 10, y + 8, { width: 210 })
-    .text("Cant.", margin + 280, y + 8, { width: 50, align: "right" })
-    .text("Precio", margin + 342, y + 8, { width: 70, align: "right" })
-    .text("Total", margin + 430, y + 8, { width: 70, align: "right" });
+function drawTableHeader(ctx: PdfContext) {
+  const { page, fonts } = ctx;
+  ensureSpace(ctx, 30);
 
-  return y + 30;
+  page.drawRectangle({
+    x: margin,
+    y: page.getHeight() - ctx.y - 24,
+    width: contentWidth,
+    height: 24,
+    color: colors.dark,
+  });
+  drawText(page, "Concepto", margin + 10, ctx.y + 8, fonts.bold, 9, colors.white);
+  drawText(page, "Cant.", margin + 280, ctx.y + 8, fonts.bold, 9, colors.white);
+  drawText(page, "Precio", margin + 342, ctx.y + 8, fonts.bold, 9, colors.white);
+  drawText(page, "Total", margin + 430, ctx.y + 8, fonts.bold, 9, colors.white);
+  ctx.y += 30;
 }
 
-function drawLineas(
-  doc: PDFKit.PDFDocument,
-  presupuesto: PresupuestoPdf,
-  startY: number,
-) {
-  let y = drawTableHeader(doc, startY);
+function drawLineas(ctx: PdfContext, presupuesto: PresupuestoPdf) {
+  drawTableHeader(ctx);
 
   presupuesto.lineas.forEach((linea, index) => {
-    const description = linea.descripcion ? `\n${linea.descripcion}` : "";
-    const rowText = `${linea.concepto}${description}`;
-    const rowHeight = Math.max(
-      34,
-      doc.heightOfString(rowText, { width: 250 }) + 16,
-    );
+    const descriptionHeight = linea.descripcion
+      ? wrapText(linea.descripcion, ctx.fonts.regular, 8, 250).length * 11
+      : 0;
+    const rowHeight = Math.max(34, 24 + descriptionHeight);
 
-    y = ensureSpace(doc, y, rowHeight + 36);
-    if (y === margin) {
-      y = drawTableHeader(doc, y);
+    if (ensureSpace(ctx, rowHeight + 30)) {
+      drawTableHeader(ctx);
     }
 
     if (index % 2 === 0) {
-      doc
-        .rect(margin, y - 4, doc.page.width - margin * 2, rowHeight)
-        .fill("#fafafa");
+      ctx.page.drawRectangle({
+        x: margin,
+        y: ctx.page.getHeight() - ctx.y - rowHeight + 4,
+        width: contentWidth,
+        height: rowHeight,
+        color: colors.row,
+      });
     }
 
-    doc
-      .fillColor("#111827")
-      .font("Helvetica-Bold")
-      .fontSize(9)
-      .text(linea.concepto, margin + 10, y + 4, { width: 250 });
+    drawWrappedText(
+      ctx.page,
+      linea.concepto,
+      margin + 10,
+      ctx.y + 4,
+      250,
+      ctx.fonts.bold,
+      9,
+      11,
+    );
 
     if (linea.descripcion) {
-      doc
-        .font("Helvetica")
-        .fillColor("#525252")
-        .fontSize(8)
-        .text(linea.descripcion, margin + 10, y + 18, { width: 250 });
+      drawWrappedText(
+        ctx.page,
+        linea.descripcion,
+        margin + 10,
+        ctx.y + 18,
+        250,
+        ctx.fonts.regular,
+        8,
+        11,
+        colors.muted,
+      );
     }
 
-    doc
-      .font("Helvetica")
-      .fontSize(9)
-      .fillColor("#111827")
-      .text(Number(linea.cantidad).toLocaleString("es-ES"), margin + 280, y + 8, {
-        width: 50,
-        align: "right",
-      })
-      .text(formatCurrency(linea.precioUnitario), margin + 342, y + 8, {
-        width: 70,
-        align: "right",
-      })
-      .font("Helvetica-Bold")
-      .text(formatCurrency(linea.total), margin + 430, y + 8, {
-        width: 70,
-        align: "right",
-      });
+    drawText(
+      ctx.page,
+      Number(linea.cantidad).toLocaleString("es-ES"),
+      margin + 280,
+      ctx.y + 8,
+      ctx.fonts.regular,
+      9,
+    );
+    drawText(
+      ctx.page,
+      formatCurrency(linea.precioUnitario),
+      margin + 334,
+      ctx.y + 8,
+      ctx.fonts.regular,
+      9,
+    );
+    drawText(
+      ctx.page,
+      formatCurrency(linea.total),
+      margin + 426,
+      ctx.y + 8,
+      ctx.fonts.bold,
+      9,
+    );
 
-    y += rowHeight;
+    ctx.y += rowHeight;
   });
 
-  return y + 10;
+  ctx.y += 10;
 }
 
-function drawTotals(
-  doc: PDFKit.PDFDocument,
-  presupuesto: PresupuestoPdf,
-  startY: number,
-) {
-  const y = ensureSpace(doc, startY, 94);
-  const x = doc.page.width - 250;
-  const labelWidth = 110;
-  const valueWidth = 92;
+function drawTotals(ctx: PdfContext, presupuesto: PresupuestoPdf) {
+  ensureSpace(ctx, 98);
 
-  drawDivider(doc, y);
-  doc.fontSize(10).fillColor("#111827");
+  ctx.page.drawLine({
+    start: { x: margin, y: ctx.page.getHeight() - ctx.y },
+    end: { x: ctx.page.getWidth() - margin, y: ctx.page.getHeight() - ctx.y },
+    thickness: 1,
+    color: colors.border,
+  });
 
+  const x = ctx.page.getWidth() - 250;
   [
-    ["Base imponible", formatCurrency(presupuesto.totalSinIva)],
-    [`IVA ${formatPercent(presupuesto.ivaPorcentaje)}%`, formatCurrency(presupuesto.totalIva)],
-    ["Total", formatCurrency(presupuesto.totalConIva)],
-  ].forEach(([label, value], index) => {
-    const rowY = y + 14 + index * 22;
-    doc
-      .font(index === 2 ? "Helvetica-Bold" : "Helvetica")
-      .fontSize(index === 2 ? 12 : 10)
-      .text(label, x, rowY, { width: labelWidth })
-      .text(value, x + labelWidth, rowY, {
-        width: valueWidth,
-        align: "right",
-      });
+    ["Base imponible", formatCurrency(presupuesto.totalSinIva), ctx.fonts.regular, 10],
+    [
+      `IVA ${formatPercent(presupuesto.ivaPorcentaje)}%`,
+      formatCurrency(presupuesto.totalIva),
+      ctx.fonts.regular,
+      10,
+    ],
+    ["Total", formatCurrency(presupuesto.totalConIva), ctx.fonts.bold, 12],
+  ].forEach(([label, value, font, size], index) => {
+    const rowY = ctx.y + 14 + index * 22;
+    drawText(ctx.page, label as string, x, rowY, font as PDFFont, size as number);
+    drawText(
+      ctx.page,
+      value as string,
+      x + 106,
+      rowY,
+      font as PDFFont,
+      size as number,
+    );
   });
 
-  return y + 92;
+  ctx.y += 92;
 }
 
-function drawFooter(
-  doc: PDFKit.PDFDocument,
-  presupuesto: PresupuestoPdf,
-  startY: number,
-) {
-  const y = ensureSpace(doc, startY, 110);
+function drawFooter(ctx: PdfContext, presupuesto: PresupuestoPdf) {
+  ensureSpace(ctx, 110);
 
   if (presupuesto.observaciones) {
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(11)
-      .fillColor("#111827")
-      .text("Observaciones", margin, y)
-      .font("Helvetica")
-      .fontSize(10)
-      .fillColor("#404040")
-      .text(presupuesto.observaciones, margin, y + 18, {
-        width: doc.page.width - margin * 2,
-      });
+    drawText(ctx.page, "Observaciones", margin, ctx.y, ctx.fonts.bold, 11);
+    ctx.y += 18;
+    ctx.y += drawWrappedText(
+      ctx.page,
+      presupuesto.observaciones,
+      margin,
+      ctx.y,
+      contentWidth,
+      ctx.fonts.regular,
+      10,
+      14,
+      colors.muted,
+    );
+    ctx.y += 18;
   }
 
-  const legalY = presupuesto.observaciones
-    ? y + Math.max(58, doc.heightOfString(presupuesto.observaciones, {
-        width: doc.page.width - margin * 2,
-      }) + 34)
-    : y;
-
-  doc
-    .font("Helvetica")
-    .fontSize(9)
-    .fillColor("#525252")
-    .text(
-      "Presupuesto sujeto a aceptación y disponibilidad de materiales.",
-      margin,
-      legalY,
-      { width: doc.page.width - margin * 2 },
-    );
+  ensureSpace(ctx, 26);
+  drawWrappedText(
+    ctx.page,
+    "Presupuesto sujeto a aceptación y disponibilidad de materiales.",
+    margin,
+    ctx.y,
+    contentWidth,
+    ctx.fonts.regular,
+    9,
+    12,
+    colors.muted,
+  );
 }
 
-function renderPdf(presupuesto: PresupuestoPdf) {
-  return new Promise<Buffer>((resolve, reject) => {
-    const doc = new PDFDocument({
-      bufferPages: true,
-      margin,
-      size: "A4",
-    });
-    const chunks: Buffer[] = [];
+async function renderPdf(presupuesto: PresupuestoPdf) {
+  const doc = await PDFDocument.create();
+  const fonts = {
+    regular: await doc.embedFont(StandardFonts.Helvetica),
+    bold: await doc.embedFont(StandardFonts.HelveticaBold),
+  };
 
-    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
-    doc.on("end", () => resolve(Buffer.concat(chunks)));
-    doc.on("error", reject);
+  const ctx: PdfContext = {
+    doc,
+    page: doc.addPage(pageSize),
+    fonts,
+    y: margin,
+  };
 
-    drawHeader(doc);
+  drawHeader(ctx, presupuesto);
+  drawIntro(ctx, presupuesto);
+  drawClienteBlock(ctx, presupuesto);
+  drawLineas(ctx, presupuesto);
+  drawTotals(ctx, presupuesto);
+  drawFooter(ctx, presupuesto);
 
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(16)
-      .fillColor("#111827")
-      .text(presupuesto.titulo, margin, 146, {
-        width: doc.page.width - margin * 2,
-      });
-
-    doc
-      .font("Helvetica")
-      .fontSize(10)
-      .fillColor("#404040")
-      .text(presupuesto.descripcion, margin, 170, {
-        width: doc.page.width - margin * 2,
-      });
-
-    let y = drawClienteBlock(doc, presupuesto, 220);
-    y = drawLineas(doc, presupuesto, y);
-    y = drawTotals(doc, presupuesto, y);
-    drawFooter(doc, presupuesto, y + 12);
-
-    doc.end();
-  });
+  return doc.save();
 }
 
 type PresupuestoPdfRouteContext = {
