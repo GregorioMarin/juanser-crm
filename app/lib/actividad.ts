@@ -8,7 +8,8 @@ export type ActividadClienteTipo =
   | "PRESUPUESTO_ELIMINADO"
   | "SEGUIMIENTO_CREADO"
   | "IMAGEN_CLIENTE_SUBIDA"
-  | "IMAGEN_JUANSER_SUBIDA";
+  | "IMAGEN_JUANSER_SUBIDA"
+  | "CLIENTE_CONVERTIDO_TRABAJO";
 
 export async function registrarActividadCliente({
   clienteId,

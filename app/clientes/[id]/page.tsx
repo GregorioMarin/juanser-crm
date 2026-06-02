@@ -3,7 +3,7 @@ import { mkdir, stat, unlink, writeFile } from "fs/promises";
 import path from "path";
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { connection } from "next/server";
 import {
   MultimediaUploadForm,
@@ -39,6 +39,11 @@ const allowedImageExtensions = ["jpg", "jpeg", "png", "webp"];
 const allowedVideoExtensions = ["mp4", "mov", "webm"];
 const fotoTipos = ["CLIENTE", "JUANSER"] as const;
 const presupuestoEstados = ["PENDIENTE", "ACEPTADO", "RECHAZADO"] as const;
+const estadosTrabajoTerminadoDestacado = [
+  "Aceptado",
+  "En fabricación",
+  "Instalado",
+] as const;
 
 type FotoTipo = (typeof fotoTipos)[number];
 type PresupuestoEstado = (typeof presupuestoEstados)[number];
@@ -552,6 +557,74 @@ async function deleteFotoCliente(formData: FormData) {
   revalidatePath(`/clientes/${clienteId}`);
 }
 
+async function convertirClienteEnTrabajoTerminado(formData: FormData) {
+  "use server";
+
+  const clienteId = requiredId(formData, "clienteId");
+  const cliente = await prisma.cliente.findUnique({
+    where: { id: clienteId },
+    select: {
+      id: true,
+      nombre: true,
+      localidad: true,
+      zona: true,
+      tipoTrabajo: true,
+      tipoCliente: true,
+      importeAceptado: true,
+      fechaInstalacion: true,
+      observaciones: true,
+      presupuestos: {
+        where: { estado: "ACEPTADO" },
+        select: {
+          totalConIva: true,
+          importe: true,
+        },
+      },
+    },
+  });
+
+  if (!cliente) {
+    throw new Error("Cliente no encontrado.");
+  }
+
+  const totalAceptadoPresupuestos = cliente.presupuestos.reduce(
+    (sum, presupuesto) =>
+      sum +
+      (Number(presupuesto.totalConIva) || Number(presupuesto.importe) || 0),
+    0,
+  );
+  const importe = cliente.importeAceptado
+    ? Number(cliente.importeAceptado)
+    : totalAceptadoPresupuestos;
+  const tipoTrabajo =
+    cliente.tipoTrabajo || cliente.tipoCliente || "Trabajo terminado";
+  const trabajo = await prisma.trabajoTerminado.create({
+    data: {
+      titulo: cliente.tipoTrabajo || cliente.nombre,
+      clienteNombre: cliente.nombre,
+      localidad: cliente.localidad || cliente.zona || "Sin localidad",
+      tipoTrabajo,
+      descripcion:
+        cliente.observaciones ||
+        `Trabajo terminado creado desde la ficha comercial de ${cliente.nombre}.`,
+      importe: importe.toFixed(2),
+      fechaTrabajo: cliente.fechaInstalacion || new Date(),
+      destacadoWeb: false,
+    },
+  });
+
+  await registrarActividadCliente({
+    clienteId,
+    tipo: "CLIENTE_CONVERTIDO_TRABAJO",
+    descripcion: "Cliente convertido en trabajo terminado",
+  });
+
+  revalidatePath("/");
+  revalidatePath("/trabajos");
+  revalidatePath(`/clientes/${clienteId}`);
+  redirect(`/trabajos/${trabajo.id}`);
+}
+
 async function getCliente(id: number) {
   const cliente = await prisma.cliente.findUnique({
     where: { id },
@@ -703,6 +776,51 @@ function SuccessMessage() {
 
 function FotoUploadForm({ clienteId }: { clienteId: number }) {
   return <MultimediaUploadForm clienteId={clienteId} action={uploadFotoCliente} />;
+}
+
+function ConvertirTrabajoTerminadoCard({
+  cliente,
+}: {
+  cliente: ClienteDetalle;
+}) {
+  const destacado = estadosTrabajoTerminadoDestacado.includes(
+    cliente.estado as (typeof estadosTrabajoTerminadoDestacado)[number],
+  );
+
+  return (
+    <section
+      className={`rounded-md border p-5 shadow-sm ${
+        destacado
+          ? "border-emerald-300 bg-emerald-50"
+          : "border-neutral-300 bg-white"
+      }`}
+    >
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-neutral-950">
+            Trabajo terminado
+          </h2>
+          <p className="mt-1 text-sm text-neutral-600">
+            Crea una ficha en la biblioteca de trabajos con los datos comerciales
+            de este cliente.
+          </p>
+        </div>
+        <form action={convertirClienteEnTrabajoTerminado}>
+          <input type="hidden" name="clienteId" value={cliente.id} />
+          <button
+            type="submit"
+            className={`inline-flex h-10 items-center justify-center rounded-md px-4 text-sm font-semibold transition ${
+              destacado
+                ? "bg-emerald-700 text-white hover:bg-emerald-800"
+                : "border border-neutral-300 bg-white text-neutral-800 hover:bg-neutral-50"
+            }`}
+          >
+            Convertir en trabajo terminado
+          </button>
+        </form>
+      </div>
+    </section>
+  );
 }
 
 function FotosGaleria({
@@ -1274,6 +1392,8 @@ function ClienteFicha({ cliente }: { cliente: ClienteDetalle }) {
           </div>
         </div>
       </div>
+
+      <ConvertirTrabajoTerminadoCard cliente={cliente} />
 
       <section className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
         <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">

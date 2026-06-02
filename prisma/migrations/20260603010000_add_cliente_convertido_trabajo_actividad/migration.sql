@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "ActividadClienteTipo" ADD VALUE 'CLIENTE_CONVERTIDO_TRABAJO';
