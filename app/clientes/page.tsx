@@ -140,6 +140,39 @@ async function getClientes(query: string) {
   });
 }
 
+function startOfToday() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return today;
+}
+
+function endOfToday() {
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
+  return today;
+}
+
+async function getSeguimientosPendientes() {
+  return prisma.cliente.findMany({
+    where: {
+      fechaSeguimiento: {
+        lte: endOfToday(),
+      },
+      estado: {
+        notIn: ["Instalado", "Perdido"],
+      },
+    },
+    orderBy: { fechaSeguimiento: "asc" },
+    select: {
+      id: true,
+      nombre: true,
+      telefono: true,
+      estado: true,
+      fechaSeguimiento: true,
+    },
+  });
+}
+
 async function getResumen() {
   const [
     leads,
@@ -165,6 +198,9 @@ async function getResumen() {
 }
 
 type Cliente = Awaited<ReturnType<typeof getClientes>>[number];
+type SeguimientoPendiente = Awaited<
+  ReturnType<typeof getSeguimientosPendientes>
+>[number];
 type Resumen = Awaited<ReturnType<typeof getResumen>>;
 
 function Field({
@@ -339,6 +375,10 @@ function estadoClass(estado: string) {
   );
 }
 
+function isVencido(date?: Date | null) {
+  return Boolean(date && date < startOfToday());
+}
+
 function EmptyState({ hasSearch }: { hasSearch: boolean }) {
   return (
     <div className="rounded-md border border-dashed border-neutral-300 bg-white p-8 text-center">
@@ -351,6 +391,103 @@ function EmptyState({ hasSearch }: { hasSearch: boolean }) {
           : "Crea el primer registro desde el formulario superior."}
       </p>
     </div>
+  );
+}
+
+function SeguimientosPendientes({
+  clientes,
+}: {
+  clientes: SeguimientoPendiente[];
+}) {
+  return (
+    <section className="rounded-md border border-neutral-300 bg-white shadow-sm">
+      <div className="flex flex-col gap-2 border-b border-neutral-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-neutral-950">
+            Seguimientos pendientes
+          </h2>
+          <p className="mt-1 text-sm text-neutral-500">
+            Clientes con seguimiento para hoy o ya vencido.
+          </p>
+        </div>
+        <span className="text-sm font-semibold text-neutral-700">
+          {clientes.length} pendientes
+        </span>
+      </div>
+
+      {clientes.length > 0 ? (
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-left text-sm">
+            <thead className="bg-neutral-100 text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
+              <tr>
+                <th className="px-4 py-3">Cliente</th>
+                <th className="px-4 py-3">Telefono</th>
+                <th className="px-4 py-3">Estado</th>
+                <th className="px-4 py-3">Seguimiento</th>
+                <th className="px-4 py-3 text-right">Ficha</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-200">
+              {clientes.map((cliente) => {
+                const vencido = isVencido(cliente.fechaSeguimiento);
+
+                return (
+                  <tr
+                    key={cliente.id}
+                    className={vencido ? "bg-rose-50 align-top" : "align-top"}
+                  >
+                    <td className="px-4 py-4">
+                      <Link
+                        href={`/clientes/${cliente.id}`}
+                        className="font-semibold text-neutral-950 transition hover:text-emerald-800"
+                      >
+                        {cliente.nombre}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-4 text-neutral-700">
+                      {cliente.telefono || "-"}
+                    </td>
+                    <td className="px-4 py-4">
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${estadoClass(
+                          cliente.estado,
+                        )}`}
+                      >
+                        {cliente.estado}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-4">
+                      <span
+                        className={
+                          vencido
+                            ? "inline-flex rounded-full bg-rose-100 px-2.5 py-1 text-xs font-semibold text-rose-900 ring-1 ring-rose-200"
+                            : "text-neutral-700"
+                        }
+                      >
+                        {formatDate(cliente.fechaSeguimiento)}
+                        {vencido ? " - Urgente" : ""}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4 text-right">
+                      <Link
+                        href={`/clientes/${cliente.id}`}
+                        className="inline-flex h-9 items-center justify-center rounded-md border border-neutral-300 px-3 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
+                      >
+                        Ver ficha
+                      </Link>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="px-5 py-6 text-sm text-neutral-500">
+          No hay seguimientos pendientes para hoy.
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -579,8 +716,9 @@ export default async function ClientesPage({ searchParams }: ClientesPageProps) 
   const params = await searchParams;
   const queryParam = Array.isArray(params.q) ? params.q[0] : params.q;
   const query = queryParam?.trim() ?? "";
-  const [clientes, resumen] = await Promise.all([
+  const [clientes, seguimientosPendientes, resumen] = await Promise.all([
     getClientes(query),
+    getSeguimientosPendientes(),
     getResumen(),
   ]);
 
@@ -605,6 +743,8 @@ export default async function ClientesPage({ searchParams }: ClientesPageProps) 
         </header>
 
         <ResumenComercial resumen={resumen} />
+
+        <SeguimientosPendientes clientes={seguimientosPendientes} />
 
         <section className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
           <div className="mb-5">

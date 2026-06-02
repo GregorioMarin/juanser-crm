@@ -109,8 +109,23 @@ function formatCurrency(value: ClienteDetalle["presupuesto"]) {
   }).format(Number(value));
 }
 
+function startOfToday() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return today;
+}
+
 function estadoClass(estado: string) {
   return estadoStyles[estado] ?? "bg-neutral-100 text-neutral-800 ring-neutral-200";
+}
+
+function isSeguimientoVencido(cliente: ClienteDetalle) {
+  return Boolean(
+    cliente.fechaSeguimiento &&
+      cliente.fechaSeguimiento < startOfToday() &&
+      cliente.estado !== "Instalado" &&
+      cliente.estado !== "Perdido",
+  );
 }
 
 function DetailItem({
@@ -131,8 +146,20 @@ function DetailItem({
 }
 
 function ClienteFicha({ cliente }: { cliente: ClienteDetalle }) {
+  const seguimientoVencido = isSeguimientoVencido(cliente);
+
   return (
-    <section className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+    <section className="grid gap-4">
+      {seguimientoVencido ? (
+        <div className="rounded-md border border-rose-300 bg-rose-50 px-5 py-4 text-rose-950 shadow-sm">
+          <p className="text-sm font-semibold">Seguimiento vencido</p>
+          <p className="mt-1 text-sm">
+            La fecha de seguimiento era el {formatDate(cliente.fechaSeguimiento)}.
+          </p>
+        </div>
+      ) : null}
+
+      <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
       <div className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -230,6 +257,7 @@ function ClienteFicha({ cliente }: { cliente: ClienteDetalle }) {
             </tbody>
           </table>
         </div>
+      </div>
       </div>
     </section>
   );
