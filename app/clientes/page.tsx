@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { connection } from "next/server";
+import { registrarActividadCliente } from "@/app/lib/actividad";
 import { prisma } from "@/app/lib/prisma";
 
 const estados = [
@@ -103,8 +104,13 @@ function clienteData(formData: FormData) {
 async function createCliente(formData: FormData) {
   "use server";
 
-  await prisma.cliente.create({
+  const cliente = await prisma.cliente.create({
     data: clienteData(formData),
+  });
+  await registrarActividadCliente({
+    clienteId: cliente.id,
+    tipo: "CLIENTE_CREADO",
+    descripcion: "Cliente creado",
   });
 
   revalidatePath("/clientes");
@@ -118,12 +124,30 @@ async function updateCliente(formData: FormData) {
     throw new Error("Cliente no valido.");
   }
 
+  const data = clienteData(formData);
+  const cliente = await prisma.cliente.findUnique({
+    where: { id },
+    select: { estado: true },
+  });
+  if (!cliente) {
+    throw new Error("Cliente no encontrado.");
+  }
+
   await prisma.cliente.update({
     where: { id },
-    data: clienteData(formData),
+    data,
   });
 
+  if (cliente.estado !== data.estado) {
+    await registrarActividadCliente({
+      clienteId: id,
+      tipo: "ESTADO_CAMBIADO",
+      descripcion: `Estado cambiado de ${cliente.estado} a ${data.estado}`,
+    });
+  }
+
   revalidatePath("/clientes");
+  revalidatePath(`/clientes/${id}`);
 }
 
 async function getClientes(query: string) {

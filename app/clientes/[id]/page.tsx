@@ -5,6 +5,7 @@ import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
+import { registrarActividadCliente } from "@/app/lib/actividad";
 import { prisma } from "@/app/lib/prisma";
 import { DeletePresupuestoForm } from "@/app/presupuestos/delete-presupuesto-form";
 import { WhatsAppPresupuestoLink } from "@/app/presupuestos/whatsapp-presupuesto-link";
@@ -282,6 +283,11 @@ async function addSeguimiento(formData: FormData) {
       nota,
     },
   });
+  await registrarActividadCliente({
+    clienteId,
+    tipo: "SEGUIMIENTO_CREADO",
+    descripcion: "Seguimiento añadido",
+  });
 
   revalidatePath(`/clientes/${clienteId}`);
 }
@@ -298,7 +304,7 @@ async function createPresupuesto(formData: FormData) {
   const totalIva = roundCurrency((totalSinIva * ivaPorcentaje) / 100);
   const totalConIva = roundCurrency(totalSinIva + totalIva);
 
-  await prisma.presupuesto.create({
+  const presupuesto = await prisma.presupuesto.create({
     data: {
       clienteId,
       numero: requiredString(formData, "numero"),
@@ -318,9 +324,17 @@ async function createPresupuesto(formData: FormData) {
       },
     },
   });
+  await registrarActividadCliente({
+    clienteId,
+    tipo: "PRESUPUESTO_CREADO",
+    descripcion: `Presupuesto nº ${presupuesto.numero} creado por importe ${formatCurrency(
+      presupuesto.totalConIva,
+    )}`,
+  });
 
   revalidatePath(`/clientes/${clienteId}`);
   revalidatePath("/clientes");
+  revalidatePath("/presupuestos");
 }
 
 async function uploadFotoCliente(formData: FormData) {
@@ -373,6 +387,14 @@ async function uploadFotoCliente(formData: FormData) {
     url: relativeUrl,
     filePath,
     size: savedFile.size,
+  });
+  await registrarActividadCliente({
+    clienteId,
+    tipo: tipo === "CLIENTE" ? "IMAGEN_CLIENTE_SUBIDA" : "IMAGEN_JUANSER_SUBIDA",
+    descripcion:
+      tipo === "CLIENTE"
+        ? "Imagen aportada por el cliente subida"
+        : "Imagen/propuesta de Juanser subida",
   });
 
   revalidatePath(`/clientes/${clienteId}`);
@@ -434,6 +456,9 @@ async function getCliente(id: number) {
             orderBy: { id: "asc" },
           },
         },
+      },
+      actividades: {
+        orderBy: { fecha: "desc" },
       },
     },
   });
@@ -892,6 +917,43 @@ function PresupuestosSection({ cliente }: { cliente: ClienteDetalle }) {
   );
 }
 
+function HistorialActividad({ cliente }: { cliente: ClienteDetalle }) {
+  return (
+    <section className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
+      <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-neutral-950">
+            HISTORIAL DE ACTIVIDAD
+          </h2>
+          <p className="mt-1 text-sm text-neutral-500">
+            Cambios y acciones comerciales registradas automaticamente.
+          </p>
+        </div>
+        <span className="text-sm font-semibold text-neutral-700">
+          {cliente.actividades.length} acciones
+        </span>
+      </div>
+
+      {cliente.actividades.length > 0 ? (
+        <ol className="divide-y divide-neutral-200 rounded-md border border-neutral-200">
+          {cliente.actividades.map((actividad) => (
+            <li key={actividad.id} className="grid gap-1 px-4 py-3">
+              <time className="text-sm font-semibold text-neutral-950">
+                {formatDateTime(actividad.fecha)}
+              </time>
+              <p className="text-sm text-neutral-700">{actividad.descripcion}</p>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="rounded-md border border-dashed border-neutral-300 px-4 py-6 text-sm text-neutral-500">
+          Todavia no hay actividad registrada para este cliente.
+        </p>
+      )}
+    </section>
+  );
+}
+
 function FotoCard({
   clienteId,
   foto,
@@ -1086,6 +1148,8 @@ function ClienteFicha({ cliente }: { cliente: ClienteDetalle }) {
       </section>
 
       <PresupuestosSection cliente={cliente} />
+
+      <HistorialActividad cliente={cliente} />
 
       <FotosGaleria
         cliente={cliente}

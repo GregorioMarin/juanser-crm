@@ -3,6 +3,7 @@
 import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { registrarActividadCliente } from "@/app/lib/actividad";
 import { prisma } from "@/app/lib/prisma";
 
 function requiredId(formData: FormData, key: string) {
@@ -39,7 +40,10 @@ export async function deletePresupuesto(formData: FormData) {
 
   const presupuesto = await prisma.presupuesto.findUnique({
     where: { id: presupuestoId },
-    select: { clienteId: true },
+    select: {
+      clienteId: true,
+      numero: true,
+    },
   });
   if (!presupuesto) {
     throw new Error("Presupuesto no encontrado.");
@@ -47,6 +51,11 @@ export async function deletePresupuesto(formData: FormData) {
 
   await prisma.presupuesto.delete({
     where: { id: presupuestoId },
+  });
+  await registrarActividadCliente({
+    clienteId: presupuesto.clienteId,
+    tipo: "PRESUPUESTO_ELIMINADO",
+    descripcion: `Presupuesto nº ${presupuesto.numero} eliminado`,
   });
 
   revalidatePath(`/clientes/${presupuesto.clienteId}`);
