@@ -24,3 +24,101 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+button,
+summary,
+a[class*="inline-flex"],
+a[class*="rounded-md"] {
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    color 0.2s ease,
+    opacity 0.2s ease,
+    transform 0.2s ease;
+  will-change: transform;
+}
+
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+input,
+select,
+textarea {
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    color 0.2s ease;
+}
+
+button:focus-visible,
+summary:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #047857;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 4px rgb(16 185 129 / 0.18);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: #047857;
+  box-shadow: 0 0 0 3px rgb(16 185 129 / 0.14);
+}
+
+.shadow-sm {
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  button:hover:not(:disabled),
+  summary:hover,
+  a[class*="inline-flex"]:hover,
+  a[class*="rounded-md"]:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 18px rgb(15 23 42 / 0.12);
+  }
+
+  .shadow-sm:hover {
+    box-shadow: 0 8px 20px rgb(15 23 42 / 0.08);
+  }
+}
+
+button:active:not(:disabled),
+summary:active,
+a[class*="inline-flex"]:active,
+a[class*="rounded-md"]:active {
+  transform: scale(0.98);
+  box-shadow: 0 3px 10px rgb(15 23 42 / 0.12);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+
+  button,
+  summary,
+  a[class*="inline-flex"],
+  a[class*="rounded-md"],
+  .shadow-sm {
+    transform: none !important;
+  }
+}
