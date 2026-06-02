@@ -6,6 +6,9 @@ import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
 import { connection } from "next/server";
 import {
+  ClienteEstadoFields,
+} from "@/app/clientes/cliente-estado-fields";
+import {
   MultimediaUploadForm,
   type MultimediaUploadState,
 } from "@/app/clientes/multimedia-upload-form";
@@ -26,6 +29,61 @@ const estadoStyles: Record<string, string> = {
   Instalado: "bg-teal-100 text-teal-900 ring-teal-200",
   Perdido: "bg-rose-100 text-rose-900 ring-rose-200",
 };
+
+const estados = [
+  "Nuevo lead",
+  "Visitado",
+  "Presupuesto enviado",
+  "Pendiente respuesta",
+  "Aceptado",
+  "En fabricación",
+  "Instalado",
+  "Perdido",
+] as const;
+
+const origenesContacto = [
+  "WhatsApp",
+  "Teléfono",
+  "Email",
+  "Formulario web",
+  "Visita presencial",
+  "Otro",
+] as const;
+
+const tiposCliente = [
+  "Usuario final",
+  "Arquitecto",
+  "Constructora",
+  "Tienda",
+  "Otros",
+] as const;
+
+const motivosRechazo = [
+  "Muy caro",
+  "Lo hace otro carpintero",
+  "Lo deja para más adelante",
+  "No responde",
+  "Fuera de zona",
+  "Trabajo que no realizamos",
+  "Otro",
+] as const;
+
+const zonas = [
+  "Alcalá de Guadaíra",
+  "Sevilla capital",
+  "Dos Hermanas",
+  "Mairena del Alcor",
+  "El Viso del Alcor",
+  "Montequinto",
+  "Utrera",
+  "Los Palacios",
+  "Mairena del Aljarafe",
+  "Bormujos",
+  "Tomares",
+  "Castilleja",
+  "Camas",
+  "Otro",
+] as const;
 
 const inputClass =
   "w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-950 outline-none transition placeholder:text-neutral-400 focus:border-emerald-700 focus:ring-2 focus:ring-emerald-100";
@@ -94,6 +152,55 @@ function requiredPresupuestoEstado(formData: FormData) {
   return value as PresupuestoEstado;
 }
 
+function estadoValue(formData: FormData) {
+  const value = optionalString(formData, "estado") ?? "Nuevo lead";
+  if (!estados.includes(value as (typeof estados)[number])) {
+    throw new Error("Estado no valido.");
+  }
+
+  return value;
+}
+
+function origenContactoValue(formData: FormData) {
+  const value = optionalString(formData, "origenContacto") ?? "WhatsApp";
+  if (!origenesContacto.includes(value as (typeof origenesContacto)[number])) {
+    throw new Error("Origen del contacto no valido.");
+  }
+
+  return value;
+}
+
+function tipoClienteValue(formData: FormData) {
+  const value = optionalString(formData, "tipoCliente") ?? "Usuario final";
+  if (!tiposCliente.includes(value as (typeof tiposCliente)[number])) {
+    throw new Error("Tipo de cliente no valido.");
+  }
+
+  return value;
+}
+
+function motivoRechazoValue(formData: FormData, estado: string) {
+  if (estado !== "Perdido") {
+    return null;
+  }
+
+  const value = optionalString(formData, "motivoRechazo") ?? motivosRechazo[0];
+  if (!motivosRechazo.includes(value as (typeof motivosRechazo)[number])) {
+    throw new Error("Motivo de rechazo no valido.");
+  }
+
+  return value;
+}
+
+function zonaValue(formData: FormData) {
+  const value = optionalString(formData, "zona") ?? "Alcalá de Guadaíra";
+  if (!zonas.includes(value as (typeof zonas)[number])) {
+    throw new Error("Zona no valida.");
+  }
+
+  return value;
+}
+
 function requiredDecimal(formData: FormData, key: string) {
   const value = requiredString(formData, key);
   return parseDecimal(value, key);
@@ -135,6 +242,44 @@ function optionalDate(formData: FormData, key: string) {
   }
 
   return date;
+}
+
+function requiredDate(formData: FormData, key: string) {
+  const date = optionalDate(formData, key);
+  if (!date) {
+    throw new Error(`La fecha ${key} es obligatoria.`);
+  }
+
+  return date;
+}
+
+function optionalCurrency(formData: FormData, key: string) {
+  const value = optionalString(formData, key);
+  return value ? parseDecimal(value, key) : null;
+}
+
+function clienteEditableData(formData: FormData) {
+  const estado = estadoValue(formData);
+
+  return {
+    nombre: requiredString(formData, "nombre"),
+    telefono: optionalString(formData, "telefono"),
+    email: optionalString(formData, "email"),
+    direccion: optionalString(formData, "direccion"),
+    localidad: optionalString(formData, "localidad"),
+    zona: zonaValue(formData),
+    origenContacto: origenContactoValue(formData),
+    tipoCliente: tipoClienteValue(formData),
+    presupuesto: optionalCurrency(formData, "presupuesto"),
+    importeAceptado: optionalCurrency(formData, "importeAceptado"),
+    fechaAlta: requiredDate(formData, "fechaAlta"),
+    fechaSeguimiento: optionalDate(formData, "fechaSeguimiento"),
+    fechaMedicion: optionalDate(formData, "fechaMedicion"),
+    fechaInstalacion: optionalDate(formData, "fechaInstalacion"),
+    estado,
+    motivoRechazo: motivoRechazoValue(formData, estado),
+    observaciones: optionalString(formData, "observaciones"),
+  };
 }
 
 function roundCurrency(value: number) {
@@ -557,6 +702,74 @@ async function deleteFotoCliente(formData: FormData) {
   revalidatePath(`/clientes/${clienteId}`);
 }
 
+async function updateClienteFicha(formData: FormData) {
+  "use server";
+
+  const clienteId = requiredId(formData, "clienteId");
+  const data = clienteEditableData(formData);
+  const cliente = await prisma.cliente.findUnique({
+    where: { id: clienteId },
+    select: { estado: true },
+  });
+  if (!cliente) {
+    throw new Error("Cliente no encontrado.");
+  }
+
+  await prisma.cliente.update({
+    where: { id: clienteId },
+    data,
+  });
+
+  if (cliente.estado !== data.estado) {
+    await registrarActividadCliente({
+      clienteId,
+      tipo: "ESTADO_CAMBIADO",
+      descripcion: `Estado cambiado de ${cliente.estado} a ${data.estado}`,
+    });
+  }
+
+  revalidatePath("/");
+  revalidatePath("/clientes");
+  revalidatePath("/kanban");
+  revalidatePath(`/clientes/${clienteId}`);
+}
+
+async function cambiarEstadoCliente(formData: FormData) {
+  "use server";
+
+  const clienteId = requiredId(formData, "clienteId");
+  const estado = estadoValue(formData);
+  const motivoRechazo = motivoRechazoValue(formData, estado);
+  const cliente = await prisma.cliente.findUnique({
+    where: { id: clienteId },
+    select: { estado: true },
+  });
+  if (!cliente) {
+    throw new Error("Cliente no encontrado.");
+  }
+
+  await prisma.cliente.update({
+    where: { id: clienteId },
+    data: {
+      estado,
+      motivoRechazo,
+    },
+  });
+
+  if (cliente.estado !== estado) {
+    await registrarActividadCliente({
+      clienteId,
+      tipo: "ESTADO_CAMBIADO",
+      descripcion: `Estado cambiado de ${cliente.estado} a ${estado}`,
+    });
+  }
+
+  revalidatePath("/");
+  revalidatePath("/clientes");
+  revalidatePath("/kanban");
+  revalidatePath(`/clientes/${clienteId}`);
+}
+
 async function convertirClienteEnTrabajoTerminado(formData: FormData) {
   "use server";
 
@@ -761,6 +974,39 @@ function DetailItem({
   );
 }
 
+function currencyInputValue(value: unknown) {
+  return value ? Number(value).toFixed(2) : "";
+}
+
+function SelectField({
+  label,
+  name,
+  options,
+  defaultValue,
+}: {
+  label: string;
+  name: string;
+  options: readonly string[];
+  defaultValue?: string | null;
+}) {
+  const current = defaultValue && options.includes(defaultValue)
+    ? defaultValue
+    : options[0];
+
+  return (
+    <label className="flex flex-col gap-1.5">
+      <span className={labelClass}>{label}</span>
+      <select className={inputClass} name={name} defaultValue={current}>
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 function successFromParam(value?: string | string[]) {
   const raw = Array.isArray(value) ? value[0] : value;
   return raw === "1";
@@ -819,6 +1065,204 @@ function ConvertirTrabajoTerminadoCard({
           </button>
         </form>
       </div>
+    </section>
+  );
+}
+
+function CambiarEstadoForm({ cliente }: { cliente: ClienteDetalle }) {
+  return (
+    <section
+      id="cambiar-estado"
+      className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm"
+    >
+      <div className="mb-4">
+        <h2 className="text-xl font-semibold text-neutral-950">
+          Cambiar estado
+        </h2>
+        <p className="mt-1 text-sm text-neutral-500">
+          Actualiza rapidamente la fase comercial del cliente.
+        </p>
+      </div>
+      <form action={cambiarEstadoCliente} className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
+        <input type="hidden" name="clienteId" value={cliente.id} />
+        <div className="grid gap-4 md:grid-cols-2">
+          <ClienteEstadoFields
+            estados={estados}
+            motivosRechazo={motivosRechazo}
+            defaultEstado={cliente.estado}
+            defaultMotivoRechazo={cliente.motivoRechazo}
+          />
+        </div>
+        <button
+          type="submit"
+          className="inline-flex h-10 w-fit items-center justify-center rounded-md bg-neutral-950 px-4 text-sm font-semibold text-white transition hover:bg-neutral-800"
+        >
+          Guardar estado
+        </button>
+      </form>
+    </section>
+  );
+}
+
+function ClienteEditForm({ cliente }: { cliente: ClienteDetalle }) {
+  return (
+    <section
+      id="editar-cliente"
+      className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm"
+    >
+      <div className="mb-4">
+        <h2 className="text-xl font-semibold text-neutral-950">
+          Editar cliente
+        </h2>
+        <p className="mt-1 text-sm text-neutral-500">
+          Datos comerciales, fechas, presupuesto y observaciones.
+        </p>
+      </div>
+      <form action={updateClienteFicha} className="grid gap-4">
+        <input type="hidden" name="clienteId" value={cliente.id} />
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>Nombre</span>
+            <input
+              className={inputClass}
+              name="nombre"
+              defaultValue={cliente.nombre}
+              required
+            />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>Telefono</span>
+            <input
+              className={inputClass}
+              name="telefono"
+              type="tel"
+              defaultValue={cliente.telefono ?? ""}
+            />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>Email</span>
+            <input
+              className={inputClass}
+              name="email"
+              type="email"
+              defaultValue={cliente.email ?? ""}
+            />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>Direccion</span>
+            <input
+              className={inputClass}
+              name="direccion"
+              defaultValue={cliente.direccion ?? ""}
+            />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>Localidad</span>
+            <input
+              className={inputClass}
+              name="localidad"
+              defaultValue={cliente.localidad ?? ""}
+            />
+          </label>
+          <SelectField
+            label="Zona"
+            name="zona"
+            options={zonas}
+            defaultValue={cliente.zona}
+          />
+          <SelectField
+            label="Origen del contacto"
+            name="origenContacto"
+            options={origenesContacto}
+            defaultValue={cliente.origenContacto}
+          />
+          <SelectField
+            label="Tipo de cliente"
+            name="tipoCliente"
+            options={tiposCliente}
+            defaultValue={displayTipoCliente(cliente)}
+          />
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>Presupuesto</span>
+            <input
+              className={inputClass}
+              name="presupuesto"
+              type="number"
+              min="0"
+              step="0.01"
+              defaultValue={currencyInputValue(cliente.presupuesto)}
+            />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>Importe aceptado</span>
+            <input
+              className={inputClass}
+              name="importeAceptado"
+              type="number"
+              min="0"
+              step="0.01"
+              defaultValue={currencyInputValue(cliente.importeAceptado)}
+            />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>Fecha de alta</span>
+            <input
+              className={inputClass}
+              name="fechaAlta"
+              type="date"
+              defaultValue={toDateInputValue(cliente.fechaAlta)}
+              required
+            />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>Fecha de seguimiento</span>
+            <input
+              className={inputClass}
+              name="fechaSeguimiento"
+              type="date"
+              defaultValue={toDateInputValue(cliente.fechaSeguimiento)}
+            />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>Fecha de medicion</span>
+            <input
+              className={inputClass}
+              name="fechaMedicion"
+              type="date"
+              defaultValue={toDateInputValue(cliente.fechaMedicion)}
+            />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>Fecha de instalacion</span>
+            <input
+              className={inputClass}
+              name="fechaInstalacion"
+              type="date"
+              defaultValue={toDateInputValue(cliente.fechaInstalacion)}
+            />
+          </label>
+          <ClienteEstadoFields
+            estados={estados}
+            motivosRechazo={motivosRechazo}
+            defaultEstado={cliente.estado}
+            defaultMotivoRechazo={cliente.motivoRechazo}
+          />
+        </div>
+        <label className="flex flex-col gap-1.5">
+          <span className={labelClass}>Observaciones</span>
+          <textarea
+            className={`${inputClass} min-h-28 resize-y`}
+            name="observaciones"
+            defaultValue={cliente.observaciones ?? ""}
+          />
+        </label>
+        <button
+          type="submit"
+          className="inline-flex h-10 w-fit items-center justify-center rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:bg-emerald-800"
+        >
+          Guardar cliente
+        </button>
+      </form>
     </section>
   );
 }
@@ -1393,6 +1837,10 @@ function ClienteFicha({ cliente }: { cliente: ClienteDetalle }) {
         </div>
       </div>
 
+      <CambiarEstadoForm cliente={cliente} />
+
+      <ClienteEditForm cliente={cliente} />
+
       <ConvertirTrabajoTerminadoCard cliente={cliente} />
 
       <section className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
@@ -1471,6 +1919,20 @@ export default async function ClientePage({
             <p className="mt-2 text-sm text-neutral-600">
               Ficha comercial individual
             </p>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <a
+              href="#editar-cliente"
+              className="inline-flex h-10 items-center justify-center rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:bg-emerald-800"
+            >
+              Editar cliente
+            </a>
+            <a
+              href="#cambiar-estado"
+              className="inline-flex h-10 items-center justify-center rounded-md border border-neutral-300 bg-white px-4 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
+            >
+              Cambiar estado
+            </a>
           </div>
         </header>
 
