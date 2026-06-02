@@ -16,6 +16,7 @@ const estadoStyles: Record<string, string> = {
   "Nuevo lead": "bg-sky-100 text-sky-900 ring-sky-200",
   Visitado: "bg-indigo-100 text-indigo-900 ring-indigo-200",
   "Presupuesto enviado": "bg-amber-100 text-amber-950 ring-amber-200",
+  "Pendiente respuesta": "bg-orange-100 text-orange-950 ring-orange-200",
   Aceptado: "bg-emerald-100 text-emerald-900 ring-emerald-200",
   "En fabricación": "bg-violet-100 text-violet-900 ring-violet-200",
   Instalado: "bg-teal-100 text-teal-900 ring-teal-200",
