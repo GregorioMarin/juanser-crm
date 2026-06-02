@@ -201,12 +201,19 @@ async function getResumen() {
     aceptados,
     enFabricacion,
     instalados,
+    totalPresupuestado,
+    totalAceptado,
   ] = await Promise.all([
     prisma.cliente.count(),
     prisma.cliente.count({ where: { estado: "Presupuesto enviado" } }),
     prisma.cliente.count({ where: { estado: "Aceptado" } }),
     prisma.cliente.count({ where: { estado: "En fabricación" } }),
     prisma.cliente.count({ where: { estado: "Instalado" } }),
+    prisma.presupuesto.aggregate({ _sum: { importe: true } }),
+    prisma.presupuesto.aggregate({
+      where: { estado: "ACEPTADO" },
+      _sum: { importe: true },
+    }),
   ]);
 
   return {
@@ -215,6 +222,8 @@ async function getResumen() {
     aceptados,
     enFabricacion,
     instalados,
+    totalPresupuestado: totalPresupuestado._sum.importe,
+    totalAceptado: totalAceptado._sum.importe,
   };
 }
 
@@ -597,10 +606,12 @@ function ResumenComercial({ resumen }: { resumen: Resumen }) {
     ["Aceptados", resumen.aceptados],
     ["En fabricacion", resumen.enFabricacion],
     ["Instalados", resumen.instalados],
+    ["Total presupuestado", formatCurrency(resumen.totalPresupuestado)],
+    ["Total aceptado", formatCurrency(resumen.totalAceptado)],
   ] as const;
 
   return (
-    <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+    <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
       {items.map(([label, value]) => (
         <div
           key={label}

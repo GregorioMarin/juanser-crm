@@ -27,8 +27,10 @@ const maxImageSize = 5 * 1024 * 1024;
 const allowedImageTypes = ["image/jpeg", "image/png", "image/webp"];
 const allowedExtensions = ["jpg", "jpeg", "png", "webp"];
 const fotoTipos = ["CLIENTE", "JUANSER"] as const;
+const presupuestoEstados = ["PENDIENTE", "ACEPTADO", "RECHAZADO"] as const;
 
 type FotoTipo = (typeof fotoTipos)[number];
+type PresupuestoEstado = (typeof presupuestoEstados)[number];
 
 function optionalString(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -65,6 +67,40 @@ function requiredFotoTipo(formData: FormData) {
   }
 
   return value as FotoTipo;
+}
+
+function requiredPresupuestoEstado(formData: FormData) {
+  const value = optionalString(formData, "estado") ?? "PENDIENTE";
+  if (!presupuestoEstados.includes(value as PresupuestoEstado)) {
+    throw new Error("Estado de presupuesto no valido.");
+  }
+
+  return value as PresupuestoEstado;
+}
+
+function requiredDecimal(formData: FormData, key: string) {
+  const value = requiredString(formData, key);
+  const normalized = value.replace(",", ".");
+
+  if (!/^\d+(\.\d{1,2})?$/.test(normalized)) {
+    throw new Error(`El campo ${key} debe ser un importe valido.`);
+  }
+
+  return normalized;
+}
+
+function optionalDate(formData: FormData, key: string) {
+  const value = optionalString(formData, key);
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) {
+    throw new Error(`La fecha ${key} no es valida.`);
+  }
+
+  return date;
 }
 
 function requiredImageFile(formData: FormData) {
@@ -183,6 +219,27 @@ async function addSeguimiento(formData: FormData) {
   revalidatePath(`/clientes/${clienteId}`);
 }
 
+async function createPresupuesto(formData: FormData) {
+  "use server";
+
+  const clienteId = requiredId(formData, "clienteId");
+
+  await prisma.presupuesto.create({
+    data: {
+      clienteId,
+      numero: requiredString(formData, "numero"),
+      titulo: requiredString(formData, "titulo"),
+      descripcion: requiredString(formData, "descripcion"),
+      importe: requiredDecimal(formData, "importe"),
+      estado: requiredPresupuestoEstado(formData),
+      fecha: optionalDate(formData, "fecha") ?? new Date(),
+    },
+  });
+
+  revalidatePath(`/clientes/${clienteId}`);
+  revalidatePath("/clientes");
+}
+
 async function uploadFotoCliente(formData: FormData) {
   "use server";
 
@@ -287,6 +344,9 @@ async function getCliente(id: number) {
       fotos: {
         orderBy: { createdAt: "desc" },
       },
+      presupuestos: {
+        orderBy: { fecha: "desc" },
+      },
     },
   });
 }
@@ -334,6 +394,23 @@ function startOfToday() {
 
 function estadoClass(estado: string) {
   return estadoStyles[estado] ?? "bg-neutral-100 text-neutral-800 ring-neutral-200";
+}
+
+function presupuestoEstadoClass(estado: string) {
+  const styles: Record<PresupuestoEstado, string> = {
+    PENDIENTE: "bg-amber-100 text-amber-900 ring-amber-200",
+    ACEPTADO: "bg-emerald-100 text-emerald-900 ring-emerald-200",
+    RECHAZADO: "bg-rose-100 text-rose-900 ring-rose-200",
+  };
+
+  return (
+    styles[estado as PresupuestoEstado] ??
+    "bg-neutral-100 text-neutral-800 ring-neutral-200"
+  );
+}
+
+function toDateInputValue(date?: Date | null) {
+  return date ? date.toISOString().slice(0, 10) : "";
 }
 
 function isSeguimientoVencido(cliente: ClienteDetalle) {
@@ -445,6 +522,139 @@ function FotosGaleria({
           No hay imagenes en esta seccion.
         </p>
       )}
+    </section>
+  );
+}
+
+function PresupuestosSection({ cliente }: { cliente: ClienteDetalle }) {
+  return (
+    <section className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
+      <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-neutral-950">Presupuestos</h2>
+          <p className="mt-1 text-sm text-neutral-500">
+            Presupuestos asociados a este cliente.
+          </p>
+        </div>
+        <span className="text-sm font-semibold text-neutral-700">
+          {cliente.presupuestos.length} presupuestos
+        </span>
+      </div>
+
+      <form
+        action={createPresupuesto}
+        className="grid gap-4 rounded-md border border-neutral-200 bg-neutral-50 p-4"
+      >
+        <input type="hidden" name="clienteId" value={cliente.id} />
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>Numero</span>
+            <input className={inputClass} name="numero" required />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>Titulo</span>
+            <input className={inputClass} name="titulo" required />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>Importe (€)</span>
+            <input
+              className={inputClass}
+              name="importe"
+              type="number"
+              step="0.01"
+              min="0"
+              required
+            />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>Fecha</span>
+            <input
+              className={inputClass}
+              name="fecha"
+              type="date"
+              defaultValue={toDateInputValue(new Date())}
+            />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>Estado</span>
+            <select className={inputClass} name="estado" defaultValue="PENDIENTE">
+              {presupuestoEstados.map((estado) => (
+                <option key={estado} value={estado}>
+                  {estado}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <label className="flex flex-col gap-1.5">
+          <span className={labelClass}>Descripcion</span>
+          <textarea
+            className={`${inputClass} min-h-24 resize-y`}
+            name="descripcion"
+            required
+          />
+        </label>
+        <button
+          type="submit"
+          className="inline-flex h-10 w-fit items-center justify-center rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:bg-emerald-800"
+        >
+          Crear presupuesto
+        </button>
+      </form>
+
+      <div className="mt-5 overflow-hidden rounded-md border border-neutral-200">
+        <table className="w-full border-collapse text-left text-sm">
+          <thead className="bg-neutral-100 text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
+            <tr>
+              <th className="px-4 py-3">Numero</th>
+              <th className="px-4 py-3">Titulo</th>
+              <th className="px-4 py-3">Importe</th>
+              <th className="px-4 py-3">Estado</th>
+              <th className="px-4 py-3">Fecha</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-neutral-200">
+            {cliente.presupuestos.length > 0 ? (
+              cliente.presupuestos.map((presupuesto) => (
+                <tr key={presupuesto.id} className="align-top">
+                  <td className="px-4 py-4 font-semibold text-neutral-950">
+                    {presupuesto.numero}
+                  </td>
+                  <td className="px-4 py-4">
+                    <p className="font-semibold text-neutral-950">
+                      {presupuesto.titulo}
+                    </p>
+                    <p className="mt-1 whitespace-pre-wrap text-neutral-600">
+                      {presupuesto.descripcion}
+                    </p>
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-4 font-semibold text-neutral-950">
+                    {formatCurrency(presupuesto.importe)}
+                  </td>
+                  <td className="px-4 py-4">
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${presupuestoEstadoClass(
+                        presupuesto.estado,
+                      )}`}
+                    >
+                      {presupuesto.estado}
+                    </span>
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-4 text-neutral-700">
+                    {formatDate(presupuesto.fecha)}
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={5} className="px-4 py-6 text-center text-neutral-500">
+                  Todavia no hay presupuestos para este cliente.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }
@@ -641,6 +851,8 @@ function ClienteFicha({ cliente }: { cliente: ClienteDetalle }) {
         </div>
         <FotoUploadForm clienteId={cliente.id} />
       </section>
+
+      <PresupuestosSection cliente={cliente} />
 
       <FotosGaleria
         cliente={cliente}
