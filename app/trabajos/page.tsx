@@ -15,6 +15,15 @@ type TrabajoFilters = {
   ano: string;
 };
 
+type TrabajoWhere = {
+  localidad?: string;
+  tipoTrabajo?: string;
+  fechaTrabajo?: {
+    gte: Date;
+    lt: Date;
+  };
+};
+
 function startOfYear(year: number) {
   return new Date(year, 0, 1);
 }
@@ -24,18 +33,30 @@ function startOfNextYear(year: number) {
 }
 
 function trabajoWhere(filters: TrabajoFilters) {
-  const year = Number(filters.ano);
+  const where: TrabajoWhere = {};
+  const localidad = filters.localidad.trim();
+  const tipoTrabajo = filters.tipoTrabajo.trim();
+  const ano = filters.ano.trim();
 
-  return {
-    localidad: filters.localidad || undefined,
-    tipoTrabajo: filters.tipoTrabajo || undefined,
-    fechaTrabajo: Number.isInteger(year)
-      ? {
-          gte: startOfYear(year),
-          lt: startOfNextYear(year),
-        }
-      : undefined,
-  };
+  if (localidad && localidad !== "Todas") {
+    where.localidad = localidad;
+  }
+
+  if (tipoTrabajo && tipoTrabajo !== "Todos") {
+    where.tipoTrabajo = tipoTrabajo;
+  }
+
+  if (ano && ano !== "Todos") {
+    const year = Number(ano);
+    if (Number.isInteger(year) && year > 0) {
+      where.fechaTrabajo = {
+        gte: startOfYear(year),
+        lt: startOfNextYear(year),
+      };
+    }
+  }
+
+  return Object.keys(where).length > 0 ? where : undefined;
 }
 
 async function getTrabajos(filters: TrabajoFilters) {
@@ -58,6 +79,20 @@ async function getFilterOptions() {
       fechaTrabajo: true,
     },
     orderBy: { fechaTrabajo: "desc" },
+  });
+}
+
+async function getTrabajosStats() {
+  return prisma.trabajoTerminado.aggregate({
+    _count: {
+      _all: true,
+    },
+    _sum: {
+      importe: true,
+    },
+    _avg: {
+      importe: true,
+    },
   });
 }
 
@@ -317,6 +352,44 @@ function TrabajosTable({ trabajos }: { trabajos: Trabajo[] }) {
   );
 }
 
+function activeFiltersLabel(filters: TrabajoFilters) {
+  const activeFilters = [
+    filters.localidad ? `localidad=${filters.localidad}` : null,
+    filters.tipoTrabajo ? `tipoTrabajo=${filters.tipoTrabajo}` : null,
+    filters.ano ? `ano=${filters.ano}` : null,
+  ].filter(Boolean);
+
+  return activeFilters.length > 0 ? activeFilters.join(", ") : "ninguno";
+}
+
+function TrabajosDebugPanel({
+  trabajos,
+  filters,
+}: {
+  trabajos: Trabajo[];
+  filters: TrabajoFilters;
+}) {
+  return (
+    <section className="rounded-md border border-amber-300 bg-amber-50 p-5 text-sm text-amber-950 shadow-sm">
+      <h2 className="text-lg font-semibold">Diagnostico trabajos</h2>
+      <dl className="mt-3 grid gap-3 md:grid-cols-3">
+        <div>
+          <dt className="font-semibold">Trabajos cargados</dt>
+          <dd>{trabajos.length}</dd>
+        </div>
+        <div>
+          <dt className="font-semibold">Filtros activos</dt>
+          <dd>{activeFiltersLabel(filters)}</dd>
+        </div>
+        <div>
+          <dt className="font-semibold">IDs cargados</dt>
+          <dd>{trabajos.map((trabajo) => trabajo.id).join(", ") || "-"}</dd>
+        </div>
+      </dl>
+    </section>
+  );
+}
+
 type TrabajosPageProps = {
   searchParams: Promise<{
     localidad?: string | string[];
@@ -329,24 +402,28 @@ function firstParam(value?: string | string[]) {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
 }
 
+function normalizedParam(value?: string | string[]) {
+  const param = firstParam(value).trim();
+  return param === "Todas" || param === "Todos" ? "" : param;
+}
+
 export default async function TrabajosPage({ searchParams }: TrabajosPageProps) {
   await connection();
 
   const params = await searchParams;
   const filters: TrabajoFilters = {
-    localidad: firstParam(params.localidad),
-    tipoTrabajo: firstParam(params.tipoTrabajo),
-    ano: firstParam(params.ano),
+    localidad: normalizedParam(params.localidad),
+    tipoTrabajo: normalizedParam(params.tipoTrabajo),
+    ano: normalizedParam(params.ano),
   };
-  const [trabajos, options] = await Promise.all([
+  const [trabajos, options, stats] = await Promise.all([
     getTrabajos(filters),
     getFilterOptions(),
+    getTrabajosStats(),
   ]);
-  const importeTotal = trabajos.reduce(
-    (sum, trabajo) => sum + Number(trabajo.importe),
-    0,
-  );
-  const importeMedio = trabajos.length > 0 ? importeTotal / trabajos.length : 0;
+  const totalTrabajos = stats._count._all;
+  const importeTotal = Number(stats._sum.importe ?? 0);
+  const importeMedio = Number(stats._avg.importe ?? 0);
   const localidades = uniqueSorted(options.map((option) => option.localidad));
   const tipos = uniqueSorted(options.map((option) => option.tipoTrabajo));
   const anos = Array.from(
@@ -374,10 +451,12 @@ export default async function TrabajosPage({ searchParams }: TrabajosPageProps) 
         </header>
 
         <section className="grid gap-4 md:grid-cols-3">
-          <StatCard label="Nº de trabajos" value={String(trabajos.length)} />
+          <StatCard label="Nº de trabajos" value={String(totalTrabajos)} />
           <StatCard label="Importe total" value={formatCurrency(importeTotal)} />
           <StatCard label="Importe medio" value={formatCurrency(importeMedio)} />
         </section>
+
+        <TrabajosDebugPanel trabajos={trabajos} filters={filters} />
 
         <TrabajoForm />
 
