@@ -1,7 +1,6 @@
 import { randomUUID } from "crypto";
-import { mkdir, unlink, writeFile } from "fs/promises";
+import { mkdir, stat, unlink, writeFile } from "fs/promises";
 import path from "path";
-import Image from "next/image";
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { notFound } from "next/navigation";
@@ -94,6 +93,28 @@ function uploadFolder(tipo: FotoTipo) {
   return tipo === "CLIENTE" ? "cliente" : "juanser";
 }
 
+function publicUploadsDir(clienteId: number, tipo: FotoTipo) {
+  return path.join(
+    process.cwd(),
+    "public",
+    "uploads",
+    "clientes",
+    String(clienteId),
+    uploadFolder(tipo),
+  );
+}
+
+function publicUploadUrl(clienteId: number, tipo: FotoTipo, fileName: string) {
+  return `/uploads/clientes/${clienteId}/${uploadFolder(tipo)}/${fileName}`;
+}
+
+function validatePublicUploadUrl(url: string, clienteId: number) {
+  const expectedPrefix = `/uploads/clientes/${clienteId}/`;
+  if (!url.startsWith(expectedPrefix) || path.isAbsolute(url)) {
+    throw new Error("URL publica de imagen no valida.");
+  }
+}
+
 function safeFileName(name: string) {
   const baseName = name.replace(/\.[^.]+$/, "");
   const safe = baseName
@@ -138,25 +159,23 @@ async function uploadFotoCliente(formData: FormData) {
     throw new Error("Cliente no encontrado.");
   }
 
-  const folder = uploadFolder(tipo);
   const fileName = `${Date.now()}-${randomUUID()}-${safeFileName(
     file.name,
   )}.${extension}`;
-  const relativeUrl = `/uploads/clientes/${clienteId}/${folder}/${fileName}`;
-  const uploadDir = path.join(
-    process.cwd(),
-    "public",
-    "uploads",
-    "clientes",
-    String(clienteId),
-    folder,
-  );
+  const relativeUrl = publicUploadUrl(clienteId, tipo, fileName);
+  const uploadDir = publicUploadsDir(clienteId, tipo);
+  const filePath = path.join(uploadDir, fileName);
 
+  validatePublicUploadUrl(relativeUrl, clienteId);
   await mkdir(uploadDir, { recursive: true });
   await writeFile(
-    path.join(uploadDir, fileName),
+    filePath,
     Buffer.from(await file.arrayBuffer()),
   );
+  const savedFile = await stat(filePath);
+  if (!savedFile.isFile() || savedFile.size === 0) {
+    throw new Error("La imagen no se ha guardado correctamente.");
+  }
 
   await prisma.fotoCliente.create({
     data: {
@@ -166,6 +185,14 @@ async function uploadFotoCliente(formData: FormData) {
       nombreArchivo: file.name,
       descripcion,
     },
+  });
+
+  console.info("FotoCliente subida", {
+    clienteId,
+    tipo,
+    url: relativeUrl,
+    filePath,
+    size: savedFile.size,
   });
 
   revalidatePath(`/clientes/${clienteId}`);
@@ -378,15 +405,12 @@ function FotosGaleria({
               className="overflow-hidden rounded-md border border-neutral-200 bg-neutral-50"
             >
               <a href={foto.url} target="_blank" rel="noreferrer">
-                <span className="relative block h-44 w-full">
-                  <Image
-                    src={foto.url}
-                    alt={foto.descripcion || foto.nombreArchivo}
-                    fill
-                    sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
-                    className="object-cover"
-                  />
-                </span>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={foto.url}
+                  alt={foto.descripcion || foto.nombreArchivo}
+                  className="h-44 w-full object-cover"
+                />
               </a>
               <div className="grid gap-3 p-3">
                 <div>
