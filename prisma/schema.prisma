@@ -38,6 +38,11 @@ model Cliente {
   tipoTrabajo      String?
   origenContacto   String?
   tipoCliente      String?
+  motivoRechazo    String?
+  fechaMedicion    DateTime?
+  fechaInstalacion DateTime?
+  importeAceptado  Decimal?           @db.Decimal(12, 2)
+  zona             String?
   presupuesto      Decimal?           @db.Decimal(12, 2)
   fechaAlta        DateTime           @default(now())
   fechaSeguimiento DateTime?

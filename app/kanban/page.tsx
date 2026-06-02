@@ -101,7 +101,10 @@ async function cambiarEstadoCliente(formData: FormData) {
   if (cliente.estado !== estado) {
     await prisma.cliente.update({
       where: { id: clienteId },
-      data: { estado },
+      data: {
+        estado,
+        motivoRechazo: estado === "Perdido" ? undefined : null,
+      },
     });
     await registrarActividadCliente({
       clienteId,
@@ -123,9 +126,14 @@ async function getClientesKanban() {
       nombre: true,
       telefono: true,
       localidad: true,
+      zona: true,
       origenContacto: true,
       tipoCliente: true,
       tipoTrabajo: true,
+      motivoRechazo: true,
+      fechaMedicion: true,
+      fechaInstalacion: true,
+      importeAceptado: true,
       presupuesto: true,
       fechaSeguimiento: true,
       estado: true,
@@ -222,6 +230,12 @@ function ClienteCard({ cliente }: { cliente: ClienteKanban }) {
           </dd>
         </div>
         <div className="flex items-center justify-between gap-3">
+          <dt className="text-neutral-500">Zona</dt>
+          <dd className="text-right font-medium text-neutral-900">
+            {cliente.zona || "-"}
+          </dd>
+        </div>
+        <div className="flex items-center justify-between gap-3">
           <dt className="text-neutral-500">Origen</dt>
           <dd className="text-right font-medium text-neutral-900">
             {cliente.origenContacto || "-"}
@@ -240,11 +254,39 @@ function ClienteCard({ cliente }: { cliente: ClienteKanban }) {
           </dd>
         </div>
         <div className="flex items-center justify-between gap-3">
+          <dt className="text-neutral-500">Aceptado</dt>
+          <dd className="text-right font-semibold text-neutral-950">
+            {formatCurrency(cliente.importeAceptado)}
+          </dd>
+        </div>
+        <div className="flex items-center justify-between gap-3">
           <dt className="text-neutral-500">Seguimiento</dt>
           <dd className="text-right font-medium text-neutral-900">
             {formatDate(cliente.fechaSeguimiento)}
           </dd>
         </div>
+        <div className="flex items-center justify-between gap-3">
+          <dt className="text-neutral-500">Medición</dt>
+          <dd className="text-right font-medium text-neutral-900">
+            {formatDate(cliente.fechaMedicion)}
+          </dd>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <dt className="text-neutral-500">Instalación</dt>
+          <dd className="text-right font-medium text-neutral-900">
+            {formatDate(cliente.fechaInstalacion)}
+          </dd>
+        </div>
+        {cliente.estado === "Perdido" ? (
+          <div className="rounded-md border border-rose-100 bg-rose-50 px-3 py-2">
+            <dt className="text-xs font-semibold uppercase tracking-[0.12em] text-rose-700">
+              Motivo rechazo
+            </dt>
+            <dd className="mt-1 text-sm font-semibold text-rose-950">
+              {cliente.motivoRechazo || "-"}
+            </dd>
+          </div>
+        ) : null}
       </dl>
 
       <form action={cambiarEstadoCliente} className="mt-4 grid gap-2">

@@ -1061,6 +1061,7 @@ function ClienteFicha({ cliente }: { cliente: ClienteDetalle }) {
             <DetailItem label="Email" value={cliente.email} />
             <DetailItem label="Direccion" value={cliente.direccion} />
             <DetailItem label="Localidad" value={cliente.localidad} />
+            <DetailItem label="Zona" value={cliente.zona} />
             <DetailItem
               label="Origen del contacto"
               value={cliente.origenContacto}
@@ -1073,11 +1074,29 @@ function ClienteFicha({ cliente }: { cliente: ClienteDetalle }) {
               label="Presupuesto"
               value={formatCurrency(cliente.presupuesto)}
             />
+            <DetailItem
+              label="Importe aceptado"
+              value={formatCurrency(cliente.importeAceptado)}
+            />
             <DetailItem label="Fecha de alta" value={formatDate(cliente.fechaAlta)} />
             <DetailItem
               label="Fecha de seguimiento"
               value={formatDate(cliente.fechaSeguimiento)}
             />
+            <DetailItem
+              label="Fecha de medición"
+              value={formatDate(cliente.fechaMedicion)}
+            />
+            <DetailItem
+              label="Fecha de instalación"
+              value={formatDate(cliente.fechaInstalacion)}
+            />
+            {cliente.estado === "Perdido" ? (
+              <DetailItem
+                label="Motivo de rechazo"
+                value={cliente.motivoRechazo}
+              />
+            ) : null}
             <DetailItem label="Creado" value={formatDate(cliente.createdAt)} />
             <DetailItem label="Actualizado" value={formatDate(cliente.updatedAt)} />
           </dl>

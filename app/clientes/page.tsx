@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { connection } from "next/server";
+import { ClienteEstadoFields } from "@/app/clientes/cliente-estado-fields";
 import { registrarActividadCliente } from "@/app/lib/actividad";
 import { prisma } from "@/app/lib/prisma";
 
@@ -41,6 +42,33 @@ const tiposCliente = [
   "Constructora",
   "Tienda",
   "Otros",
+] as const;
+
+const motivosRechazo = [
+  "Muy caro",
+  "Lo hace otro carpintero",
+  "Lo deja para más adelante",
+  "No responde",
+  "Fuera de zona",
+  "Trabajo que no realizamos",
+  "Otro",
+] as const;
+
+const zonas = [
+  "Alcalá de Guadaíra",
+  "Sevilla capital",
+  "Dos Hermanas",
+  "Mairena del Alcor",
+  "El Viso del Alcor",
+  "Montequinto",
+  "Utrera",
+  "Los Palacios",
+  "Mairena del Aljarafe",
+  "Bormujos",
+  "Tomares",
+  "Castilleja",
+  "Camas",
+  "Otro",
 ] as const;
 
 const inputClass =
@@ -94,6 +122,28 @@ function tipoClienteValue(formData: FormData) {
   return value;
 }
 
+function motivoRechazoValue(formData: FormData, estado: string) {
+  if (estado !== "Perdido") {
+    return null;
+  }
+
+  const value = optionalString(formData, "motivoRechazo") ?? motivosRechazo[0];
+  if (!motivosRechazo.includes(value as (typeof motivosRechazo)[number])) {
+    throw new Error("Motivo de rechazo no valido.");
+  }
+
+  return value;
+}
+
+function zonaValue(formData: FormData) {
+  const value = optionalString(formData, "zona") ?? "Alcalá de Guadaíra";
+  if (!zonas.includes(value as (typeof zonas)[number])) {
+    throw new Error("Zona no valida.");
+  }
+
+  return value;
+}
+
 function optionalDate(formData: FormData, key: string) {
   const value = optionalString(formData, key);
   if (!value) {
@@ -108,21 +158,23 @@ function optionalDate(formData: FormData, key: string) {
   return date;
 }
 
-function presupuestoValue(formData: FormData) {
-  const value = optionalString(formData, "presupuesto");
+function presupuestoValue(formData: FormData, key = "presupuesto") {
+  const value = optionalString(formData, key);
   if (!value) {
     return null;
   }
 
   const normalized = value.replace(",", ".");
   if (!/^\d+(\.\d{1,2})?$/.test(normalized)) {
-    throw new Error("El presupuesto debe ser un importe valido.");
+    throw new Error(`El campo ${key} debe ser un importe valido.`);
   }
 
   return normalized;
 }
 
 function clienteData(formData: FormData) {
+  const estado = estadoValue(formData);
+
   return {
     nombre: requiredString(formData, "nombre"),
     telefono: optionalString(formData, "telefono"),
@@ -131,10 +183,15 @@ function clienteData(formData: FormData) {
     localidad: optionalString(formData, "localidad"),
     origenContacto: origenContactoValue(formData),
     tipoCliente: tipoClienteValue(formData),
+    motivoRechazo: motivoRechazoValue(formData, estado),
+    fechaMedicion: optionalDate(formData, "fechaMedicion"),
+    fechaInstalacion: optionalDate(formData, "fechaInstalacion"),
+    importeAceptado: presupuestoValue(formData, "importeAceptado"),
+    zona: zonaValue(formData),
     presupuesto: presupuestoValue(formData),
     fechaAlta: optionalDate(formData, "fechaAlta") ?? new Date(),
     fechaSeguimiento: optionalDate(formData, "fechaSeguimiento"),
-    estado: estadoValue(formData),
+    estado,
     observaciones: optionalString(formData, "observaciones"),
   };
 }
@@ -267,6 +324,8 @@ async function getResumen() {
     instalados,
     totalPresupuestado,
     totalAceptado,
+    importeAceptadoTotal,
+    perdidosPorMotivo,
   ] = await Promise.all([
     prisma.cliente.count(),
     prisma.cliente.count({ where: { estado: "Presupuesto enviado" } }),
@@ -278,6 +337,13 @@ async function getResumen() {
       where: { estado: "ACEPTADO" },
       _sum: { totalConIva: true },
     }),
+    prisma.cliente.aggregate({ _sum: { importeAceptado: true } }),
+    prisma.cliente.groupBy({
+      by: ["motivoRechazo"],
+      where: { estado: "Perdido" },
+      _count: { _all: true },
+      orderBy: { _count: { motivoRechazo: "desc" } },
+    }),
   ]);
 
   return {
@@ -288,6 +354,8 @@ async function getResumen() {
     instalados,
     totalPresupuestado: totalPresupuestado._sum.totalConIva,
     totalAceptado: totalAceptado._sum.totalConIva,
+    importeAceptadoTotal: importeAceptadoTotal._sum.importeAceptado,
+    perdidosPorMotivo,
   };
 }
 
@@ -328,7 +396,13 @@ function Field({
   );
 }
 
-function EstadoSelect({ defaultValue }: { defaultValue?: string | null }) {
+function EstadoSelect({
+  defaultValue,
+  defaultMotivoRechazo,
+}: {
+  defaultValue?: string | null;
+  defaultMotivoRechazo?: string | null;
+}) {
   const current: (typeof estados)[number] = estados.includes(
     defaultValue as (typeof estados)[number],
   )
@@ -336,16 +410,12 @@ function EstadoSelect({ defaultValue }: { defaultValue?: string | null }) {
     : "Nuevo lead";
 
   return (
-    <label className="flex flex-col gap-1.5">
-      <span className={labelClass}>Estado</span>
-      <select className={inputClass} name="estado" defaultValue={current}>
-        {estados.map((estado) => (
-          <option key={estado} value={estado}>
-            {estado}
-          </option>
-        ))}
-      </select>
-    </label>
+    <ClienteEstadoFields
+      estados={estados}
+      motivosRechazo={motivosRechazo}
+      defaultEstado={current}
+      defaultMotivoRechazo={defaultMotivoRechazo}
+    />
   );
 }
 
@@ -420,6 +490,12 @@ function ClienteForm({
           defaultValue={cliente?.localidad}
         />
         <OptionSelect
+          label="Zona"
+          name="zona"
+          options={zonas}
+          defaultValue={cliente?.zona}
+        />
+        <OptionSelect
           label="Origen del contacto"
           name="origenContacto"
           options={origenesContacto}
@@ -439,6 +515,13 @@ function ClienteForm({
           defaultValue={cliente?.presupuesto?.toString()}
         />
         <Field
+          label="Importe aceptado (€)"
+          name="importeAceptado"
+          type="number"
+          step="0.01"
+          defaultValue={cliente?.importeAceptado?.toString()}
+        />
+        <Field
           label="Fecha de alta"
           name="fechaAlta"
           type="date"
@@ -450,7 +533,22 @@ function ClienteForm({
           type="date"
           defaultValue={toDateInputValue(cliente?.fechaSeguimiento)}
         />
-        <EstadoSelect defaultValue={cliente?.estado} />
+        <Field
+          label="Fecha de medición"
+          name="fechaMedicion"
+          type="date"
+          defaultValue={toDateInputValue(cliente?.fechaMedicion)}
+        />
+        <Field
+          label="Fecha de instalación"
+          name="fechaInstalacion"
+          type="date"
+          defaultValue={toDateInputValue(cliente?.fechaInstalacion)}
+        />
+        <EstadoSelect
+          defaultValue={cliente?.estado}
+          defaultMotivoRechazo={cliente?.motivoRechazo}
+        />
       </div>
       <label className="flex flex-col gap-1.5">
         <span className={labelClass}>Observaciones</span>
@@ -712,21 +810,59 @@ function ResumenComercial({ resumen }: { resumen: Resumen }) {
     ["Instalados", resumen.instalados],
     ["Total presupuestado", formatCurrency(resumen.totalPresupuestado)],
     ["Total aceptado", formatCurrency(resumen.totalAceptado)],
+    ["Importe aceptado", formatCurrency(resumen.importeAceptadoTotal)],
   ] as const;
 
   return (
-    <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-      {items.map(([label, value]) => (
-        <div
-          key={label}
-          className="rounded-md border border-neutral-300 bg-white px-4 py-3 shadow-sm"
-        >
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
-            {label}
-          </p>
-          <p className="mt-2 text-2xl font-semibold text-neutral-950">{value}</p>
+    <section className="grid gap-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
+        {items.map(([label, value]) => (
+          <div
+            key={label}
+            className="rounded-md border border-neutral-300 bg-white px-4 py-3 shadow-sm"
+          >
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
+              {label}
+            </p>
+            <p className="mt-2 text-2xl font-semibold text-neutral-950">{value}</p>
+          </div>
+        ))}
+      </div>
+      <div className="rounded-md border border-neutral-300 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-neutral-500">
+            Clientes perdidos por motivo
+          </h2>
+          <span className="text-sm font-semibold text-neutral-700">
+            {resumen.perdidosPorMotivo.reduce(
+              (total, item) => total + item._count._all,
+              0,
+            )}{" "}
+            perdidos
+          </span>
         </div>
-      ))}
+        {resumen.perdidosPorMotivo.length > 0 ? (
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {resumen.perdidosPorMotivo.map((item) => (
+              <div
+                key={item.motivoRechazo ?? "Sin motivo"}
+                className="rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2"
+              >
+                <p className="text-sm font-semibold text-neutral-950">
+                  {item.motivoRechazo ?? "Sin motivo"}
+                </p>
+                <p className="mt-1 text-sm text-neutral-500">
+                  {item._count._all} clientes
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-3 text-sm text-neutral-500">
+            Todavia no hay clientes perdidos.
+          </p>
+        )}
+      </div>
     </section>
   );
 }
@@ -773,12 +909,24 @@ function ClienteDetails({ cliente }: { cliente: Cliente }) {
         <dd>{formatCurrency(cliente.presupuesto)}</dd>
       </div>
       <div>
+        <dt className="font-medium text-neutral-500">Aceptado</dt>
+        <dd>{formatCurrency(cliente.importeAceptado)}</dd>
+      </div>
+      <div>
         <dt className="font-medium text-neutral-500">Alta</dt>
         <dd>{formatDate(cliente.fechaAlta)}</dd>
       </div>
       <div>
         <dt className="font-medium text-neutral-500">Seguimiento</dt>
         <dd>{formatDate(cliente.fechaSeguimiento)}</dd>
+      </div>
+      <div>
+        <dt className="font-medium text-neutral-500">Medición</dt>
+        <dd>{formatDate(cliente.fechaMedicion)}</dd>
+      </div>
+      <div>
+        <dt className="font-medium text-neutral-500">Instalación</dt>
+        <dd>{formatDate(cliente.fechaInstalacion)}</dd>
       </div>
       <div>
         <dt className="font-medium text-neutral-500">Origen</dt>
@@ -792,6 +940,16 @@ function ClienteDetails({ cliente }: { cliente: Cliente }) {
         <dt className="font-medium text-neutral-500">Localidad</dt>
         <dd>{cliente.localidad || "-"}</dd>
       </div>
+      <div>
+        <dt className="font-medium text-neutral-500">Zona</dt>
+        <dd>{cliente.zona || "-"}</dd>
+      </div>
+      {cliente.estado === "Perdido" ? (
+        <div className="sm:col-span-2">
+          <dt className="font-medium text-neutral-500">Motivo rechazo</dt>
+          <dd>{cliente.motivoRechazo || "-"}</dd>
+        </div>
+      ) : null}
     </dl>
   );
 }
@@ -807,8 +965,12 @@ function ClientesTable({ clientes }: { clientes: Cliente[] }) {
             <th className="px-4 py-3">Telefono</th>
             <th className="px-4 py-3">Origen</th>
             <th className="px-4 py-3">Tipo cliente</th>
+            <th className="px-4 py-3">Zona</th>
             <th className="px-4 py-3">Presupuesto</th>
+            <th className="px-4 py-3">Aceptado</th>
             <th className="px-4 py-3">Seguimiento</th>
+            <th className="px-4 py-3">Medición</th>
+            <th className="px-4 py-3">Instalación</th>
             <th className="px-4 py-3">Estado</th>
             <th className="px-4 py-3 text-right">Acciones</th>
           </tr>
@@ -837,11 +999,23 @@ function ClientesTable({ clientes }: { clientes: Cliente[] }) {
               <td className="px-4 py-4 text-neutral-700">
                 {displayTipoCliente(cliente)}
               </td>
+              <td className="px-4 py-4 text-neutral-700">
+                {cliente.zona || "-"}
+              </td>
               <td className="whitespace-nowrap px-4 py-4 font-semibold text-neutral-950">
                 {formatCurrency(cliente.presupuesto)}
               </td>
+              <td className="whitespace-nowrap px-4 py-4 font-semibold text-neutral-950">
+                {formatCurrency(cliente.importeAceptado)}
+              </td>
               <td className="whitespace-nowrap px-4 py-4 text-neutral-700">
                 {formatDate(cliente.fechaSeguimiento)}
+              </td>
+              <td className="whitespace-nowrap px-4 py-4 text-neutral-700">
+                {formatDate(cliente.fechaMedicion)}
+              </td>
+              <td className="whitespace-nowrap px-4 py-4 text-neutral-700">
+                {formatDate(cliente.fechaInstalacion)}
               </td>
               <td className="px-4 py-4">
                 <span
@@ -851,6 +1025,11 @@ function ClientesTable({ clientes }: { clientes: Cliente[] }) {
                 >
                   {cliente.estado}
                 </span>
+                {cliente.estado === "Perdido" && cliente.motivoRechazo ? (
+                  <p className="mt-2 text-xs font-medium text-rose-700">
+                    {cliente.motivoRechazo}
+                  </p>
+                ) : null}
               </td>
               <td className="px-4 py-4 text-right">
                 <details className="group">
