@@ -96,7 +96,7 @@ export default async function Home() {
               Gestor comercial
             </h1>
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
             <Link
               href="/clientes"
               className="inline-flex h-11 items-center justify-center rounded-md bg-emerald-700 px-5 text-sm font-semibold text-white transition hover:bg-emerald-800"
@@ -120,6 +120,12 @@ export default async function Home() {
               className="inline-flex h-11 items-center justify-center rounded-md border border-neutral-300 bg-white px-5 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
             >
               Proveedores
+            </Link>
+            <Link
+              href="/trabajos"
+              className="inline-flex h-11 items-center justify-center rounded-md border border-neutral-300 bg-white px-5 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
+            >
+              Trabajos terminados
             </Link>
           </div>
         </header>

@@ -14,6 +14,7 @@ const clienteExtensions = new Set([
   "webm",
 ]);
 const documentExtensions = new Set(["pdf", "xlsx", "docx"]);
+const trabajoExtensions = clienteExtensions;
 const contentTypes: Record<string, string> = {
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
@@ -59,14 +60,21 @@ function resolveUploadPath(segments: string[]) {
     if (segments.length !== 3 || !/^\d+$/.test(recordId)) {
       return null;
     }
+  } else if (scope === "trabajos") {
+    if (segments.length !== 3 || !/^\d+$/.test(recordId)) {
+      return null;
+    }
   } else {
     return null;
   }
 
   const fileName = scope === "clientes" ? fourthSegment : thirdSegment;
   const extension = fileName.split(".").pop()?.toLowerCase();
-  const allowedExtensions =
-    scope === "clientes" ? clienteExtensions : documentExtensions;
+  const allowedExtensions = scope === "clientes"
+    ? clienteExtensions
+    : scope === "trabajos"
+      ? trabajoExtensions
+      : documentExtensions;
   if (!extension || !allowedExtensions.has(extension)) {
     return null;
   }
