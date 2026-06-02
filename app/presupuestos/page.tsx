@@ -250,6 +250,13 @@ function PresupuestosTable({ presupuestos }: { presupuestos: Presupuesto[] }) {
                     >
                       Descargar PDF
                     </Link>
+                    <Link
+                      href={`/presupuestos/${presupuesto.id}/pdf/ver`}
+                      target="_blank"
+                      className="inline-flex h-9 items-center justify-center rounded-md border border-neutral-300 px-3 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
+                    >
+                      Ver PDF
+                    </Link>
                   </div>
                 </td>
               </tr>

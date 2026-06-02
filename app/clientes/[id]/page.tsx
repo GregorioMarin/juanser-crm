@@ -831,12 +831,21 @@ function PresupuestosSection({ cliente }: { cliente: ClienteDetalle }) {
                     {formatDate(presupuesto.fecha)}
                   </td>
                   <td className="px-4 py-4 text-right">
-                    <Link
-                      href={`/presupuestos/${presupuesto.id}/pdf`}
-                      className="inline-flex h-9 items-center justify-center rounded-md border border-neutral-300 px-3 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
-                    >
-                      Descargar PDF
-                    </Link>
+                    <div className="flex flex-col items-end gap-2">
+                      <Link
+                        href={`/presupuestos/${presupuesto.id}/pdf`}
+                        className="inline-flex h-9 items-center justify-center rounded-md border border-neutral-300 px-3 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
+                      >
+                        Descargar PDF
+                      </Link>
+                      <Link
+                        href={`/presupuestos/${presupuesto.id}/pdf/ver`}
+                        target="_blank"
+                        className="inline-flex h-9 items-center justify-center rounded-md bg-neutral-950 px-3 text-sm font-semibold text-white transition hover:bg-neutral-800"
+                      >
+                        Ver PDF
+                      </Link>
+                    </div>
                   </td>
                 </tr>
               ))
