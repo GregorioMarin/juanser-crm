@@ -7,6 +7,11 @@ datasource db {
   provider = "postgresql"
 }
 
+enum FotoTipo {
+  CLIENTE
+  JUANSER
+}
+
 model Cliente {
   id               Int           @id @default(autoincrement())
   nombre           String
@@ -21,6 +26,7 @@ model Cliente {
   observaciones    String?
   estado           String        @default("Nuevo lead")
   seguimientos     Seguimiento[]
+  fotos            FotoCliente[]
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 }
@@ -33,4 +39,18 @@ model Seguimiento {
   cliente   Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
 
   @@index([clienteId])
+}
+
+model FotoCliente {
+  id            Int       @id @default(autoincrement())
+  clienteId     Int
+  tipo          FotoTipo
+  url           String
+  nombreArchivo String
+  descripcion   String?
+  createdAt     DateTime  @default(now())
+  cliente       Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  @@index([clienteId])
+  @@index([tipo])
 }
