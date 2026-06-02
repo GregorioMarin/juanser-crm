@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/app/lib/prisma";
@@ -53,4 +54,54 @@ export async function deletePresupuesto(formData: FormData) {
   revalidatePath("/presupuestos");
 
   redirect(safeReturnTo(formData, `/clientes/${presupuesto.clienteId}`));
+}
+
+export async function ensurePresupuestoPublicToken(presupuestoId: number) {
+  if (!Number.isInteger(presupuestoId) || presupuestoId < 1) {
+    throw new Error("Presupuesto no valido.");
+  }
+
+  const presupuesto = await prisma.presupuesto.findUnique({
+    where: { id: presupuestoId },
+    select: {
+      clienteId: true,
+      publicToken: true,
+    },
+  });
+  if (!presupuesto) {
+    throw new Error("Presupuesto no encontrado.");
+  }
+
+  if (presupuesto.publicToken) {
+    return presupuesto.publicToken;
+  }
+
+  const token = randomUUID();
+  const updated = await prisma.presupuesto.updateMany({
+    where: {
+      id: presupuestoId,
+      publicToken: null,
+    },
+    data: {
+      publicToken: token,
+      publicTokenCreatedAt: new Date(),
+    },
+  });
+
+  if (updated.count === 1) {
+    revalidatePath(`/clientes/${presupuesto.clienteId}`);
+    revalidatePath("/presupuestos");
+    return token;
+  }
+
+  const refreshed = await prisma.presupuesto.findUnique({
+    where: { id: presupuestoId },
+    select: { publicToken: true },
+  });
+
+  if (!refreshed?.publicToken) {
+    throw new Error("No se ha podido generar el enlace publico.");
+  }
+
+  return refreshed.publicToken;
 }

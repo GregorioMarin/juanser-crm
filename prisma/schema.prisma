@@ -26,8 +26,8 @@ model Cliente {
   direccion        String?
   localidad        String?
   tipoTrabajo      String?
-  presupuesto      Decimal? @db.Decimal(12, 2)
-  fechaAlta        DateTime @default(now())
+  presupuesto      Decimal?      @db.Decimal(12, 2)
+  fechaAlta        DateTime      @default(now())
   fechaSeguimiento DateTime?
   observaciones    String?
   estado           String        @default("Nuevo lead")
@@ -49,38 +49,40 @@ model Seguimiento {
 }
 
 model FotoCliente {
-  id            Int       @id @default(autoincrement())
+  id            Int      @id @default(autoincrement())
   clienteId     Int
   tipo          FotoTipo
   url           String
   nombreArchivo String
   descripcion   String?
-  createdAt     DateTime  @default(now())
-  cliente       Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+  cliente       Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
 
   @@index([clienteId])
   @@index([tipo])
 }
 
 model Presupuesto {
-  id             Int                 @id @default(autoincrement())
-  clienteId      Int
-  numero         String
-  titulo         String
-  descripcion    String
-  importe        Decimal             @db.Decimal(12, 2)
-  estado         PresupuestoEstado   @default(PENDIENTE)
-  fecha          DateTime            @default(now())
-  validezDias    Int                 @default(15)
-  observaciones  String?
-  ivaPorcentaje  Decimal             @default(21) @db.Decimal(5, 2)
-  totalSinIva    Decimal             @default(0) @db.Decimal(12, 2)
-  totalIva       Decimal             @default(0) @db.Decimal(12, 2)
-  totalConIva    Decimal             @default(0) @db.Decimal(12, 2)
-  lineas         PresupuestoLinea[]
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
-  cliente        Cliente             @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  id                   Int                @id @default(autoincrement())
+  clienteId            Int
+  numero               String
+  titulo               String
+  descripcion          String
+  importe              Decimal            @db.Decimal(12, 2)
+  estado               PresupuestoEstado  @default(PENDIENTE)
+  fecha                DateTime           @default(now())
+  validezDias          Int                @default(15)
+  observaciones        String?
+  ivaPorcentaje        Decimal            @default(21) @db.Decimal(5, 2)
+  totalSinIva          Decimal            @default(0) @db.Decimal(12, 2)
+  totalIva             Decimal            @default(0) @db.Decimal(12, 2)
+  totalConIva          Decimal            @default(0) @db.Decimal(12, 2)
+  publicToken          String?            @unique
+  publicTokenCreatedAt DateTime?
+  lineas               PresupuestoLinea[]
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  cliente              Cliente            @relation(fields: [clienteId], references: [id], onDelete: Cascade)
 
   @@index([clienteId])
   @@index([estado])

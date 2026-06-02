@@ -20,7 +20,7 @@ const colors = {
   white: rgb(1, 1, 1),
 };
 
-type PresupuestoPdf = NonNullable<Awaited<ReturnType<typeof getPresupuesto>>>;
+type PresupuestoPdf = NonNullable<Awaited<ReturnType<typeof getPresupuestoById>>>;
 type PdfFonts = {
   regular: PDFFont;
   bold: PDFFont;
@@ -32,9 +32,21 @@ type PdfContext = {
   y: number;
 };
 
-async function getPresupuesto(id: number) {
+async function getPresupuestoById(id: number) {
   return prisma.presupuesto.findUnique({
     where: { id },
+    include: {
+      cliente: true,
+      lineas: {
+        orderBy: { id: "asc" },
+      },
+    },
+  });
+}
+
+async function getPresupuestoByPublicToken(token: string) {
+  return prisma.presupuesto.findUnique({
+    where: { publicToken: token },
     include: {
       cliente: true,
       lineas: {
@@ -478,7 +490,32 @@ export async function presupuestoPdfResponse(
     return new NextResponse("Presupuesto no encontrado", { status: 404 });
   }
 
-  const presupuesto = await getPresupuesto(id);
+  const presupuesto = await getPresupuestoById(id);
+  return presupuestoPdfResponseFromRecord(presupuesto, disposition);
+}
+
+function validPublicToken(token: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    token,
+  );
+}
+
+export async function presupuestoPdfResponseByToken(
+  token: string,
+  disposition: "attachment" | "inline",
+) {
+  if (!validPublicToken(token)) {
+    return new NextResponse("Presupuesto no encontrado", { status: 404 });
+  }
+
+  const presupuesto = await getPresupuestoByPublicToken(token);
+  return presupuestoPdfResponseFromRecord(presupuesto, disposition);
+}
+
+async function presupuestoPdfResponseFromRecord(
+  presupuesto: PresupuestoPdf | null,
+  disposition: "attachment" | "inline",
+) {
   if (!presupuesto) {
     return new NextResponse("Presupuesto no encontrado", { status: 404 });
   }

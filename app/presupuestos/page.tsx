@@ -293,6 +293,8 @@ function PresupuestosTable({
                       Ver PDF
                     </Link>
                     <WhatsAppPresupuestoLink
+                      presupuestoId={presupuesto.id}
+                      publicToken={presupuesto.publicToken}
                       nombreCliente={presupuesto.cliente.nombre}
                       telefono={presupuesto.cliente.telefono}
                       numero={presupuesto.numero}

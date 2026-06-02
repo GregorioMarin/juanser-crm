@@ -862,6 +862,8 @@ function PresupuestosSection({ cliente }: { cliente: ClienteDetalle }) {
                         Ver PDF
                       </Link>
                       <WhatsAppPresupuestoLink
+                        presupuestoId={presupuesto.id}
+                        publicToken={presupuesto.publicToken}
                         nombreCliente={cliente.nombre}
                         telefono={cliente.telefono}
                         numero={presupuesto.numero}
