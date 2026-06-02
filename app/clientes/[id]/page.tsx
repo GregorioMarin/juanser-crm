@@ -5,6 +5,10 @@ import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
+import {
+  MultimediaUploadForm,
+  type MultimediaUploadState,
+} from "@/app/clientes/multimedia-upload-form";
 import { registrarActividadCliente } from "@/app/lib/actividad";
 import { prisma } from "@/app/lib/prisma";
 import { DeletePresupuestoForm } from "@/app/presupuestos/delete-presupuesto-form";
@@ -188,6 +192,18 @@ function requiredMediaFile(formData: FormData) {
   const isVideo =
     Boolean(extension && allowedVideoExtensions.includes(extension)) &&
     allowedVideoTypes.includes(file.type);
+  const tipoArchivoDetectado: "IMAGEN" | "VIDEO" | null = isVideo
+    ? "VIDEO"
+    : isImage
+      ? "IMAGEN"
+      : null;
+
+  console.info("Validando archivo multimedia de cliente", {
+    nombreArchivo: file.name,
+    mimeType: file.type,
+    tamanoBytes: file.size,
+    tipoArchivoDetectado,
+  });
 
   if (!isImage && !isVideo) {
     throw new Error("Solo se aceptan imagenes jpg, jpeg, png, webp o videos mp4, mov, webm.");
@@ -204,7 +220,7 @@ function requiredMediaFile(formData: FormData) {
   return {
     file,
     extension: extension as string,
-    tipoArchivo: isVideo ? ("VIDEO" as const) : ("IMAGEN" as const),
+    tipoArchivo: tipoArchivoDetectado,
   };
 }
 
@@ -352,75 +368,103 @@ async function createPresupuesto(formData: FormData) {
   revalidatePath("/presupuestos");
 }
 
-async function uploadFotoCliente(formData: FormData) {
+async function uploadFotoCliente(
+  _state: MultimediaUploadState,
+  formData: FormData,
+): Promise<MultimediaUploadState> {
   "use server";
 
-  const clienteId = requiredId(formData, "clienteId");
-  const tipo = requiredFotoTipo(formData);
-  const descripcion = optionalString(formData, "descripcion");
-  const { file, extension, tipoArchivo } = requiredMediaFile(formData);
+  try {
+    const clienteId = requiredId(formData, "clienteId");
+    const tipo = requiredFotoTipo(formData);
+    const descripcion = optionalString(formData, "descripcion");
+    const { file, extension, tipoArchivo } = requiredMediaFile(formData);
 
-  const cliente = await prisma.cliente.findUnique({
-    where: { id: clienteId },
-    select: { id: true },
-  });
-  if (!cliente) {
-    throw new Error("Cliente no encontrado.");
-  }
+    if (!tipoArchivo) {
+      throw new Error("No se ha podido detectar el tipo de archivo.");
+    }
 
-  const fileName = `${Date.now()}-${randomUUID()}-${safeFileName(
-    file.name,
-  )}.${extension}`;
-  const relativeUrl = apiUploadUrl(clienteId, tipo, fileName);
-  const uploadDir = persistentUploadsDir(clienteId, tipo);
-  const filePath = path.join(uploadDir, fileName);
+    const cliente = await prisma.cliente.findUnique({
+      where: { id: clienteId },
+      select: { id: true },
+    });
+    if (!cliente) {
+      throw new Error("Cliente no encontrado.");
+    }
 
-  validatePublicUploadUrl(relativeUrl, clienteId);
-  await mkdir(uploadDir, { recursive: true });
-  await writeFile(
-    filePath,
-    Buffer.from(await file.arrayBuffer()),
-  );
-  const savedFile = await stat(filePath);
-  if (!savedFile.isFile() || savedFile.size === 0) {
-    throw new Error("El archivo no se ha guardado correctamente.");
-  }
+    const fileName = `${Date.now()}-${randomUUID()}-${safeFileName(
+      file.name,
+    )}.${extension}`;
+    const relativeUrl = apiUploadUrl(clienteId, tipo, fileName);
+    const uploadDir = persistentUploadsDir(clienteId, tipo);
+    const filePath = path.join(uploadDir, fileName);
 
-  await prisma.fotoCliente.create({
-    data: {
+    validatePublicUploadUrl(relativeUrl, clienteId);
+    await mkdir(uploadDir, { recursive: true });
+    await writeFile(filePath, Buffer.from(await file.arrayBuffer()));
+    const savedFile = await stat(filePath);
+    if (!savedFile.isFile() || savedFile.size === 0) {
+      throw new Error("El archivo no se ha guardado correctamente.");
+    }
+
+    const foto = await prisma.fotoCliente.create({
+      data: {
+        clienteId,
+        tipo,
+        url: relativeUrl,
+        nombreArchivo: file.name,
+        descripcion,
+        mimeType: file.type,
+        tamanoBytes: savedFile.size,
+        tipoArchivo,
+      },
+    });
+
+    console.info("Archivo multimedia de cliente subido", {
       clienteId,
+      fotoId: foto.id,
       tipo,
-      url: relativeUrl,
       nombreArchivo: file.name,
-      descripcion,
       mimeType: file.type,
       tamanoBytes: savedFile.size,
       tipoArchivo,
-    },
-  });
+      url: relativeUrl,
+      filePath,
+    });
+    await registrarActividadCliente({
+      clienteId,
+      tipo:
+        tipo === "CLIENTE" ? "IMAGEN_CLIENTE_SUBIDA" : "IMAGEN_JUANSER_SUBIDA",
+      descripcion:
+        tipoArchivo === "VIDEO"
+          ? tipo === "CLIENTE"
+            ? "Vídeo aportado por el cliente subido"
+            : "Vídeo/propuesta de Juanser subido"
+          : tipo === "CLIENTE"
+            ? "Imagen aportada por el cliente subida"
+            : "Imagen/propuesta de Juanser subida",
+    });
 
-  console.info("Archivo multimedia de cliente subido", {
-    clienteId,
-    tipo,
-    tipoArchivo,
-    url: relativeUrl,
-    filePath,
-    size: savedFile.size,
-  });
-  await registrarActividadCliente({
-    clienteId,
-    tipo: tipo === "CLIENTE" ? "IMAGEN_CLIENTE_SUBIDA" : "IMAGEN_JUANSER_SUBIDA",
-    descripcion:
-      tipoArchivo === "VIDEO"
-        ? tipo === "CLIENTE"
-          ? "Vídeo aportado por el cliente subido"
-          : "Vídeo/propuesta de Juanser subido"
-        : tipo === "CLIENTE"
-          ? "Imagen aportada por el cliente subida"
-          : "Imagen/propuesta de Juanser subida",
-  });
+    revalidatePath(`/clientes/${clienteId}`);
 
-  revalidatePath(`/clientes/${clienteId}`);
+    return {
+      status: "success",
+      message:
+        tipoArchivo === "VIDEO"
+          ? "Vídeo subido correctamente."
+          : "Imagen subida correctamente.",
+    };
+  } catch (error) {
+    console.error("Error al subir archivo multimedia de cliente", error);
+
+    return {
+      status: "error",
+      message:
+        error instanceof Error
+          ? error.message
+          : "No se ha podido subir el archivo.",
+    };
+  }
 }
 
 async function deleteFotoCliente(formData: FormData) {
@@ -612,50 +656,7 @@ function SuccessMessage() {
 }
 
 function FotoUploadForm({ clienteId }: { clienteId: number }) {
-  return (
-    <form
-      action={uploadFotoCliente}
-      encType="multipart/form-data"
-      className="grid gap-4 rounded-md border border-neutral-200 bg-neutral-50 p-4"
-    >
-      <input type="hidden" name="clienteId" value={clienteId} />
-      <div className="grid gap-4 md:grid-cols-[220px_1fr]">
-        <label className="flex flex-col gap-1.5">
-          <span className={labelClass}>Tipo</span>
-          <select className={inputClass} name="tipo" defaultValue="CLIENTE">
-            <option value="CLIENTE">Archivo aportado por el cliente</option>
-            <option value="JUANSER">Propuesta de Juanser</option>
-          </select>
-        </label>
-        <label className="flex flex-col gap-1.5">
-          <span className={labelClass}>Archivo multimedia</span>
-          <input
-            className={inputClass}
-            name="archivo"
-            type="file"
-            accept=".jpg,.jpeg,.png,.webp,.mp4,.mov,.webm,image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm"
-            required
-          />
-        </label>
-      </div>
-      <label className="flex flex-col gap-1.5">
-        <span className={labelClass}>Descripcion breve</span>
-        <input
-          className={inputClass}
-          name="descripcion"
-          type="text"
-          maxLength={180}
-          placeholder="Ejemplo: hueco actual, video de funcionamiento, render IA"
-        />
-      </label>
-      <button
-        type="submit"
-        className="inline-flex h-10 w-fit items-center justify-center rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:bg-emerald-800"
-      >
-        Subir archivo
-      </button>
-    </form>
-  );
+  return <MultimediaUploadForm clienteId={clienteId} action={uploadFotoCliente} />;
 }
 
 function FotosGaleria({
