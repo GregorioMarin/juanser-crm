@@ -108,9 +108,30 @@ function publicUploadUrl(clienteId: number, tipo: FotoTipo, fileName: string) {
   return `/uploads/clientes/${clienteId}/${uploadFolder(tipo)}/${fileName}`;
 }
 
+function hasSystemPathShape(url: string) {
+  return (
+    /^[a-zA-Z]:[\\/]/.test(url) ||
+    url.startsWith("\\\\") ||
+    url.startsWith("file:") ||
+    /^https?:\/\//i.test(url) ||
+    url.includes("\\")
+  );
+}
+
+function validPublicUploadUrl(url: string | null | undefined, clienteId?: number) {
+  if (!url) {
+    return false;
+  }
+
+  const expectedPrefix = clienteId
+    ? `/uploads/clientes/${clienteId}/`
+    : "/uploads/clientes/";
+
+  return url.startsWith(expectedPrefix) && !hasSystemPathShape(url);
+}
+
 function validatePublicUploadUrl(url: string, clienteId: number) {
-  const expectedPrefix = `/uploads/clientes/${clienteId}/`;
-  if (!url.startsWith(expectedPrefix) || path.isAbsolute(url)) {
+  if (!validPublicUploadUrl(url, clienteId)) {
     throw new Error("URL publica de imagen no valida.");
   }
 }
@@ -400,44 +421,7 @@ function FotosGaleria({
       {fotos.length > 0 ? (
         <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {fotos.map((foto) => (
-            <article
-              key={foto.id}
-              className="overflow-hidden rounded-md border border-neutral-200 bg-neutral-50"
-            >
-              <a href={foto.url} target="_blank" rel="noreferrer">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={foto.url}
-                  alt={foto.descripcion || foto.nombreArchivo}
-                  className="h-44 w-full object-cover"
-                />
-              </a>
-              <div className="grid gap-3 p-3">
-                <div>
-                  <p className="truncate text-sm font-semibold text-neutral-950">
-                    {foto.nombreArchivo}
-                  </p>
-                  <p className="mt-1 text-xs text-neutral-500">
-                    {formatDateTime(foto.createdAt)}
-                  </p>
-                  {foto.descripcion ? (
-                    <p className="mt-2 text-sm text-neutral-700">
-                      {foto.descripcion}
-                    </p>
-                  ) : null}
-                </div>
-                <form action={deleteFotoCliente}>
-                  <input type="hidden" name="clienteId" value={cliente.id} />
-                  <input type="hidden" name="fotoId" value={foto.id} />
-                  <button
-                    type="submit"
-                    className="inline-flex h-9 items-center justify-center rounded-md border border-rose-200 px-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-50"
-                  >
-                    Eliminar
-                  </button>
-                </form>
-              </div>
-            </article>
+            <FotoCard key={foto.id} clienteId={cliente.id} foto={foto} />
           ))}
         </div>
       ) : (
@@ -446,6 +430,66 @@ function FotosGaleria({
         </p>
       )}
     </section>
+  );
+}
+
+function FotoCard({
+  clienteId,
+  foto,
+}: {
+  clienteId: number;
+  foto: ClienteDetalle["fotos"][number];
+}) {
+  const validUrl = validPublicUploadUrl(foto.url, clienteId);
+
+  return (
+    <article className="overflow-hidden rounded-md border border-neutral-200 bg-neutral-50">
+      {validUrl ? (
+        <a href={foto.url} target="_blank" rel="noreferrer">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={foto.url}
+            alt={foto.descripcion || foto.nombreArchivo}
+            className="h-44 w-full object-cover"
+          />
+        </a>
+      ) : (
+        <div className="flex h-44 w-full flex-col items-center justify-center bg-rose-50 px-4 text-center text-rose-800">
+          <p className="text-sm font-semibold">Imagen no disponible</p>
+          <p className="mt-1 break-all text-xs text-rose-700">
+            URL invalida o antigua
+          </p>
+        </div>
+      )}
+      <div className="grid gap-3 p-3">
+        <div>
+          <p className="truncate text-sm font-semibold text-neutral-950">
+            {foto.nombreArchivo}
+          </p>
+          <p className="mt-1 text-xs text-neutral-500">
+            {formatDateTime(foto.createdAt)}
+          </p>
+          {foto.descripcion ? (
+            <p className="mt-2 text-sm text-neutral-700">{foto.descripcion}</p>
+          ) : null}
+          {!validUrl ? (
+            <p className="mt-2 break-all text-xs text-rose-700">
+              {foto.url || "Sin URL guardada"}
+            </p>
+          ) : null}
+        </div>
+        <form action={deleteFotoCliente}>
+          <input type="hidden" name="clienteId" value={clienteId} />
+          <input type="hidden" name="fotoId" value={foto.id} />
+          <button
+            type="submit"
+            className="inline-flex h-9 items-center justify-center rounded-md border border-rose-200 px-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-50"
+          >
+            {validUrl ? "Eliminar" : "Eliminar registro invalido"}
+          </button>
+        </form>
+      </div>
+    </article>
   );
 }
 
