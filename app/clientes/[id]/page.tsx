@@ -93,19 +93,21 @@ function uploadFolder(tipo: FotoTipo) {
   return tipo === "CLIENTE" ? "cliente" : "juanser";
 }
 
-function publicUploadsDir(clienteId: number, tipo: FotoTipo) {
+function uploadsRootDir() {
+  return path.resolve(process.cwd(), "uploads");
+}
+
+function persistentUploadsDir(clienteId: number, tipo: FotoTipo) {
   return path.join(
-    process.cwd(),
-    "public",
-    "uploads",
+    uploadsRootDir(),
     "clientes",
     String(clienteId),
     uploadFolder(tipo),
   );
 }
 
-function publicUploadUrl(clienteId: number, tipo: FotoTipo, fileName: string) {
-  return `/uploads/clientes/${clienteId}/${uploadFolder(tipo)}/${fileName}`;
+function apiUploadUrl(clienteId: number, tipo: FotoTipo, fileName: string) {
+  return `/api/uploads/clientes/${clienteId}/${uploadFolder(tipo)}/${fileName}`;
 }
 
 function hasSystemPathShape(url: string) {
@@ -124,8 +126,8 @@ function validPublicUploadUrl(url: string | null | undefined, clienteId?: number
   }
 
   const expectedPrefix = clienteId
-    ? `/uploads/clientes/${clienteId}/`
-    : "/uploads/clientes/";
+    ? `/api/uploads/clientes/${clienteId}/`
+    : "/api/uploads/clientes/";
 
   return url.startsWith(expectedPrefix) && !hasSystemPathShape(url);
 }
@@ -134,6 +136,23 @@ function validatePublicUploadUrl(url: string, clienteId: number) {
   if (!validPublicUploadUrl(url, clienteId)) {
     throw new Error("URL publica de imagen no valida.");
   }
+}
+
+function uploadFilePathFromUrl(url: string, clienteId: number) {
+  if (!validPublicUploadUrl(url, clienteId)) {
+    return null;
+  }
+
+  const relativePath = url.replace(/^\/api\/uploads\//, "");
+  const rootDir = uploadsRootDir();
+  const filePath = path.resolve(rootDir, relativePath);
+  const relativeToRoot = path.relative(rootDir, filePath);
+
+  if (relativeToRoot.startsWith("..") || path.isAbsolute(relativeToRoot)) {
+    return null;
+  }
+
+  return filePath;
 }
 
 function safeFileName(name: string) {
@@ -183,8 +202,8 @@ async function uploadFotoCliente(formData: FormData) {
   const fileName = `${Date.now()}-${randomUUID()}-${safeFileName(
     file.name,
   )}.${extension}`;
-  const relativeUrl = publicUploadUrl(clienteId, tipo, fileName);
-  const uploadDir = publicUploadsDir(clienteId, tipo);
+  const relativeUrl = apiUploadUrl(clienteId, tipo, fileName);
+  const uploadDir = persistentUploadsDir(clienteId, tipo);
   const filePath = path.join(uploadDir, fileName);
 
   validatePublicUploadUrl(relativeUrl, clienteId);
@@ -236,22 +255,19 @@ async function deleteFotoCliente(formData: FormData) {
   }
 
   const expectedPrefix = `/uploads/clientes/${clienteId}/`;
-  if (foto.url.startsWith(expectedPrefix)) {
-    const publicDir = path.resolve(process.cwd(), "public");
-    const clienteUploadsDir = path.resolve(
-      publicDir,
-      "uploads",
-      "clientes",
-      String(clienteId),
-    );
-    const filePath = path.resolve(publicDir, foto.url.replace(/^\//, ""));
-    if (filePath.startsWith(clienteUploadsDir)) {
-      await unlink(filePath).catch((error: NodeJS.ErrnoException) => {
-        if (error.code !== "ENOENT") {
-          throw error;
-        }
-      });
-    }
+  const filePath = uploadFilePathFromUrl(foto.url, clienteId);
+  if (filePath) {
+    await unlink(filePath).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== "ENOENT") {
+        throw error;
+      }
+    });
+  } else if (foto.url.startsWith(expectedPrefix)) {
+    console.warn("FotoCliente antigua sin archivo persistente", {
+      clienteId,
+      fotoId,
+      url: foto.url,
+    });
   }
 
   await prisma.fotoCliente.delete({
