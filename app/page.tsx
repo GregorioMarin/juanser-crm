@@ -13,12 +13,20 @@ export default function Home() {
               Gestor comercial
             </h1>
           </div>
-          <Link
-            href="/clientes"
-            className="inline-flex h-11 items-center justify-center rounded-md bg-emerald-700 px-5 text-sm font-semibold text-white transition hover:bg-emerald-800"
-          >
-            Abrir cartera
-          </Link>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Link
+              href="/clientes"
+              className="inline-flex h-11 items-center justify-center rounded-md bg-emerald-700 px-5 text-sm font-semibold text-white transition hover:bg-emerald-800"
+            >
+              Abrir cartera
+            </Link>
+            <Link
+              href="/presupuestos"
+              className="inline-flex h-11 items-center justify-center rounded-md border border-neutral-300 bg-white px-5 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
+            >
+              Ver presupuestos
+            </Link>
+          </div>
         </header>
 
         <section className="grid gap-4 md:grid-cols-3">

@@ -852,6 +852,12 @@ export default async function ClientesPage({ searchParams }: ClientesPageProps) 
               {clientes.length} registros visibles ordenados por fecha de alta
             </p>
           </div>
+          <Link
+            href="/presupuestos"
+            className="inline-flex h-10 items-center justify-center rounded-md border border-neutral-300 bg-white px-4 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
+          >
+            Ver presupuestos
+          </Link>
         </header>
 
         <ResumenComercial resumen={resumen} />
