@@ -209,10 +209,10 @@ async function getResumen() {
     prisma.cliente.count({ where: { estado: "Aceptado" } }),
     prisma.cliente.count({ where: { estado: "En fabricación" } }),
     prisma.cliente.count({ where: { estado: "Instalado" } }),
-    prisma.presupuesto.aggregate({ _sum: { importe: true } }),
+    prisma.presupuesto.aggregate({ _sum: { totalConIva: true } }),
     prisma.presupuesto.aggregate({
       where: { estado: "ACEPTADO" },
-      _sum: { importe: true },
+      _sum: { totalConIva: true },
     }),
   ]);
 
@@ -222,8 +222,8 @@ async function getResumen() {
     aceptados,
     enFabricacion,
     instalados,
-    totalPresupuestado: totalPresupuestado._sum.importe,
-    totalAceptado: totalAceptado._sum.importe,
+    totalPresupuestado: totalPresupuestado._sum.totalConIva,
+    totalAceptado: totalAceptado._sum.totalConIva,
   };
 }
 
@@ -388,7 +388,7 @@ function formatDate(date?: Date | null) {
   }).format(date);
 }
 
-function formatCurrency(value: Cliente["presupuesto"]) {
+function formatCurrency(value: unknown) {
   if (!value) {
     return "-";
   }

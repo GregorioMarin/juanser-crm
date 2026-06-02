@@ -80,6 +80,10 @@ function requiredPresupuestoEstado(formData: FormData) {
 
 function requiredDecimal(formData: FormData, key: string) {
   const value = requiredString(formData, key);
+  return parseDecimal(value, key);
+}
+
+function parseDecimal(value: string, key: string) {
   const normalized = value.replace(",", ".");
 
   if (!/^\d+(\.\d{1,2})?$/.test(normalized)) {
@@ -87,6 +91,20 @@ function requiredDecimal(formData: FormData, key: string) {
   }
 
   return normalized;
+}
+
+function optionalInteger(formData: FormData, key: string, fallback: number) {
+  const value = optionalString(formData, key);
+  if (!value) {
+    return fallback;
+  }
+
+  const numberValue = Number(value);
+  if (!Number.isInteger(numberValue) || numberValue < 0) {
+    throw new Error(`El campo ${key} no es valido.`);
+  }
+
+  return numberValue;
 }
 
 function optionalDate(formData: FormData, key: string) {
@@ -101,6 +119,53 @@ function optionalDate(formData: FormData, key: string) {
   }
 
   return date;
+}
+
+function roundCurrency(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+type PresupuestoLineaData = {
+  concepto: string;
+  descripcion: string | null;
+  cantidad: string;
+  precioUnitario: string;
+  total: string;
+};
+
+function presupuestoLineasData(formData: FormData) {
+  const lineas = Array.from({ length: 6 }, (_, index) => {
+    const concepto = optionalString(formData, `lineas[${index}][concepto]`);
+    const cantidadRaw = optionalString(formData, `lineas[${index}][cantidad]`);
+    const precioRaw = optionalString(formData, `lineas[${index}][precioUnitario]`);
+    const descripcion = optionalString(formData, `lineas[${index}][descripcion]`);
+
+    if (!concepto && !cantidadRaw && !precioRaw && !descripcion) {
+      return null;
+    }
+
+    if (!concepto || !cantidadRaw || !precioRaw) {
+      throw new Error("Cada linea debe tener concepto, cantidad y precio.");
+    }
+
+    const cantidad = parseDecimal(cantidadRaw, "cantidad");
+    const precioUnitario = parseDecimal(precioRaw, "precioUnitario");
+    const total = roundCurrency(Number(cantidad) * Number(precioUnitario));
+
+    return {
+      concepto,
+      descripcion,
+      cantidad,
+      precioUnitario,
+      total: total.toFixed(2),
+    };
+  }).filter((linea): linea is PresupuestoLineaData => linea !== null);
+
+  if (lineas.length === 0) {
+    throw new Error("Añade al menos una linea de presupuesto.");
+  }
+
+  return lineas;
 }
 
 function requiredImageFile(formData: FormData) {
@@ -223,6 +288,13 @@ async function createPresupuesto(formData: FormData) {
   "use server";
 
   const clienteId = requiredId(formData, "clienteId");
+  const lineas = presupuestoLineasData(formData);
+  const ivaPorcentaje = Number(requiredDecimal(formData, "ivaPorcentaje"));
+  const totalSinIva = roundCurrency(
+    lineas.reduce((sum, linea) => sum + Number(linea.total), 0),
+  );
+  const totalIva = roundCurrency((totalSinIva * ivaPorcentaje) / 100);
+  const totalConIva = roundCurrency(totalSinIva + totalIva);
 
   await prisma.presupuesto.create({
     data: {
@@ -230,9 +302,18 @@ async function createPresupuesto(formData: FormData) {
       numero: requiredString(formData, "numero"),
       titulo: requiredString(formData, "titulo"),
       descripcion: requiredString(formData, "descripcion"),
-      importe: requiredDecimal(formData, "importe"),
+      importe: totalConIva.toFixed(2),
       estado: requiredPresupuestoEstado(formData),
       fecha: optionalDate(formData, "fecha") ?? new Date(),
+      validezDias: optionalInteger(formData, "validezDias", 15),
+      observaciones: optionalString(formData, "observaciones"),
+      ivaPorcentaje: ivaPorcentaje.toFixed(2),
+      totalSinIva: totalSinIva.toFixed(2),
+      totalIva: totalIva.toFixed(2),
+      totalConIva: totalConIva.toFixed(2),
+      lineas: {
+        create: lineas,
+      },
     },
   });
 
@@ -346,6 +427,11 @@ async function getCliente(id: number) {
       },
       presupuestos: {
         orderBy: { fecha: "desc" },
+        include: {
+          lineas: {
+            orderBy: { id: "asc" },
+          },
+        },
       },
     },
   });
@@ -375,7 +461,7 @@ function formatDateTime(date: Date) {
   }).format(date);
 }
 
-function formatCurrency(value: ClienteDetalle["presupuesto"]) {
+function formatCurrency(value: unknown) {
   if (!value) {
     return "-";
   }
@@ -556,17 +642,6 @@ function PresupuestosSection({ cliente }: { cliente: ClienteDetalle }) {
             <input className={inputClass} name="titulo" required />
           </label>
           <label className="flex flex-col gap-1.5">
-            <span className={labelClass}>Importe (€)</span>
-            <input
-              className={inputClass}
-              name="importe"
-              type="number"
-              step="0.01"
-              min="0"
-              required
-            />
-          </label>
-          <label className="flex flex-col gap-1.5">
             <span className={labelClass}>Fecha</span>
             <input
               className={inputClass}
@@ -585,6 +660,28 @@ function PresupuestosSection({ cliente }: { cliente: ClienteDetalle }) {
               ))}
             </select>
           </label>
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>Validez (dias)</span>
+            <input
+              className={inputClass}
+              name="validezDias"
+              type="number"
+              min="0"
+              defaultValue="15"
+            />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>IVA (%)</span>
+            <input
+              className={inputClass}
+              name="ivaPorcentaje"
+              type="number"
+              step="0.01"
+              min="0"
+              defaultValue="21"
+              required
+            />
+          </label>
         </div>
         <label className="flex flex-col gap-1.5">
           <span className={labelClass}>Descripcion</span>
@@ -592,6 +689,52 @@ function PresupuestosSection({ cliente }: { cliente: ClienteDetalle }) {
             className={`${inputClass} min-h-24 resize-y`}
             name="descripcion"
             required
+          />
+        </label>
+        <div className="grid gap-3">
+          <p className={labelClass}>Lineas</p>
+          {Array.from({ length: 6 }, (_, index) => (
+            <div
+              key={index}
+              className="grid gap-3 rounded-md border border-neutral-200 bg-white p-3 lg:grid-cols-[1fr_1.4fr_120px_160px]"
+            >
+              <input
+                className={inputClass}
+                name={`lineas[${index}][concepto]`}
+                placeholder="Concepto"
+                required={index === 0}
+              />
+              <input
+                className={inputClass}
+                name={`lineas[${index}][descripcion]`}
+                placeholder="Descripcion"
+              />
+              <input
+                className={inputClass}
+                name={`lineas[${index}][cantidad]`}
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="Cantidad"
+                required={index === 0}
+              />
+              <input
+                className={inputClass}
+                name={`lineas[${index}][precioUnitario]`}
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="Precio unitario"
+                required={index === 0}
+              />
+            </div>
+          ))}
+        </div>
+        <label className="flex flex-col gap-1.5">
+          <span className={labelClass}>Observaciones</span>
+          <textarea
+            className={`${inputClass} min-h-20 resize-y`}
+            name="observaciones"
           />
         </label>
         <button
@@ -611,6 +754,7 @@ function PresupuestosSection({ cliente }: { cliente: ClienteDetalle }) {
               <th className="px-4 py-3">Importe</th>
               <th className="px-4 py-3">Estado</th>
               <th className="px-4 py-3">Fecha</th>
+              <th className="px-4 py-3 text-right">PDF</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-neutral-200">
@@ -627,9 +771,52 @@ function PresupuestosSection({ cliente }: { cliente: ClienteDetalle }) {
                     <p className="mt-1 whitespace-pre-wrap text-neutral-600">
                       {presupuesto.descripcion}
                     </p>
+                    <div className="mt-3 overflow-hidden rounded-md border border-neutral-200">
+                      <table className="w-full text-xs">
+                        <thead className="bg-white text-neutral-500">
+                          <tr>
+                            <th className="px-3 py-2 text-left">Concepto</th>
+                            <th className="px-3 py-2 text-right">Cant.</th>
+                            <th className="px-3 py-2 text-right">Precio</th>
+                            <th className="px-3 py-2 text-right">Total</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-neutral-200 bg-white">
+                          {presupuesto.lineas.map((linea) => (
+                            <tr key={linea.id}>
+                              <td className="px-3 py-2">
+                                <p className="font-semibold text-neutral-800">
+                                  {linea.concepto}
+                                </p>
+                                {linea.descripcion ? (
+                                  <p className="mt-1 text-neutral-500">
+                                    {linea.descripcion}
+                                  </p>
+                                ) : null}
+                              </td>
+                              <td className="px-3 py-2 text-right text-neutral-700">
+                                {Number(linea.cantidad).toLocaleString("es-ES")}
+                              </td>
+                              <td className="px-3 py-2 text-right text-neutral-700">
+                                {formatCurrency(linea.precioUnitario)}
+                              </td>
+                              <td className="px-3 py-2 text-right font-semibold text-neutral-950">
+                                {formatCurrency(linea.total)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </td>
                   <td className="whitespace-nowrap px-4 py-4 font-semibold text-neutral-950">
-                    {formatCurrency(presupuesto.importe)}
+                    <p>{formatCurrency(presupuesto.totalConIva)}</p>
+                    <p className="mt-1 text-xs font-medium text-neutral-500">
+                      Base {formatCurrency(presupuesto.totalSinIva)}
+                    </p>
+                    <p className="text-xs font-medium text-neutral-500">
+                      IVA {formatCurrency(presupuesto.totalIva)}
+                    </p>
                   </td>
                   <td className="px-4 py-4">
                     <span
@@ -643,11 +830,19 @@ function PresupuestosSection({ cliente }: { cliente: ClienteDetalle }) {
                   <td className="whitespace-nowrap px-4 py-4 text-neutral-700">
                     {formatDate(presupuesto.fecha)}
                   </td>
+                  <td className="px-4 py-4 text-right">
+                    <Link
+                      href={`/presupuestos/${presupuesto.id}/pdf`}
+                      className="inline-flex h-9 items-center justify-center rounded-md border border-neutral-300 px-3 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
+                    >
+                      Descargar PDF
+                    </Link>
+                  </td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-neutral-500">
+                <td colSpan={6} className="px-4 py-6 text-center text-neutral-500">
                   Todavia no hay presupuestos para este cliente.
                 </td>
               </tr>

@@ -57,33 +57,33 @@ async function getPresupuestos(query: string, estado: PresupuestoEstado | null) 
 
 async function getTotales() {
   const [total, aceptado, pendiente, rechazado] = await Promise.all([
-    prisma.presupuesto.aggregate({ _sum: { importe: true } }),
+    prisma.presupuesto.aggregate({ _sum: { totalConIva: true } }),
     prisma.presupuesto.aggregate({
       where: { estado: "ACEPTADO" },
-      _sum: { importe: true },
+      _sum: { totalConIva: true },
     }),
     prisma.presupuesto.aggregate({
       where: { estado: "PENDIENTE" },
-      _sum: { importe: true },
+      _sum: { totalConIva: true },
     }),
     prisma.presupuesto.aggregate({
       where: { estado: "RECHAZADO" },
-      _sum: { importe: true },
+      _sum: { totalConIva: true },
     }),
   ]);
 
   return {
-    total: total._sum.importe,
-    aceptado: aceptado._sum.importe,
-    pendiente: pendiente._sum.importe,
-    rechazado: rechazado._sum.importe,
+    total: total._sum.totalConIva,
+    aceptado: aceptado._sum.totalConIva,
+    pendiente: pendiente._sum.totalConIva,
+    rechazado: rechazado._sum.totalConIva,
   };
 }
 
 type Presupuesto = Awaited<ReturnType<typeof getPresupuestos>>[number];
 type Totales = Awaited<ReturnType<typeof getTotales>>;
 
-function formatCurrency(value: Presupuesto["importe"] | Totales[keyof Totales]) {
+function formatCurrency(value: unknown) {
   if (!value) {
     return "0,00 €";
   }
@@ -197,7 +197,7 @@ function PresupuestosTable({ presupuestos }: { presupuestos: Presupuesto[] }) {
             <th className="px-4 py-3">Importe</th>
             <th className="px-4 py-3">Estado</th>
             <th className="px-4 py-3">Fecha</th>
-            <th className="px-4 py-3 text-right">Ficha</th>
+            <th className="px-4 py-3 text-right">Acciones</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-neutral-200">
@@ -222,7 +222,7 @@ function PresupuestosTable({ presupuestos }: { presupuestos: Presupuesto[] }) {
                   {presupuesto.titulo}
                 </td>
                 <td className="whitespace-nowrap px-4 py-4 font-semibold text-neutral-950">
-                  {formatCurrency(presupuesto.importe)}
+                  {formatCurrency(presupuesto.totalConIva)}
                 </td>
                 <td className="px-4 py-4">
                   <span
@@ -237,12 +237,20 @@ function PresupuestosTable({ presupuestos }: { presupuestos: Presupuesto[] }) {
                   {formatDate(presupuesto.fecha)}
                 </td>
                 <td className="px-4 py-4 text-right">
-                  <Link
-                    href={`/clientes/${presupuesto.cliente.id}`}
-                    className="inline-flex h-9 items-center justify-center rounded-md border border-neutral-300 px-3 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
-                  >
-                    Ver cliente
-                  </Link>
+                  <div className="flex flex-col items-end gap-2">
+                    <Link
+                      href={`/clientes/${presupuesto.cliente.id}`}
+                      className="inline-flex h-9 items-center justify-center rounded-md border border-neutral-300 px-3 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
+                    >
+                      Ver cliente
+                    </Link>
+                    <Link
+                      href={`/presupuestos/${presupuesto.id}/pdf`}
+                      className="inline-flex h-9 items-center justify-center rounded-md bg-neutral-950 px-3 text-sm font-semibold text-white transition hover:bg-neutral-800"
+                    >
+                      Descargar PDF
+                    </Link>
+                  </div>
                 </td>
               </tr>
             ))
