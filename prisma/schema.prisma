@@ -36,6 +36,8 @@ model Cliente {
   direccion        String?
   localidad        String?
   tipoTrabajo      String?
+  origenContacto   String?
+  tipoCliente      String?
   presupuesto      Decimal?           @db.Decimal(12, 2)
   fechaAlta        DateTime           @default(now())
   fechaSeguimiento DateTime?

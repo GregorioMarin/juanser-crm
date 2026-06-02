@@ -26,6 +26,23 @@ const estadoStyles: Record<(typeof estados)[number], string> = {
   Perdido: "bg-rose-100 text-rose-900 ring-rose-200",
 };
 
+const origenesContacto = [
+  "WhatsApp",
+  "Teléfono",
+  "Email",
+  "Formulario web",
+  "Visita presencial",
+  "Otro",
+] as const;
+
+const tiposCliente = [
+  "Usuario final",
+  "Arquitecto",
+  "Constructora",
+  "Tienda",
+  "Otros",
+] as const;
+
 const inputClass =
   "w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-950 outline-none transition placeholder:text-neutral-400 focus:border-emerald-700 focus:ring-2 focus:ring-emerald-100";
 
@@ -54,6 +71,24 @@ function estadoValue(formData: FormData) {
   const value = optionalString(formData, "estado") ?? "Nuevo lead";
   if (!estados.includes(value as (typeof estados)[number])) {
     throw new Error("Estado no valido.");
+  }
+
+  return value;
+}
+
+function origenContactoValue(formData: FormData) {
+  const value = optionalString(formData, "origenContacto") ?? "WhatsApp";
+  if (!origenesContacto.includes(value as (typeof origenesContacto)[number])) {
+    throw new Error("Origen del contacto no valido.");
+  }
+
+  return value;
+}
+
+function tipoClienteValue(formData: FormData) {
+  const value = optionalString(formData, "tipoCliente") ?? "Usuario final";
+  if (!tiposCliente.includes(value as (typeof tiposCliente)[number])) {
+    throw new Error("Tipo de cliente no valido.");
   }
 
   return value;
@@ -94,7 +129,8 @@ function clienteData(formData: FormData) {
     email: optionalString(formData, "email"),
     direccion: optionalString(formData, "direccion"),
     localidad: optionalString(formData, "localidad"),
-    tipoTrabajo: optionalString(formData, "tipoTrabajo"),
+    origenContacto: origenContactoValue(formData),
+    tipoCliente: tipoClienteValue(formData),
     presupuesto: presupuestoValue(formData),
     fechaAlta: optionalDate(formData, "fechaAlta") ?? new Date(),
     fechaSeguimiento: optionalDate(formData, "fechaSeguimiento"),
@@ -116,6 +152,7 @@ async function createCliente(formData: FormData) {
   });
 
   revalidatePath("/clientes");
+  revalidatePath("/kanban");
 }
 
 async function updateCliente(formData: FormData) {
@@ -149,6 +186,7 @@ async function updateCliente(formData: FormData) {
   }
 
   revalidatePath("/clientes");
+  revalidatePath("/kanban");
   revalidatePath(`/clientes/${id}`);
 }
 
@@ -311,6 +349,35 @@ function EstadoSelect({ defaultValue }: { defaultValue?: string | null }) {
   );
 }
 
+function OptionSelect<const T extends readonly string[]>({
+  label,
+  name,
+  options,
+  defaultValue,
+}: {
+  label: string;
+  name: string;
+  options: T;
+  defaultValue?: string | null;
+}) {
+  const current = options.includes(defaultValue ?? "")
+    ? (defaultValue as T[number])
+    : options[0];
+
+  return (
+    <label className="flex flex-col gap-1.5">
+      <span className={labelClass}>{label}</span>
+      <select className={inputClass} name={name} defaultValue={current}>
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 function ClienteForm({
   action,
   cliente,
@@ -352,10 +419,17 @@ function ClienteForm({
           name="localidad"
           defaultValue={cliente?.localidad}
         />
-        <Field
-          label="Tipo de trabajo"
-          name="tipoTrabajo"
-          defaultValue={cliente?.tipoTrabajo}
+        <OptionSelect
+          label="Origen del contacto"
+          name="origenContacto"
+          options={origenesContacto}
+          defaultValue={cliente?.origenContacto}
+        />
+        <OptionSelect
+          label="Tipo de cliente"
+          name="tipoCliente"
+          options={tiposCliente}
+          defaultValue={cliente?.tipoCliente ?? cliente?.tipoTrabajo}
         />
         <Field
           label="Presupuesto (€)"
@@ -423,6 +497,10 @@ function formatCurrency(value: unknown) {
     style: "currency",
     currency: "EUR",
   }).format(Number(value));
+}
+
+function displayTipoCliente(cliente: Pick<Cliente, "tipoCliente" | "tipoTrabajo">) {
+  return cliente.tipoCliente || cliente.tipoTrabajo || "-";
 }
 
 function estadoClass(estado: string) {
@@ -703,8 +781,12 @@ function ClienteDetails({ cliente }: { cliente: Cliente }) {
         <dd>{formatDate(cliente.fechaSeguimiento)}</dd>
       </div>
       <div>
-        <dt className="font-medium text-neutral-500">Trabajo</dt>
-        <dd>{cliente.tipoTrabajo || "-"}</dd>
+        <dt className="font-medium text-neutral-500">Origen</dt>
+        <dd>{cliente.origenContacto || "-"}</dd>
+      </div>
+      <div>
+        <dt className="font-medium text-neutral-500">Tipo cliente</dt>
+        <dd>{displayTipoCliente(cliente)}</dd>
       </div>
       <div>
         <dt className="font-medium text-neutral-500">Localidad</dt>
@@ -723,7 +805,8 @@ function ClientesTable({ clientes }: { clientes: Cliente[] }) {
             <th className="px-4 py-3">Alta</th>
             <th className="px-4 py-3">Cliente</th>
             <th className="px-4 py-3">Telefono</th>
-            <th className="px-4 py-3">Trabajo</th>
+            <th className="px-4 py-3">Origen</th>
+            <th className="px-4 py-3">Tipo cliente</th>
             <th className="px-4 py-3">Presupuesto</th>
             <th className="px-4 py-3">Seguimiento</th>
             <th className="px-4 py-3">Estado</th>
@@ -749,7 +832,10 @@ function ClientesTable({ clientes }: { clientes: Cliente[] }) {
                 {cliente.telefono || "-"}
               </td>
               <td className="px-4 py-4 text-neutral-700">
-                {cliente.tipoTrabajo || "-"}
+                {cliente.origenContacto || "-"}
+              </td>
+              <td className="px-4 py-4 text-neutral-700">
+                {displayTipoCliente(cliente)}
               </td>
               <td className="whitespace-nowrap px-4 py-4 font-semibold text-neutral-950">
                 {formatCurrency(cliente.presupuesto)}

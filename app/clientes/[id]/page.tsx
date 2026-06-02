@@ -500,6 +500,12 @@ function formatCurrency(value: unknown) {
   }).format(Number(value));
 }
 
+function displayTipoCliente(
+  cliente: Pick<ClienteDetalle, "tipoCliente" | "tipoTrabajo">,
+) {
+  return cliente.tipoCliente || cliente.tipoTrabajo || "-";
+}
+
 function startOfToday() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -1055,7 +1061,14 @@ function ClienteFicha({ cliente }: { cliente: ClienteDetalle }) {
             <DetailItem label="Email" value={cliente.email} />
             <DetailItem label="Direccion" value={cliente.direccion} />
             <DetailItem label="Localidad" value={cliente.localidad} />
-            <DetailItem label="Tipo de trabajo" value={cliente.tipoTrabajo} />
+            <DetailItem
+              label="Origen del contacto"
+              value={cliente.origenContacto}
+            />
+            <DetailItem
+              label="Tipo de cliente"
+              value={displayTipoCliente(cliente)}
+            />
             <DetailItem
               label="Presupuesto"
               value={formatCurrency(cliente.presupuesto)}

@@ -123,6 +123,9 @@ async function getClientesKanban() {
       nombre: true,
       telefono: true,
       localidad: true,
+      origenContacto: true,
+      tipoCliente: true,
+      tipoTrabajo: true,
       presupuesto: true,
       fechaSeguimiento: true,
       estado: true,
@@ -173,6 +176,10 @@ function importePresupuestado(cliente: ClienteKanban) {
   return cliente.presupuesto ? Number(cliente.presupuesto) : null;
 }
 
+function displayTipoCliente(cliente: ClienteKanban) {
+  return cliente.tipoCliente || cliente.tipoTrabajo || "-";
+}
+
 function estadoConfig(estado: string) {
   return (
     estadoStyles[estado as EstadoKanban] ?? {
@@ -212,6 +219,18 @@ function ClienteCard({ cliente }: { cliente: ClienteKanban }) {
           <dt className="text-neutral-500">Localidad</dt>
           <dd className="text-right font-medium text-neutral-900">
             {cliente.localidad || "-"}
+          </dd>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <dt className="text-neutral-500">Origen</dt>
+          <dd className="text-right font-medium text-neutral-900">
+            {cliente.origenContacto || "-"}
+          </dd>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <dt className="text-neutral-500">Tipo</dt>
+          <dd className="text-right font-medium text-neutral-900">
+            {displayTipoCliente(cliente)}
           </dd>
         </div>
         <div className="flex items-center justify-between gap-3">
