@@ -28,7 +28,7 @@ const inputClass =
 
 const labelClass = "text-sm font-medium text-neutral-700";
 const maxImageSize = 10 * 1024 * 1024;
-const maxVideoSize = 100 * 1024 * 1024;
+const maxVideoSize = 50 * 1024 * 1024;
 const allowedImageTypes = ["image/jpeg", "image/png", "image/webp"];
 const allowedVideoTypes = ["video/mp4", "video/quicktime", "video/webm"];
 const allowedImageExtensions = ["jpg", "jpeg", "png", "webp"];
@@ -198,7 +198,7 @@ function requiredMediaFile(formData: FormData) {
   }
 
   if (isVideo && file.size > maxVideoSize) {
-    throw new Error("El video no puede superar 100 MB.");
+    throw new Error("El video no puede superar 50 MB.");
   }
 
   return {
@@ -1054,6 +1054,11 @@ function FotoCard({
           </div>
           {foto.descripcion ? (
             <p className="mt-2 text-sm text-neutral-700">{foto.descripcion}</p>
+          ) : null}
+          {isVideo ? (
+            <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950">
+              Vídeo temporal: eliminar cuando ya no sea necesario.
+            </p>
           ) : null}
           {!validUrl ? (
             <p className="mt-2 break-all text-xs text-rose-700">
