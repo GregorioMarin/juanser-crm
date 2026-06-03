@@ -34,6 +34,18 @@ enum PresupuestoEstado {
   RECHAZADO
 }
 
+enum CitaOrigen {
+  AMELIA
+  MANUAL
+}
+
+enum CitaEstado {
+  PENDIENTE
+  CONFIRMADA
+  CANCELADA
+  REALIZADA
+}
+
 enum ActividadClienteTipo {
   CLIENTE_CREADO
   ESTADO_CAMBIADO
@@ -204,6 +216,24 @@ model ActividadProveedor {
 
   @@index([proveedorId])
   @@index([fecha])
+}
+
+model Cita {
+  id              Int        @id @default(autoincrement())
+  clienteNombre   String
+  telefono        String?
+  email           String?
+  fechaHora       DateTime
+  origen          CitaOrigen @default(MANUAL)
+  estado          CitaEstado @default(PENDIENTE)
+  nota            String?
+  ameliaBookingId String?    @unique
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@index([fechaHora])
+  @@index([estado])
+  @@index([origen])
 }
 
 model TrabajoTerminado {

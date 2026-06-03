@@ -373,6 +373,25 @@ async function getResumen() {
 }
 
 type Cliente = Awaited<ReturnType<typeof getClientes>>[number];
+type ClienteFormDefaults = {
+  nombre?: string | null;
+  telefono?: string | null;
+  email?: string | null;
+  direccion?: string | null;
+  localidad?: string | null;
+  origenContacto?: string | null;
+  tipoCliente?: string | null;
+  presupuesto?: string | null;
+  importeAceptado?: string | null;
+  fechaAlta?: Date | null;
+  fechaSeguimiento?: Date | null;
+  fechaMedicion?: Date | null;
+  fechaInstalacion?: Date | null;
+  estado?: string | null;
+  motivoRechazo?: string | null;
+  zona?: string | null;
+  observaciones?: string | null;
+};
 type SeguimientoPendiente = Awaited<
   ReturnType<typeof getSeguimientosPendientes>
 >[number];
@@ -464,12 +483,16 @@ function OptionSelect<const T extends readonly string[]>({
 function ClienteForm({
   action,
   cliente,
+  defaults,
   submitLabel,
 }: {
   action: (formData: FormData) => Promise<void>;
   cliente?: Cliente;
+  defaults?: ClienteFormDefaults;
   submitLabel: string;
 }) {
+  const values = cliente ?? defaults;
+
   return (
     <form action={action} className="grid gap-4">
       {cliente ? <input type="hidden" name="id" value={cliente.id} /> : null}
@@ -477,90 +500,94 @@ function ClienteForm({
         <Field
           label="Nombre"
           name="nombre"
-          defaultValue={cliente?.nombre}
+          defaultValue={values?.nombre}
           required
         />
         <Field
           label="Telefono"
           name="telefono"
           type="tel"
-          defaultValue={cliente?.telefono}
+          defaultValue={values?.telefono}
         />
         <Field
           label="Email"
           name="email"
           type="email"
-          defaultValue={cliente?.email}
+          defaultValue={values?.email}
         />
         <Field
           label="Direccion"
           name="direccion"
-          defaultValue={cliente?.direccion}
+          defaultValue={values?.direccion}
         />
         <Field
           label="Localidad"
           name="localidad"
-          defaultValue={cliente?.localidad}
+          defaultValue={values?.localidad}
         />
         <OptionSelect
           label="Zona"
           name="zona"
           options={zonas}
-          defaultValue={cliente?.zona}
+          defaultValue={values?.zona}
         />
         <OptionSelect
           label="Origen del contacto"
           name="origenContacto"
           options={origenesContacto}
-          defaultValue={cliente?.origenContacto}
+          defaultValue={values?.origenContacto}
         />
         <OptionSelect
           label="Tipo de cliente"
           name="tipoCliente"
           options={tiposCliente}
-          defaultValue={cliente?.tipoCliente ?? cliente?.tipoTrabajo}
+          defaultValue={
+            cliente ? cliente.tipoCliente ?? cliente.tipoTrabajo : values?.tipoCliente
+          }
         />
         <Field
           label="Presupuesto (€)"
           name="presupuesto"
           type="number"
           step="0.01"
-          defaultValue={cliente?.presupuesto?.toString()}
+          defaultValue={cliente ? cliente.presupuesto?.toString() : defaults?.presupuesto}
         />
         <Field
           label="Importe aceptado (€)"
           name="importeAceptado"
           type="number"
           step="0.01"
-          defaultValue={cliente?.importeAceptado?.toString()}
+          defaultValue={
+            cliente ? cliente.importeAceptado?.toString() : defaults?.importeAceptado
+          }
         />
         <Field
           label="Fecha de alta"
           name="fechaAlta"
           type="date"
-          defaultValue={toDateInputValue(cliente?.fechaAlta)}
+          defaultValue={toDateInputValue(values?.fechaAlta)}
         />
         <Field
           label="Fecha de seguimiento"
           name="fechaSeguimiento"
           type="date"
-          defaultValue={toDateInputValue(cliente?.fechaSeguimiento)}
+          defaultValue={toDateInputValue(values?.fechaSeguimiento)}
         />
         <Field
           label="Fecha de medición"
           name="fechaMedicion"
           type="date"
-          defaultValue={toDateInputValue(cliente?.fechaMedicion)}
+          defaultValue={toDateInputValue(values?.fechaMedicion)}
         />
         <Field
           label="Fecha de instalación"
           name="fechaInstalacion"
           type="date"
-          defaultValue={toDateInputValue(cliente?.fechaInstalacion)}
+          defaultValue={toDateInputValue(values?.fechaInstalacion)}
         />
         <EstadoSelect
-          defaultValue={cliente?.estado}
-          defaultMotivoRechazo={cliente?.motivoRechazo}
+          defaultValue={values?.estado}
+          defaultMotivoRechazo={values?.motivoRechazo}
         />
       </div>
       <label className="flex flex-col gap-1.5">
@@ -568,7 +595,7 @@ function ClienteForm({
         <textarea
           className={`${inputClass} min-h-24 resize-y`}
           name="observaciones"
-          defaultValue={cliente?.observaciones ?? ""}
+          defaultValue={values?.observaciones ?? ""}
         />
       </label>
       <div>
@@ -1142,15 +1169,47 @@ type ClientesPageProps = {
   searchParams: Promise<{
     q?: string | string[];
     clienteEliminado?: string | string[];
+    nombre?: string | string[];
+    telefono?: string | string[];
+    email?: string | string[];
+    origenContacto?: string | string[];
+    observaciones?: string | string[];
   }>;
 };
+
+function searchParamString(value?: string | string[]) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function clienteDefaultsFromParams(
+  params: Awaited<ClientesPageProps["searchParams"]>,
+): ClienteFormDefaults | undefined {
+  const nombre = searchParamString(params.nombre)?.trim();
+  const telefono = searchParamString(params.telefono)?.trim();
+  const email = searchParamString(params.email)?.trim();
+  const origenContacto = searchParamString(params.origenContacto)?.trim();
+  const observaciones = searchParamString(params.observaciones)?.trim();
+
+  if (!nombre && !telefono && !email && !observaciones) {
+    return undefined;
+  }
+
+  return {
+    nombre,
+    telefono,
+    email,
+    origenContacto,
+    observaciones,
+  };
+}
 
 export default async function ClientesPage({ searchParams }: ClientesPageProps) {
   await connection();
 
   const params = await searchParams;
-  const queryParam = Array.isArray(params.q) ? params.q[0] : params.q;
+  const queryParam = searchParamString(params.q);
   const query = queryParam?.trim() ?? "";
+  const clienteDefaults = clienteDefaultsFromParams(params);
   const [clientes, seguimientosPendientes, seguimientosFuturos, resumen] =
     await Promise.all([
       getClientes(query),
@@ -1201,7 +1260,11 @@ export default async function ClientesPage({ searchParams }: ClientesPageProps) 
               Nuevo cliente
             </h2>
           </div>
-          <ClienteForm action={createCliente} submitLabel="Crear cliente" />
+          <ClienteForm
+            action={createCliente}
+            defaults={clienteDefaults}
+            submitLabel="Crear cliente"
+          />
         </section>
 
         <section className="grid gap-4">
