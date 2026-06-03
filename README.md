@@ -2,6 +2,13 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
+Configura estas variables de entorno antes de arrancar el CRM:
+
+```bash
+CRM_USER=
+CRM_PASSWORD=
+```
+
 First, run the development server:
 
 ```bash

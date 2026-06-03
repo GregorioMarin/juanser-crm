@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { connection } from "next/server";
+import { logout } from "@/app/auth/actions";
 import { prisma } from "@/app/lib/prisma";
 
 async function getActividadReciente() {
@@ -133,6 +134,14 @@ export default async function Home() {
             >
               Trabajos terminados
             </Link>
+            <form action={logout}>
+              <button
+                type="submit"
+                className="inline-flex h-11 w-full items-center justify-center rounded-md border border-neutral-300 bg-white px-5 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50 sm:w-auto"
+              >
+                Cerrar sesión
+              </button>
+            </form>
           </div>
         </header>
 
