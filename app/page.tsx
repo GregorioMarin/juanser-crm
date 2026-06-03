@@ -87,7 +87,7 @@ export default async function Home() {
 
   return (
     <main className="min-h-screen bg-neutral-100 px-5 py-6 text-neutral-950 sm:px-8">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
         <header className="flex flex-col gap-4 border-b border-neutral-300 pb-6 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-medium uppercase tracking-[0.18em] text-emerald-700">
@@ -146,25 +146,6 @@ export default async function Home() {
         </header>
 
         <ActividadRecienteCard actividades={actividades} />
-
-        <section className="grid gap-4 md:grid-cols-3">
-          <div className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
-            <p className="text-sm font-medium text-neutral-500">Modulo activo</p>
-            <p className="mt-2 text-xl font-semibold text-neutral-950">
-              Clientes y presupuestos
-            </p>
-          </div>
-          <div className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
-            <p className="text-sm font-medium text-neutral-500">Base de datos</p>
-            <p className="mt-2 text-xl font-semibold text-neutral-950">
-              PostgreSQL
-            </p>
-          </div>
-          <div className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
-            <p className="text-sm font-medium text-neutral-500">ORM</p>
-            <p className="mt-2 text-xl font-semibold text-neutral-950">Prisma</p>
-          </div>
-        </section>
       </div>
     </main>
   );
