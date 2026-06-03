@@ -1,0 +1,1 @@
+ALTER TYPE "ActividadClienteTipo" ADD VALUE 'PRESUPUESTO_EDITADO';

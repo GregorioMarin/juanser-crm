@@ -292,6 +292,14 @@ function PresupuestosTable({
                     >
                       Ver PDF
                     </Link>
+                    <Link
+                      href={`/presupuestos/${presupuesto.id}/editar?returnTo=${encodeURIComponent(
+                        returnTo,
+                      )}`}
+                      className="inline-flex h-9 items-center justify-center rounded-md border border-neutral-300 px-3 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
+                    >
+                      Editar presupuesto
+                    </Link>
                     <WhatsAppPresupuestoLink
                       presupuestoId={presupuesto.id}
                       publicToken={presupuesto.publicToken}
