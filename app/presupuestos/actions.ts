@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { registrarActividadCliente } from "@/app/lib/actividad";
 import { prisma } from "@/app/lib/prisma";
+import { defaultPresupuestoValidezDias } from "./default-observaciones";
 
 function requiredId(formData: FormData, key: string) {
   const id = Number(formData.get(key));
@@ -242,7 +243,11 @@ export async function updatePresupuesto(formData: FormData) {
         descripcion: requiredString(formData, "descripcion"),
         estado: presupuestoEstado(formData),
         fecha: requiredDate(formData, "fecha"),
-        validezDias: optionalInteger(formData, "validezDias", 15),
+        validezDias: optionalInteger(
+          formData,
+          "validezDias",
+          defaultPresupuestoValidezDias,
+        ),
         observaciones: optionalString(formData, "observaciones"),
         ivaPorcentaje: ivaPorcentaje.toFixed(2),
         importe: totalConIva.toFixed(2),

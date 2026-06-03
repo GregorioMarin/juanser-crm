@@ -15,7 +15,10 @@ import {
 } from "@/app/clientes/multimedia-upload-form";
 import { registrarActividadCliente } from "@/app/lib/actividad";
 import { prisma } from "@/app/lib/prisma";
-import { defaultPresupuestoObservaciones } from "@/app/presupuestos/default-observaciones";
+import {
+  defaultPresupuestoObservaciones,
+  defaultPresupuestoValidezDias,
+} from "@/app/presupuestos/default-observaciones";
 import { DeletePresupuestoForm } from "@/app/presupuestos/delete-presupuesto-form";
 import { WhatsAppPresupuestoLink } from "@/app/presupuestos/whatsapp-presupuesto-link";
 
@@ -288,6 +291,31 @@ function roundCurrency(value: number) {
   return Math.round(value * 100) / 100;
 }
 
+async function generatePresupuestoNumero(fecha: Date) {
+  const year = fecha.getFullYear();
+  const prefix = `PJ-${year}-`;
+  const presupuestos = await prisma.presupuesto.findMany({
+    where: {
+      numero: {
+        startsWith: prefix,
+      },
+    },
+    select: {
+      numero: true,
+    },
+  });
+  const maxNumber = presupuestos.reduce((max, presupuesto) => {
+    const suffix = presupuesto.numero.slice(prefix.length);
+    if (!/^\d+$/.test(suffix)) {
+      return max;
+    }
+
+    return Math.max(max, Number(suffix));
+  }, 0);
+
+  return `${prefix}${String(maxNumber + 1).padStart(4, "0")}`;
+}
+
 type PresupuestoLineaData = {
   concepto: string;
   descripcion: string | null;
@@ -514,17 +542,25 @@ async function createPresupuesto(formData: FormData) {
   );
   const totalIva = roundCurrency((totalSinIva * ivaPorcentaje) / 100);
   const totalConIva = roundCurrency(totalSinIva + totalIva);
+  const fecha = optionalDate(formData, "fecha") ?? new Date();
+  const numero =
+    optionalString(formData, "numero") ??
+    (await generatePresupuestoNumero(fecha));
 
   const presupuesto = await prisma.presupuesto.create({
     data: {
       clienteId,
-      numero: requiredString(formData, "numero"),
+      numero,
       titulo: requiredString(formData, "titulo"),
       descripcion: requiredString(formData, "descripcion"),
       importe: totalConIva.toFixed(2),
       estado: requiredPresupuestoEstado(formData),
-      fecha: optionalDate(formData, "fecha") ?? new Date(),
-      validezDias: optionalInteger(formData, "validezDias", 15),
+      fecha,
+      validezDias: optionalInteger(
+        formData,
+        "validezDias",
+        defaultPresupuestoValidezDias,
+      ),
       observaciones: optionalString(formData, "observaciones"),
       ivaPorcentaje: ivaPorcentaje.toFixed(2),
       totalSinIva: totalSinIva.toFixed(2),
@@ -1332,7 +1368,11 @@ function PresupuestosSection({ cliente }: { cliente: ClienteDetalle }) {
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <label className="flex flex-col gap-1.5">
             <span className={labelClass}>Numero</span>
-            <input className={inputClass} name="numero" required />
+            <input
+              className={inputClass}
+              name="numero"
+              placeholder="Se generará automáticamente"
+            />
           </label>
           <label className="flex flex-col gap-1.5">
             <span className={labelClass}>Titulo</span>
@@ -1364,7 +1404,7 @@ function PresupuestosSection({ cliente }: { cliente: ClienteDetalle }) {
               name="validezDias"
               type="number"
               min="0"
-              defaultValue="15"
+              defaultValue={defaultPresupuestoValidezDias}
             />
           </label>
           <label className="flex flex-col gap-1.5">

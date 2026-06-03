@@ -6,3 +6,5 @@ En el caso de que este presupuesto sea aceptado, se deberá abonar el 50% del im
 
 Nº Cuenta:
 ES25 2100 2735 1113 0005 9956`;
+
+export const defaultPresupuestoValidezDias = 30;

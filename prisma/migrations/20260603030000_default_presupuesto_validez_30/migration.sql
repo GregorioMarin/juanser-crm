@@ -1,0 +1,2 @@
+ALTER TABLE "Presupuesto"
+ALTER COLUMN "validezDias" SET DEFAULT 30;
