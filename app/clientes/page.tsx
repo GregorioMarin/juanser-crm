@@ -323,8 +323,7 @@ async function getResumen() {
     aceptados,
     enFabricacion,
     instalados,
-    totalPresupuestado,
-    totalAceptado,
+    clientesParaTotales,
     importeAceptadoTotal,
     perdidosPorMotivo,
   ] = await Promise.all([
@@ -333,10 +332,14 @@ async function getResumen() {
     prisma.cliente.count({ where: { estado: "Aceptado" } }),
     prisma.cliente.count({ where: { estado: "En fabricación" } }),
     prisma.cliente.count({ where: { estado: "Instalado" } }),
-    prisma.presupuesto.aggregate({ _sum: { totalConIva: true } }),
-    prisma.presupuesto.aggregate({
-      where: { estado: "ACEPTADO" },
-      _sum: { totalConIva: true },
+    prisma.cliente.findMany({
+      select: {
+        presupuestos: {
+          select: {
+            totalConIva: true,
+          },
+        },
+      },
     }),
     prisma.cliente.aggregate({ _sum: { importeAceptado: true } }),
     prisma.cliente.groupBy({
@@ -346,6 +349,16 @@ async function getResumen() {
       orderBy: { _count: { motivoRechazo: "desc" } },
     }),
   ]);
+  const totalPresupuestado = clientesParaTotales.reduce(
+    (total, cliente) =>
+      total +
+      cliente.presupuestos.reduce(
+        (clienteTotal, presupuesto) =>
+          clienteTotal + Number(presupuesto.totalConIva),
+        0,
+      ),
+    0,
+  );
 
   return {
     leads,
@@ -353,8 +366,7 @@ async function getResumen() {
     aceptados,
     enFabricacion,
     instalados,
-    totalPresupuestado: totalPresupuestado._sum.totalConIva,
-    totalAceptado: totalAceptado._sum.totalConIva,
+    totalPresupuestado,
     importeAceptadoTotal: importeAceptadoTotal._sum.importeAceptado,
     perdidosPorMotivo,
   };
@@ -810,13 +822,12 @@ function ResumenComercial({ resumen }: { resumen: Resumen }) {
     ["En fabricacion", resumen.enFabricacion],
     ["Instalados", resumen.instalados],
     ["Total presupuestado", formatCurrency(resumen.totalPresupuestado)],
-    ["Total aceptado", formatCurrency(resumen.totalAceptado)],
     ["Importe aceptado", formatCurrency(resumen.importeAceptadoTotal)],
   ] as const;
 
   return (
     <section className="grid gap-3">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
         {items.map(([label, value]) => (
           <div
             key={label}

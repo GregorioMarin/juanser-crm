@@ -9,6 +9,7 @@ const inputClass =
   "w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-950 outline-none transition placeholder:text-neutral-400 focus:border-emerald-700 focus:ring-2 focus:ring-emerald-100";
 
 type PresupuestoEstado = (typeof estados)[number];
+const clienteExistenteWhere = { cliente: { id: { gt: 0 } } } as const;
 
 function estadoFromParam(value?: string | string[]) {
   const raw = Array.isArray(value) ? value[0] : value;
@@ -47,6 +48,7 @@ function presupuestosReturnPath(query: string, estado: PresupuestoEstado | null)
 async function getPresupuestos(query: string, estado: PresupuestoEstado | null) {
   return prisma.presupuesto.findMany({
     where: {
+      ...clienteExistenteWhere,
       ...(estado ? { estado } : {}),
       ...(query
         ? {
@@ -77,17 +79,20 @@ async function getPresupuestos(query: string, estado: PresupuestoEstado | null) 
 
 async function getTotales() {
   const [total, aceptado, pendiente, rechazado] = await Promise.all([
-    prisma.presupuesto.aggregate({ _sum: { totalConIva: true } }),
     prisma.presupuesto.aggregate({
-      where: { estado: "ACEPTADO" },
+      where: clienteExistenteWhere,
       _sum: { totalConIva: true },
     }),
     prisma.presupuesto.aggregate({
-      where: { estado: "PENDIENTE" },
+      where: { ...clienteExistenteWhere, estado: "ACEPTADO" },
       _sum: { totalConIva: true },
     }),
     prisma.presupuesto.aggregate({
-      where: { estado: "RECHAZADO" },
+      where: { ...clienteExistenteWhere, estado: "PENDIENTE" },
+      _sum: { totalConIva: true },
+    }),
+    prisma.presupuesto.aggregate({
+      where: { ...clienteExistenteWhere, estado: "RECHAZADO" },
       _sum: { totalConIva: true },
     }),
   ]);
