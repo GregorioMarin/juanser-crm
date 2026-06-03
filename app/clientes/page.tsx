@@ -981,7 +981,7 @@ function ClienteDetails({ cliente }: { cliente: Cliente }) {
 
 function ClientesTable({ clientes }: { clientes: Cliente[] }) {
   return (
-    <div className="hidden overflow-hidden rounded-md border border-neutral-300 bg-white shadow-sm lg:block">
+    <div className="hidden overflow-x-auto rounded-md border border-neutral-300 bg-white shadow-sm lg:block">
       <table className="w-full border-collapse text-left text-sm">
         <thead className="bg-neutral-100 text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
           <tr>
@@ -996,7 +996,7 @@ function ClientesTable({ clientes }: { clientes: Cliente[] }) {
             <th className="px-4 py-3">Seguimiento</th>
             <th className="px-4 py-3">Medición</th>
             <th className="px-4 py-3">Instalación</th>
-            <th className="px-4 py-3">Estado</th>
+            <th className="min-w-36 px-4 py-3 text-center">Estado</th>
             <th className="px-4 py-3 text-right">Acciones</th>
           </tr>
         </thead>
@@ -1042,9 +1042,9 @@ function ClientesTable({ clientes }: { clientes: Cliente[] }) {
               <td className="whitespace-nowrap px-4 py-4 text-neutral-700">
                 {formatDate(cliente.fechaInstalacion)}
               </td>
-              <td className="px-4 py-4">
+              <td className="min-w-36 px-4 py-4 text-center">
                 <span
-                  className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${estadoClass(
+                  className={`inline-flex min-w-28 max-w-36 items-center justify-center whitespace-normal break-words rounded-full px-2.5 py-1 text-center text-xs font-semibold leading-tight ring-1 ${estadoClass(
                     cliente.estado,
                   )}`}
                 >
