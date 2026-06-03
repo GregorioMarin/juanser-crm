@@ -15,6 +15,7 @@ import {
 } from "@/app/clientes/multimedia-upload-form";
 import { registrarActividadCliente } from "@/app/lib/actividad";
 import { prisma } from "@/app/lib/prisma";
+import { defaultPresupuestoObservaciones } from "@/app/presupuestos/default-observaciones";
 import { DeletePresupuestoForm } from "@/app/presupuestos/delete-presupuesto-form";
 import { WhatsAppPresupuestoLink } from "@/app/presupuestos/whatsapp-presupuesto-link";
 
@@ -1431,6 +1432,7 @@ function PresupuestosSection({ cliente }: { cliente: ClienteDetalle }) {
           <textarea
             className={`${inputClass} min-h-20 resize-y`}
             name="observaciones"
+            defaultValue={defaultPresupuestoObservaciones}
           />
         </label>
         <button

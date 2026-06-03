@@ -1,10 +1,13 @@
 import {
   PDFDocument,
+  PDFImage,
   PDFPage,
   PDFFont,
   StandardFonts,
   rgb,
 } from "pdf-lib";
+import { readFile } from "fs/promises";
+import path from "path";
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 
@@ -31,6 +34,12 @@ type PdfContext = {
   fonts: PdfFonts;
   y: number;
 };
+
+async function loadLogo(doc: PDFDocument) {
+  const logoPath = path.join(process.cwd(), "public", "logo-juanser.jpeg");
+  const logoBytes = await readFile(logoPath);
+  return doc.embedJpg(logoBytes);
+}
 
 async function getPresupuestoById(id: number) {
   return prisma.presupuesto.findUnique({
@@ -158,6 +167,27 @@ function drawWrappedText(
   return lines.length * lineHeight;
 }
 
+function drawWrappedTextFlow(
+  ctx: PdfContext,
+  text: string,
+  x: number,
+  width: number,
+  font: PDFFont,
+  size: number,
+  lineHeight: number,
+  color = colors.dark,
+) {
+  const lines = wrapText(text, font, size, width);
+
+  lines.forEach((line) => {
+    ensureSpace(ctx, lineHeight);
+    if (line) {
+      drawText(ctx.page, line, x, ctx.y, font, size, color);
+    }
+    ctx.y += lineHeight;
+  });
+}
+
 function addPage(ctx: PdfContext) {
   ctx.page = ctx.doc.addPage(pageSize);
   ctx.y = margin;
@@ -172,15 +202,26 @@ function ensureSpace(ctx: PdfContext, height: number) {
   return false;
 }
 
-function drawHeader(ctx: PdfContext, presupuesto: PresupuestoPdf) {
+function drawHeader(
+  ctx: PdfContext,
+  presupuesto: PresupuestoPdf,
+  logo: PDFImage,
+) {
   const { page, fonts } = ctx;
+  const logoSize = logo.scaleToFit(132, 58);
 
-  drawText(page, "Carpintería Juanser", margin, margin, fonts.bold, 24);
+  page.drawImage(logo, {
+    x: margin,
+    y: page.getHeight() - margin - logoSize.height,
+    width: logoSize.width,
+    height: logoSize.height,
+  });
+  drawText(page, "Carpintería Juanser", margin, 112, fonts.bold, 13);
   drawWrappedText(
     page,
     "P.I. San Nicolás, Calle San Nicolás 9 Nave 21, 41500 Alcalá de Guadaíra, Sevilla",
     margin,
-    82,
+    132,
     340,
     fonts.regular,
     10,
@@ -191,7 +232,7 @@ function drawHeader(ctx: PdfContext, presupuesto: PresupuestoPdf) {
     page,
     "Teléfonos: 665 13 47 46 / 655 69 39 63",
     margin,
-    112,
+    162,
     fonts.regular,
     10,
     colors.muted,
@@ -216,7 +257,7 @@ function drawHeader(ctx: PdfContext, presupuesto: PresupuestoPdf) {
     13,
   );
 
-  ctx.y = 146;
+  ctx.y = 196;
 }
 
 function drawIntro(ctx: PdfContext, presupuesto: PresupuestoPdf) {
@@ -429,11 +470,10 @@ function drawFooter(ctx: PdfContext, presupuesto: PresupuestoPdf) {
   if (presupuesto.observaciones) {
     drawText(ctx.page, "Observaciones", margin, ctx.y, ctx.fonts.bold, 11);
     ctx.y += 18;
-    ctx.y += drawWrappedText(
-      ctx.page,
+    drawWrappedTextFlow(
+      ctx,
       presupuesto.observaciones,
       margin,
-      ctx.y,
       contentWidth,
       ctx.fonts.regular,
       10,
@@ -463,6 +503,7 @@ async function renderPdf(presupuesto: PresupuestoPdf) {
     regular: await doc.embedFont(StandardFonts.Helvetica),
     bold: await doc.embedFont(StandardFonts.HelveticaBold),
   };
+  const logo = await loadLogo(doc);
 
   const ctx: PdfContext = {
     doc,
@@ -471,9 +512,9 @@ async function renderPdf(presupuesto: PresupuestoPdf) {
     y: margin,
   };
 
-  drawHeader(ctx, presupuesto);
-  drawIntro(ctx, presupuesto);
+  drawHeader(ctx, presupuesto, logo);
   drawClienteBlock(ctx, presupuesto);
+  drawIntro(ctx, presupuesto);
   drawLineas(ctx, presupuesto);
   drawTotals(ctx, presupuesto);
   drawFooter(ctx, presupuesto);
