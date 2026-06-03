@@ -1,7 +1,10 @@
 import { createHmac, timingSafeEqual } from "crypto";
+import {
+  sessionCookieName,
+  sessionDurationSeconds,
+} from "@/app/lib/auth-constants";
 
-export const sessionCookieName = "juanser_crm_session";
-export const sessionDurationSeconds = 60 * 60 * 24 * 7;
+export { sessionCookieName, sessionDurationSeconds };
 
 type SessionPayload = {
   user: string;
