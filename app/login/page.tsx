@@ -10,6 +10,7 @@ const labelClass = "text-sm font-medium text-neutral-700";
 
 type LoginPageProps = {
   searchParams: Promise<{
+    blocked?: string | string[];
     error?: string | string[];
     next?: string | string[];
   }>;
@@ -45,7 +46,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           Introduce las credenciales internas para continuar.
         </p>
 
-        {hasError(params.error) ? (
+        {hasError(params.blocked) ? (
+          <div className="mt-5 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-900">
+            Demasiados intentos. Inténtalo de nuevo más tarde.
+          </div>
+        ) : hasError(params.error) ? (
           <div className="mt-5 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-900">
             Usuario o contraseña incorrectos.
           </div>

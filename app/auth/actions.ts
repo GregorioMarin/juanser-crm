@@ -1,6 +1,7 @@
 "use server";
 
 import { cookies } from "next/headers";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import {
   createSessionValue,
@@ -9,6 +10,11 @@ import {
   sessionCookieName,
   sessionCookieOptions,
 } from "@/app/lib/auth";
+import {
+  clearFailedLogins,
+  isLoginBlocked,
+  recordFailedLogin,
+} from "@/app/lib/login-rate-limit";
 
 function formString(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -31,14 +37,43 @@ function safeRedirectPath(value: string) {
   return value;
 }
 
+function redirectToLogin(params: Record<string, string>) {
+  const searchParams = new URLSearchParams(params);
+
+  redirect(`/login?${searchParams.toString()}`);
+}
+
+async function clientIp() {
+  const headersList = await headers();
+  const forwardedFor = headersList.get("x-forwarded-for")?.split(",")[0]?.trim();
+
+  return (
+    forwardedFor ||
+    headersList.get("x-real-ip")?.trim() ||
+    headersList.get("cf-connecting-ip")?.trim() ||
+    "unknown"
+  );
+}
+
 export async function login(formData: FormData) {
   const user = formString(formData, "user").trim();
   const password = formString(formData, "password");
   const next = safeRedirectPath(formString(formData, "next") || "/");
+  const ip = await clientIp();
+
+  if (isLoginBlocked(ip)) {
+    redirectToLogin({ blocked: "1", next });
+  }
 
   if (!isValidCredentials(user, password)) {
-    redirect(`/login?error=1&next=${encodeURIComponent(next)}`);
+    if (recordFailedLogin(ip)) {
+      redirectToLogin({ blocked: "1", next });
+    }
+
+    redirectToLogin({ error: "1", next });
   }
+
+  clearFailedLogins(ip);
 
   const cookieStore = await cookies();
   cookieStore.set({
