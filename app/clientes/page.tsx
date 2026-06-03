@@ -248,34 +248,6 @@ async function updateCliente(formData: FormData) {
   revalidatePath(`/clientes/${id}`);
 }
 
-async function cleanupOrphanPresupuestos() {
-  "use server";
-
-  await prisma.$transaction([
-    prisma.$executeRaw`
-      DELETE FROM "PresupuestoLinea"
-      WHERE "presupuestoId" IN (
-        SELECT p.id
-        FROM "Presupuesto" p
-        LEFT JOIN "Cliente" c ON c.id = p."clienteId"
-        WHERE c.id IS NULL
-      )
-    `,
-    prisma.$executeRaw`
-      DELETE FROM "Presupuesto"
-      WHERE id IN (
-        SELECT p.id
-        FROM "Presupuesto" p
-        LEFT JOIN "Cliente" c ON c.id = p."clienteId"
-        WHERE c.id IS NULL
-      )
-    `,
-  ]);
-
-  revalidatePath("/clientes");
-  revalidatePath("/presupuestos");
-}
-
 async function getClientes(query: string) {
   return prisma.cliente.findMany({
     where: query
@@ -352,7 +324,6 @@ async function getResumen() {
     enFabricacion,
     instalados,
     clientesParaTotales,
-    presupuestosHuerfanos,
     importeAceptadoTotal,
     perdidosPorMotivo,
   ] = await Promise.all([
@@ -363,35 +334,13 @@ async function getResumen() {
     prisma.cliente.count({ where: { estado: "Instalado" } }),
     prisma.cliente.findMany({
       select: {
-        id: true,
-        nombre: true,
         presupuestos: {
-          orderBy: { id: "asc" },
           select: {
-            id: true,
-            numero: true,
-            clienteId: true,
             totalConIva: true,
-            estado: true,
           },
         },
       },
     }),
-    prisma.$queryRaw<
-      {
-        id: number;
-        numero: string;
-        clienteId: number;
-        totalConIva: unknown;
-        estado: string;
-      }[]
-    >`
-      SELECT p.id, p.numero, p."clienteId", p."totalConIva", p.estado
-      FROM "Presupuesto" p
-      LEFT JOIN "Cliente" c ON c.id = p."clienteId"
-      WHERE c.id IS NULL
-      ORDER BY p.id ASC
-    `,
     prisma.cliente.aggregate({ _sum: { importeAceptado: true } }),
     prisma.cliente.groupBy({
       by: ["motivoRechazo"],
@@ -400,12 +349,6 @@ async function getResumen() {
       orderBy: { _count: { motivoRechazo: "desc" } },
     }),
   ]);
-  const presupuestosUsados = clientesParaTotales.flatMap((cliente) =>
-    cliente.presupuestos.map((presupuesto) => ({
-      ...presupuesto,
-      clienteNombre: cliente.nombre,
-    })),
-  );
   const totalPresupuestado = clientesParaTotales.reduce(
     (total, cliente) =>
       total +
@@ -425,12 +368,6 @@ async function getResumen() {
     instalados,
     totalPresupuestado,
     importeAceptadoTotal: importeAceptadoTotal._sum.importeAceptado,
-    diagnostico: {
-      clientesCargados: clientesParaTotales.length,
-      presupuestosCargados: presupuestosUsados.length,
-      presupuestosUsados,
-      presupuestosHuerfanos,
-    },
     perdidosPorMotivo,
   };
 }
@@ -903,7 +840,6 @@ function ResumenComercial({ resumen }: { resumen: Resumen }) {
           </div>
         ))}
       </div>
-      <DiagnosticoPresupuestos resumen={resumen} />
       <div className="rounded-md border border-neutral-300 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-neutral-500">
@@ -939,147 +875,6 @@ function ResumenComercial({ resumen }: { resumen: Resumen }) {
           </p>
         )}
       </div>
-    </section>
-  );
-}
-
-function DiagnosticoPresupuestos({ resumen }: { resumen: Resumen }) {
-  const diagnostico = resumen.diagnostico;
-
-  return (
-    <section className="rounded-md border border-amber-300 bg-amber-50 p-4 shadow-sm">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-amber-950">
-            Diagnostico temporal de presupuestos
-          </h2>
-          <p className="mt-1 text-sm text-amber-900">
-            Total presupuestado calculado:{" "}
-            <span className="font-semibold">
-              {formatCurrency(resumen.totalPresupuestado)}
-            </span>
-          </p>
-        </div>
-        {diagnostico.presupuestosHuerfanos.length > 0 ? (
-          <form action={cleanupOrphanPresupuestos}>
-            <button
-              type="submit"
-              className="inline-flex h-9 items-center justify-center rounded-md bg-rose-700 px-3 text-sm font-semibold text-white transition hover:bg-rose-800"
-            >
-              Eliminar huerfanos
-            </button>
-          </form>
-        ) : null}
-      </div>
-
-      <div className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
-        <p className="rounded-md border border-amber-200 bg-white px-3 py-2">
-          <span className="font-semibold text-neutral-500">Clientes cargados: </span>
-          <span className="font-semibold text-neutral-950">
-            {diagnostico.clientesCargados}
-          </span>
-        </p>
-        <p className="rounded-md border border-amber-200 bg-white px-3 py-2">
-          <span className="font-semibold text-neutral-500">
-            Presupuestos cargados:{" "}
-          </span>
-          <span className="font-semibold text-neutral-950">
-            {diagnostico.presupuestosCargados}
-          </span>
-        </p>
-        <p className="rounded-md border border-amber-200 bg-white px-3 py-2">
-          <span className="font-semibold text-neutral-500">
-            Presupuestos huerfanos:{" "}
-          </span>
-          <span className="font-semibold text-neutral-950">
-            {diagnostico.presupuestosHuerfanos.length}
-          </span>
-        </p>
-      </div>
-
-      <div className="mt-4 overflow-x-auto rounded-md border border-amber-200 bg-white">
-        <table className="w-full border-collapse text-left text-xs">
-          <thead className="bg-amber-100 font-semibold uppercase tracking-[0.12em] text-amber-950">
-            <tr>
-              <th className="px-3 py-2">ID</th>
-              <th className="px-3 py-2">Numero</th>
-              <th className="px-3 py-2">Cliente ID</th>
-              <th className="px-3 py-2">Cliente</th>
-              <th className="px-3 py-2 text-right">Total con IVA</th>
-              <th className="px-3 py-2">Estado</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-amber-100">
-            {diagnostico.presupuestosUsados.length > 0 ? (
-              diagnostico.presupuestosUsados.map((presupuesto) => (
-                <tr key={presupuesto.id}>
-                  <td className="px-3 py-2 font-semibold text-neutral-950">
-                    {presupuesto.id}
-                  </td>
-                  <td className="px-3 py-2 text-neutral-700">
-                    {presupuesto.numero}
-                  </td>
-                  <td className="px-3 py-2 text-neutral-700">
-                    {presupuesto.clienteId}
-                  </td>
-                  <td className="px-3 py-2 text-neutral-700">
-                    {presupuesto.clienteNombre}
-                  </td>
-                  <td className="px-3 py-2 text-right font-semibold text-neutral-950">
-                    {formatCurrency(presupuesto.totalConIva)}
-                  </td>
-                  <td className="px-3 py-2 text-neutral-700">
-                    {presupuesto.estado}
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={6} className="px-3 py-4 text-center text-neutral-500">
-                  No hay presupuestos asociados a clientes existentes.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {diagnostico.presupuestosHuerfanos.length > 0 ? (
-        <div className="mt-4 overflow-x-auto rounded-md border border-rose-200 bg-white">
-          <table className="w-full border-collapse text-left text-xs">
-            <thead className="bg-rose-100 font-semibold uppercase tracking-[0.12em] text-rose-950">
-              <tr>
-                <th className="px-3 py-2">ID huerfano</th>
-                <th className="px-3 py-2">Numero</th>
-                <th className="px-3 py-2">Cliente ID</th>
-                <th className="px-3 py-2 text-right">Total con IVA</th>
-                <th className="px-3 py-2">Estado</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-rose-100">
-              {diagnostico.presupuestosHuerfanos.map((presupuesto) => (
-                <tr key={presupuesto.id}>
-                  <td className="px-3 py-2 font-semibold text-neutral-950">
-                    {presupuesto.id}
-                  </td>
-                  <td className="px-3 py-2 text-neutral-700">
-                    {presupuesto.numero}
-                  </td>
-                  <td className="px-3 py-2 text-neutral-700">
-                    {presupuesto.clienteId}
-                  </td>
-                  <td className="px-3 py-2 text-right font-semibold text-neutral-950">
-                    {formatCurrency(presupuesto.totalConIva)}
-                  </td>
-                  <td className="px-3 py-2 text-neutral-700">
-                    {presupuesto.estado}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : null}
     </section>
   );
 }
