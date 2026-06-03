@@ -97,39 +97,18 @@ async function isValidSessionValue(value?: string | null) {
   }
 }
 
-function logAuthDecision({
-  pathname,
-  cookiePresent,
-  redirects,
-}: {
-  pathname: string;
-  cookiePresent: boolean;
-  redirects: boolean;
-}) {
-  console.log(
-    `[auth] ruta=${pathname} cookiePresente=${cookiePresent ? "si" : "no"} redirige=${
-      redirects ? "si" : "no"
-    }`,
-  );
-}
-
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const cookieValue = request.cookies.get(sessionCookieName)?.value;
-  const cookiePresent = Boolean(cookieValue);
   const isAuthenticated = await isValidSessionValue(cookieValue);
 
   if (pathname === "/login" && isAuthenticated) {
-    logAuthDecision({ cookiePresent, pathname, redirects: true });
     return NextResponse.redirect(new URL("/", request.url));
   }
 
   if (isPublicPath(pathname) || isAuthenticated) {
-    logAuthDecision({ cookiePresent, pathname, redirects: false });
     return NextResponse.next();
   }
-
-  logAuthDecision({ cookiePresent, pathname, redirects: true });
 
   const loginUrl = new URL("/login", request.url);
   loginUrl.searchParams.set("next", `${pathname}${request.nextUrl.search}`);
