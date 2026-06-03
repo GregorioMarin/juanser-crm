@@ -67,10 +67,13 @@ async function getPresupuestoByPublicToken(token: string) {
 }
 
 function formatCurrency(value: unknown) {
-  return `${new Intl.NumberFormat("es-ES", {
+  return new Intl.NumberFormat("es-ES", {
+    currency: "EUR",
+    currencyDisplay: "symbol",
+    style: "currency",
     maximumFractionDigits: 2,
     minimumFractionDigits: 2,
-  }).format(Number(value ?? 0))} EUR`;
+  }).format(Number(value ?? 0));
 }
 
 function formatDate(date: Date) {
@@ -158,6 +161,28 @@ function drawCenteredText(
 function wrapText(text: string, font: PDFFont, size: number, width: number) {
   const lines: string[] = [];
 
+  function splitLongWord(word: string) {
+    const chunks: string[] = [];
+    let current = "";
+
+    Array.from(word).forEach((character) => {
+      const next = `${current}${character}`;
+      if (!current || font.widthOfTextAtSize(next, size) <= width) {
+        current = next;
+        return;
+      }
+
+      chunks.push(current);
+      current = character;
+    });
+
+    if (current) {
+      chunks.push(current);
+    }
+
+    return chunks;
+  }
+
   text.split(/\r?\n/).forEach((paragraph) => {
     const words = paragraph.trim().split(/\s+/).filter(Boolean);
     if (words.length === 0) {
@@ -167,16 +192,23 @@ function wrapText(text: string, font: PDFFont, size: number, width: number) {
 
     let current = "";
     words.forEach((word) => {
-      const next = current ? `${current} ${word}` : word;
-      if (font.widthOfTextAtSize(next, size) <= width) {
-        current = next;
-        return;
-      }
+      const wordParts =
+        font.widthOfTextAtSize(word, size) > width
+          ? splitLongWord(word)
+          : [word];
 
-      if (current) {
-        lines.push(current);
-      }
-      current = word;
+      wordParts.forEach((wordPart) => {
+        const next = current ? `${current} ${wordPart}` : wordPart;
+        if (font.widthOfTextAtSize(next, size) <= width) {
+          current = next;
+          return;
+        }
+
+        if (current) {
+          lines.push(current);
+        }
+        current = wordPart;
+      });
     });
 
     if (current) {
@@ -249,9 +281,14 @@ function drawHeader(
   logo: PDFImage,
 ) {
   const { page, fonts } = ctx;
-  const logoSize = logo.scaleToFit(140, 62);
-  const budgetBoxX = page.getWidth() - margin - 210;
-  const budgetBoxY = page.getHeight() - margin - 112;
+  const logoSize = logo.scaleToFit(175, 78);
+  const budgetBoxWidth = 248;
+  const budgetBoxHeight = 136;
+  const budgetBoxX = page.getWidth() - margin - budgetBoxWidth;
+  const budgetBoxY = page.getHeight() - margin - budgetBoxHeight;
+  const budgetInnerX = budgetBoxX + 14;
+  const budgetInnerWidth = budgetBoxWidth - 28;
+  const headerBottom = margin + 222;
 
   page.drawImage(logo, {
     x: margin,
@@ -260,60 +297,68 @@ function drawHeader(
     height: logoSize.height,
   });
 
-  [
-    ["Carpintería Juanser", fonts.bold, colors.dark],
-    ["P.I. San Nicolás", fonts.regular, colors.muted],
-    ["Calle San Nicolás 9 Nave 21", fonts.regular, colors.muted],
-    ["41500 Alcalá de Guadaíra (Sevilla)", fonts.regular, colors.muted],
-    ["", fonts.regular, colors.muted],
-    ["Teléfono: 665 13 47 46", fonts.regular, colors.muted],
-    ["Email: info@juanser.es", fonts.regular, colors.muted],
-    ["Web: https://juanser.es", fonts.regular, colors.muted],
-  ].forEach(([line, font, color], index) => {
-    if (!line) {
-      return;
+  const companyX = margin;
+  let companyY = margin + logoSize.height + 12;
+  const companyLines = [
+    ["Carpintería Juanser", fonts.bold, 12, colors.dark],
+    ["P.I. San Nicolás", fonts.regular, 9, colors.muted],
+    ["Calle San Nicolás 9 Nave 21", fonts.regular, 9, colors.muted],
+    ["41500 Alcalá de Guadaíra (Sevilla)", fonts.regular, 9, colors.muted],
+    ["Teléfono: 665 13 47 46", fonts.regular, 9, colors.muted],
+    ["Email: info@juanser.es", fonts.regular, 9, colors.muted],
+    ["Web: https://juanser.es", fonts.regular, 9, colors.muted],
+  ] as const;
+
+  companyLines.forEach(([line, font, size, color], index) => {
+    if (index === 4) {
+      companyY += 6;
     }
-    drawText(
-      page,
-      line as string,
-      margin,
-      118 + index * 14,
-      font as PDFFont,
-      index === 0 ? 12 : 9,
-      color as ReturnType<typeof rgb>,
-    );
+    drawText(page, line, companyX, companyY, font, size, color);
+    companyY += index === 0 ? 16 : 13;
   });
 
   page.drawRectangle({
     x: budgetBoxX,
     y: budgetBoxY,
-    width: 210,
-    height: 112,
+    width: budgetBoxWidth,
+    height: budgetBoxHeight,
     color: colors.pale,
     borderColor: colors.border,
     borderWidth: 1,
   });
   page.drawRectangle({
     x: budgetBoxX,
-    y: budgetBoxY + 78,
-    width: 210,
-    height: 34,
+    y: budgetBoxY + 62,
+    width: budgetBoxWidth,
+    height: 74,
     color: colors.dark,
   });
+
   drawText(
     page,
-    `PRESUPUESTO Nº ${presupuesto.numero}`,
-    budgetBoxX + 14,
-    margin + 12,
+    "PRESUPUESTO Nº",
+    budgetInnerX,
+    margin + 11,
+    fonts.bold,
+    9,
+    colors.white,
+  );
+  drawWrappedText(
+    page,
+    presupuesto.numero,
+    budgetInnerX,
+    margin + 27,
+    budgetInnerWidth,
     fonts.bold,
     15,
+    16,
     colors.white,
   );
   drawText(
     page,
     `Fecha: ${formatDate(presupuesto.fecha)}`,
-    budgetBoxX + 14,
-    margin + 52,
+    budgetInnerX,
+    margin + 92,
     fonts.regular,
     10,
     colors.dark,
@@ -321,21 +366,21 @@ function drawHeader(
   drawText(
     page,
     `Validez: ${presupuesto.validezDias} días`,
-    budgetBoxX + 14,
-    margin + 74,
+    budgetInnerX,
+    margin + 114,
     fonts.regular,
     10,
     colors.dark,
   );
 
   page.drawLine({
-    start: { x: margin, y: page.getHeight() - 236 },
-    end: { x: page.getWidth() - margin, y: page.getHeight() - 236 },
+    start: { x: margin, y: page.getHeight() - headerBottom },
+    end: { x: page.getWidth() - margin, y: page.getHeight() - headerBottom },
     thickness: 1,
     color: colors.border,
   });
 
-  ctx.y = 260;
+  ctx.y = headerBottom + 24;
 }
 
 function drawIntro(ctx: PdfContext, presupuesto: PresupuestoPdf) {
@@ -366,13 +411,49 @@ function drawIntro(ctx: PdfContext, presupuesto: PresupuestoPdf) {
 
 function drawClienteBlock(ctx: PdfContext, presupuesto: PresupuestoPdf) {
   const { cliente } = presupuesto;
-  ensureSpace(ctx, 128);
+  const headerHeight = 28;
+  const paddingX = 14;
+  const paddingY = 14;
+  const columnGap = 22;
+  const columnWidth = (contentWidth - paddingX * 2 - columnGap) / 2;
+  const rows = [
+    [
+      ["Cliente", cliente.nombre],
+      ["Teléfono", cliente.telefono || "-"],
+    ],
+    [
+      ["Email", cliente.email || "-"],
+      ["Dirección", cliente.direccion || "-"],
+    ],
+    [["Localidad", cliente.localidad || "-"], null],
+  ] as const;
+  const rowMeasurements = rows.map(([left, right]) => {
+    const leftWidth = right ? columnWidth : contentWidth - paddingX * 2;
+    const leftLines = wrapText(left[1], ctx.fonts.regular, 10, leftWidth);
+    const rightLines = right
+      ? wrapText(right[1], ctx.fonts.regular, 10, columnWidth)
+      : [];
+    const linesCount = Math.max(leftLines.length, rightLines.length, 1);
+
+    return {
+      leftLines,
+      rightLines,
+      height: 21 + linesCount * 12,
+    };
+  });
+  const contentHeight = rowMeasurements.reduce(
+    (sum, row) => sum + row.height,
+    0,
+  );
+  const blockHeight = headerHeight + paddingY * 2 + contentHeight;
+
+  ensureSpace(ctx, blockHeight + 20);
 
   ctx.page.drawRectangle({
     x: margin,
-    y: ctx.page.getHeight() - ctx.y - 104,
+    y: ctx.page.getHeight() - ctx.y - blockHeight,
     width: contentWidth,
-    height: 104,
+    height: blockHeight,
     color: colors.pale,
     borderColor: colors.border,
     borderWidth: 1,
@@ -381,44 +462,73 @@ function drawClienteBlock(ctx: PdfContext, presupuesto: PresupuestoPdf) {
     x: margin,
     y: ctx.page.getHeight() - ctx.y - 28,
     width: contentWidth,
-    height: 28,
+    height: headerHeight,
     color: colors.dark,
   });
-  drawText(ctx.page, "DATOS DEL CLIENTE", margin + 14, ctx.y + 9, ctx.fonts.bold, 10, colors.white);
-  ctx.y += 42;
+  drawText(
+    ctx.page,
+    "DATOS DEL CLIENTE",
+    margin + paddingX,
+    ctx.y + 9,
+    ctx.fonts.bold,
+    10,
+    colors.white,
+  );
 
-  const leftX = margin + 14;
-  const rightX = margin + contentWidth / 2 + 12;
-  const rows = [
-    ["Cliente", cliente.nombre, leftX, 0],
-    ["Teléfono", cliente.telefono || "-", rightX, 0],
-    ["Email", cliente.email || "-", leftX, 28],
-    ["Dirección", cliente.direccion || "-", rightX, 28],
-    ["Localidad", cliente.localidad || "-", leftX, 56],
-  ] as const;
+  let rowY = ctx.y + headerHeight + paddingY;
+  rows.forEach(([left, right], index) => {
+    const measurement = rowMeasurements[index];
+    const leftX = margin + paddingX;
+    const rightX = leftX + columnWidth + columnGap;
 
-  rows.forEach(([label, value, x, offset]) => {
     drawText(
       ctx.page,
-      label,
-      x,
-      ctx.y + offset,
+      left[0],
+      leftX,
+      rowY,
       ctx.fonts.bold,
       8,
       colors.muted,
     );
-    drawText(
-      ctx.page,
-      value,
-      x,
-      ctx.y + offset + 12,
-      ctx.fonts.regular,
-      10,
-      colors.dark,
-    );
+    measurement.leftLines.forEach((line, lineIndex) => {
+      drawText(
+        ctx.page,
+        line,
+        leftX,
+        rowY + 12 + lineIndex * 12,
+        ctx.fonts.regular,
+        10,
+        colors.dark,
+      );
+    });
+
+    if (right) {
+      drawText(
+        ctx.page,
+        right[0],
+        rightX,
+        rowY,
+        ctx.fonts.bold,
+        8,
+        colors.muted,
+      );
+      measurement.rightLines.forEach((line, lineIndex) => {
+        drawText(
+          ctx.page,
+          line,
+          rightX,
+          rowY + 12 + lineIndex * 12,
+          ctx.fonts.regular,
+          10,
+          colors.dark,
+        );
+      });
+    }
+
+    rowY += measurement.height;
   });
 
-  ctx.y += 86;
+  ctx.y += blockHeight + 18;
 }
 
 function drawTableHeader(ctx: PdfContext) {
