@@ -2,6 +2,7 @@ import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { connection } from "next/server";
 import { ClienteEstadoFields } from "@/app/clientes/cliente-estado-fields";
+import { DeleteClienteForm } from "@/app/clientes/delete-cliente-form";
 import { registrarActividadCliente } from "@/app/lib/actividad";
 import { prisma } from "@/app/lib/prisma";
 
@@ -897,6 +898,19 @@ function SearchForm({ query }: { query: string }) {
   );
 }
 
+function successFromParam(value?: string | string[]) {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return raw === "1";
+}
+
+function ClienteEliminadoMessage() {
+  return (
+    <div className="rounded-md border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-semibold text-emerald-900 shadow-sm">
+      Cliente eliminado correctamente.
+    </div>
+  );
+}
+
 function ClienteDetails({ cliente }: { cliente: Cliente }) {
   return (
     <dl className="grid gap-2 text-sm text-neutral-700 sm:grid-cols-2">
@@ -1032,18 +1046,21 @@ function ClientesTable({ clientes }: { clientes: Cliente[] }) {
                 ) : null}
               </td>
               <td className="px-4 py-4 text-right">
-                <details className="group">
-                  <summary className="inline-flex cursor-pointer list-none items-center justify-center rounded-md border border-neutral-300 px-3 py-2 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100">
-                    Editar
-                  </summary>
-                  <div className="mt-4 rounded-md border border-neutral-200 bg-neutral-50 p-4 text-left">
-                    <ClienteForm
-                      action={updateCliente}
-                      cliente={cliente}
-                      submitLabel="Guardar cambios"
-                    />
-                  </div>
-                </details>
+                <div className="flex flex-col items-end gap-2">
+                  <details className="group">
+                    <summary className="inline-flex cursor-pointer list-none items-center justify-center rounded-md border border-neutral-300 px-3 py-2 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100">
+                      Editar
+                    </summary>
+                    <div className="mt-4 rounded-md border border-neutral-200 bg-neutral-50 p-4 text-left">
+                      <ClienteForm
+                        action={updateCliente}
+                        cliente={cliente}
+                        submitLabel="Guardar cambios"
+                      />
+                    </div>
+                  </details>
+                  <DeleteClienteForm clienteId={cliente.id} />
+                </div>
               </td>
             </tr>
           ))}
@@ -1089,18 +1106,21 @@ function ClientesCards({ clientes }: { clientes: Cliente[] }) {
               {cliente.observaciones}
             </p>
           ) : null}
-          <details className="mt-4">
-            <summary className="inline-flex cursor-pointer list-none items-center justify-center rounded-md border border-neutral-300 px-3 py-2 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100">
-              Editar
-            </summary>
-            <div className="mt-4 rounded-md bg-neutral-50 p-4">
-              <ClienteForm
-                action={updateCliente}
-                cliente={cliente}
-                submitLabel="Guardar cambios"
-              />
-            </div>
-          </details>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <details>
+              <summary className="inline-flex cursor-pointer list-none items-center justify-center rounded-md border border-neutral-300 px-3 py-2 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100">
+                Editar
+              </summary>
+              <div className="mt-4 rounded-md bg-neutral-50 p-4">
+                <ClienteForm
+                  action={updateCliente}
+                  cliente={cliente}
+                  submitLabel="Guardar cambios"
+                />
+              </div>
+            </details>
+            <DeleteClienteForm clienteId={cliente.id} />
+          </div>
         </article>
       ))}
     </div>
@@ -1108,7 +1128,10 @@ function ClientesCards({ clientes }: { clientes: Cliente[] }) {
 }
 
 type ClientesPageProps = {
-  searchParams: Promise<{ q?: string | string[] }>;
+  searchParams: Promise<{
+    q?: string | string[];
+    clienteEliminado?: string | string[];
+  }>;
 };
 
 export default async function ClientesPage({ searchParams }: ClientesPageProps) {
@@ -1150,6 +1173,10 @@ export default async function ClientesPage({ searchParams }: ClientesPageProps) 
             Ver presupuestos
           </Link>
         </header>
+
+        {successFromParam(params.clienteEliminado) ? (
+          <ClienteEliminadoMessage />
+        ) : null}
 
         <ResumenComercial resumen={resumen} />
 

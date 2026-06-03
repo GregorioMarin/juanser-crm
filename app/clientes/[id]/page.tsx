@@ -8,6 +8,7 @@ import { connection } from "next/server";
 import {
   ClienteEstadoFields,
 } from "@/app/clientes/cliente-estado-fields";
+import { DeleteClienteForm } from "@/app/clientes/delete-cliente-form";
 import {
   MultimediaUploadForm,
   type MultimediaUploadState,
@@ -1933,6 +1934,11 @@ export default async function ClientePage({
             >
               Cambiar estado
             </a>
+            <DeleteClienteForm
+              clienteId={cliente.id}
+              label="Eliminar cliente"
+              className="inline-flex h-10 items-center justify-center rounded-md bg-rose-700 px-4 text-sm font-semibold text-white transition hover:bg-rose-800"
+            />
           </div>
         </header>
 
