@@ -1,8 +1,14 @@
 import Link from "next/link";
 import { connection } from "next/server";
 import { PhoneContactActions } from "@/app/contact-actions";
-import { motivoRechazoFromParam } from "@/app/clientes/motivos-rechazo";
+import {
+  motivoRechazoFromParam,
+  motivoRechazoToParam,
+} from "@/app/clientes/motivos-rechazo";
 import { prisma } from "@/app/lib/prisma";
+
+const inputClass =
+  "w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-950 outline-none transition placeholder:text-neutral-400 focus:border-emerald-700 focus:ring-2 focus:ring-emerald-100";
 
 const linkButtonClass =
   "inline-flex h-10 items-center justify-center rounded-md border border-neutral-300 bg-white px-4 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50";
@@ -10,6 +16,7 @@ const linkButtonClass =
 type ClientesPerdidosPageProps = {
   searchParams: Promise<{
     motivo?: string | string[];
+    q?: string | string[];
   }>;
 };
 
@@ -41,7 +48,7 @@ function formatCurrency(value: unknown) {
   }).format(numberValue);
 }
 
-async function getClientesPerdidos(motivo: string | null) {
+async function getClientesPerdidos(motivo: string | null, query: string) {
   if (!motivo) {
     return [];
   }
@@ -50,6 +57,15 @@ async function getClientesPerdidos(motivo: string | null) {
     where: {
       estado: "Perdido",
       motivoRechazo: motivo,
+      ...(query
+        ? {
+            OR: [
+              { nombre: { contains: query, mode: "insensitive" } },
+              { telefono: { contains: query, mode: "insensitive" } },
+              { localidad: { contains: query, mode: "insensitive" } },
+            ],
+          }
+        : {}),
     },
     orderBy: { fechaAlta: "desc" },
     select: {
@@ -58,9 +74,7 @@ async function getClientesPerdidos(motivo: string | null) {
       telefono: true,
       localidad: true,
       presupuesto: true,
-      importeAceptado: true,
       fechaAlta: true,
-      fechaSeguimiento: true,
       motivoRechazo: true,
     },
   });
@@ -74,22 +88,18 @@ function ClientesPerdidosTable({ clientes }: { clientes: ClientePerdido[] }) {
       <table className="w-full border-collapse text-left text-sm">
         <thead className="bg-neutral-100 text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
           <tr>
-            <th className="px-4 py-3">Alta</th>
             <th className="px-4 py-3">Cliente</th>
             <th className="px-4 py-3">Telefono</th>
             <th className="px-4 py-3">Localidad</th>
             <th className="px-4 py-3">Presupuesto</th>
-            <th className="px-4 py-3">Aceptado</th>
-            <th className="px-4 py-3">Seguimiento</th>
+            <th className="px-4 py-3">Motivo de rechazo</th>
+            <th className="px-4 py-3">Fecha</th>
             <th className="px-4 py-3 text-right">Ficha</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-neutral-200">
           {clientes.map((cliente) => (
             <tr key={cliente.id} className="align-top">
-              <td className="whitespace-nowrap px-4 py-4 text-neutral-700">
-                {formatDate(cliente.fechaAlta)}
-              </td>
               <td className="px-4 py-4">
                 <Link
                   href={`/clientes/${cliente.id}`}
@@ -107,11 +117,11 @@ function ClientesPerdidosTable({ clientes }: { clientes: ClientePerdido[] }) {
               <td className="whitespace-nowrap px-4 py-4 font-semibold text-neutral-950">
                 {formatCurrency(cliente.presupuesto)}
               </td>
-              <td className="whitespace-nowrap px-4 py-4 font-semibold text-neutral-950">
-                {formatCurrency(cliente.importeAceptado)}
+              <td className="px-4 py-4 text-neutral-700">
+                {cliente.motivoRechazo || "-"}
               </td>
               <td className="whitespace-nowrap px-4 py-4 text-neutral-700">
-                {formatDate(cliente.fechaSeguimiento)}
+                {formatDate(cliente.fechaAlta)}
               </td>
               <td className="px-4 py-4 text-right">
                 <Link
@@ -169,17 +179,65 @@ function ClientesPerdidosCards({ clientes }: { clientes: ClientePerdido[] }) {
               <dd>{formatCurrency(cliente.presupuesto)}</dd>
             </div>
             <div>
-              <dt className="font-medium text-neutral-500">Aceptado</dt>
-              <dd>{formatCurrency(cliente.importeAceptado)}</dd>
-            </div>
-            <div>
-              <dt className="font-medium text-neutral-500">Seguimiento</dt>
-              <dd>{formatDate(cliente.fechaSeguimiento)}</dd>
+              <dt className="font-medium text-neutral-500">Motivo rechazo</dt>
+              <dd>{cliente.motivoRechazo || "-"}</dd>
             </div>
           </dl>
+          <Link
+            href={`/clientes/${cliente.id}`}
+            className="mt-4 inline-flex h-9 items-center justify-center rounded-md border border-neutral-300 px-3 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
+          >
+            Ver ficha
+          </Link>
         </article>
       ))}
     </div>
+  );
+}
+
+function SearchForm({
+  query,
+  motivoParam,
+}: {
+  query: string;
+  motivoParam: string | null;
+}) {
+  const clearHref = motivoParam
+    ? `/clientes/perdidos?motivo=${encodeURIComponent(motivoParam)}`
+    : "/clientes/perdidos";
+
+  return (
+    <form
+      action="/clientes/perdidos"
+      className="flex flex-col gap-3 sm:flex-row sm:items-center"
+    >
+      {motivoParam ? (
+        <input type="hidden" name="motivo" value={motivoParam} />
+      ) : null}
+      <input
+        className={inputClass}
+        name="q"
+        type="search"
+        defaultValue={query}
+        placeholder="Buscar por nombre, telefono o localidad"
+      />
+      <div className="flex gap-2">
+        <button
+          type="submit"
+          className="inline-flex h-10 items-center justify-center rounded-md bg-neutral-950 px-4 text-sm font-semibold text-white transition hover:bg-neutral-800"
+        >
+          Buscar
+        </button>
+        {query ? (
+          <Link
+            href={clearHref}
+            className="inline-flex h-10 items-center justify-center rounded-md border border-neutral-300 px-4 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
+          >
+            Limpiar
+          </Link>
+        ) : null}
+      </div>
+    </form>
   );
 }
 
@@ -190,7 +248,9 @@ export default async function ClientesPerdidosPage({
 
   const params = await searchParams;
   const motivo = motivoRechazoFromParam(searchParamString(params.motivo));
-  const clientes = await getClientesPerdidos(motivo);
+  const motivoParam = motivo ? motivoRechazoToParam(motivo) : null;
+  const query = searchParamString(params.q)?.trim() ?? "";
+  const clientes = await getClientesPerdidos(motivo, query);
 
   return (
     <main className="min-h-screen bg-neutral-100 px-5 py-6 text-neutral-950 sm:px-8">
@@ -216,6 +276,10 @@ export default async function ClientesPerdidosPage({
             Volver
           </Link>
         </header>
+
+        <section className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
+          <SearchForm query={query} motivoParam={motivoParam} />
+        </section>
 
         {clientes.length > 0 ? (
           <>
