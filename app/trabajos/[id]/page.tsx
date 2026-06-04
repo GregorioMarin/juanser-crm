@@ -407,7 +407,7 @@ export default async function TrabajoPage({ params }: TrabajoPageProps) {
           trabajo={trabajo}
           categoria="ANTES"
           title="Fotos antes"
-          subtitle="Estado inicial, hueco, mueble o zona antes del trabajo."
+          subtitle="Estado inicial, hueco, mueble o area antes del trabajo."
         />
         <MediaSection
           trabajo={trabajo}

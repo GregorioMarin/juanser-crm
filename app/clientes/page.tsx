@@ -3,6 +3,8 @@ import { revalidatePath } from "next/cache";
 import { connection } from "next/server";
 import { ClienteEstadoFields } from "@/app/clientes/cliente-estado-fields";
 import { DeleteClienteForm } from "@/app/clientes/delete-cliente-form";
+import { LocalidadField } from "@/app/clientes/localidad-field";
+import { localidades } from "@/app/clientes/localidades";
 import { registrarActividadCliente } from "@/app/lib/actividad";
 import { prisma } from "@/app/lib/prisma";
 
@@ -50,25 +52,8 @@ const motivosRechazo = [
   "Lo hace otro carpintero",
   "Lo deja para más adelante",
   "No responde",
-  "Fuera de zona",
+  "Fuera de localidad",
   "Trabajo que no realizamos",
-  "Otro",
-] as const;
-
-const zonas = [
-  "Alcalá de Guadaíra",
-  "Sevilla capital",
-  "Dos Hermanas",
-  "Mairena del Alcor",
-  "El Viso del Alcor",
-  "Montequinto",
-  "Utrera",
-  "Los Palacios",
-  "Mairena del Aljarafe",
-  "Bormujos",
-  "Tomares",
-  "Castilleja",
-  "Camas",
   "Otro",
 ] as const;
 
@@ -136,13 +121,18 @@ function motivoRechazoValue(formData: FormData, estado: string) {
   return value;
 }
 
-function zonaValue(formData: FormData) {
-  const value = optionalString(formData, "zona") ?? "Alcalá de Guadaíra";
-  if (!zonas.includes(value as (typeof zonas)[number])) {
-    throw new Error("Zona no valida.");
+function localidadValue(formData: FormData) {
+  const selected =
+    optionalString(formData, "localidadSeleccionada") ?? localidades[0];
+  if (!localidades.includes(selected as (typeof localidades)[number])) {
+    throw new Error("Localidad no valida.");
   }
 
-  return value;
+  if (selected === "Otro") {
+    return requiredString(formData, "localidadOtro");
+  }
+
+  return selected;
 }
 
 function optionalDate(formData: FormData, key: string) {
@@ -181,14 +171,13 @@ function clienteData(formData: FormData) {
     telefono: optionalString(formData, "telefono"),
     email: optionalString(formData, "email"),
     direccion: optionalString(formData, "direccion"),
-    localidad: optionalString(formData, "localidad"),
+    localidad: localidadValue(formData),
     origenContacto: origenContactoValue(formData),
     tipoCliente: tipoClienteValue(formData),
     motivoRechazo: motivoRechazoValue(formData, estado),
     fechaMedicion: optionalDate(formData, "fechaMedicion"),
     fechaInstalacion: optionalDate(formData, "fechaInstalacion"),
     importeAceptado: presupuestoValue(formData, "importeAceptado"),
-    zona: zonaValue(formData),
     presupuesto: presupuestoValue(formData),
     fechaAlta: optionalDate(formData, "fechaAlta") ?? new Date(),
     fechaSeguimiento: optionalDate(formData, "fechaSeguimiento"),
@@ -354,7 +343,6 @@ type ClienteFormDefaults = {
   fechaInstalacion?: Date | null;
   estado?: string | null;
   motivoRechazo?: string | null;
-  zona?: string | null;
   observaciones?: string | null;
 };
 type SeguimientoPendiente = Awaited<
@@ -485,16 +473,9 @@ function ClienteForm({
           name="direccion"
           defaultValue={values?.direccion}
         />
-        <Field
-          label="Localidad"
-          name="localidad"
+        <LocalidadField
+          localidades={localidades}
           defaultValue={values?.localidad}
-        />
-        <OptionSelect
-          label="Zona"
-          name="zona"
-          options={zonas}
-          defaultValue={values?.zona}
         />
         <OptionSelect
           label="Origen del contacto"
@@ -957,10 +938,6 @@ function ClienteDetails({ cliente }: { cliente: Cliente }) {
         <dt className="font-medium text-neutral-500">Localidad</dt>
         <dd>{cliente.localidad || "-"}</dd>
       </div>
-      <div>
-        <dt className="font-medium text-neutral-500">Zona</dt>
-        <dd>{cliente.zona || "-"}</dd>
-      </div>
       {cliente.estado === "Perdido" ? (
         <div className="sm:col-span-2">
           <dt className="font-medium text-neutral-500">Motivo rechazo</dt>
@@ -982,7 +959,7 @@ function ClientesTable({ clientes }: { clientes: Cliente[] }) {
             <th className="px-4 py-3">Telefono</th>
             <th className="px-4 py-3">Origen</th>
             <th className="px-4 py-3">Tipo cliente</th>
-            <th className="px-4 py-3">Zona</th>
+            <th className="px-4 py-3">Localidad</th>
             <th className="px-4 py-3">Presupuesto</th>
             <th className="px-4 py-3">Aceptado</th>
             <th className="px-4 py-3">Seguimiento</th>
@@ -1005,7 +982,6 @@ function ClientesTable({ clientes }: { clientes: Cliente[] }) {
                 >
                   {cliente.nombre}
                 </Link>
-                <p className="mt-1 text-neutral-500">{cliente.localidad || "-"}</p>
               </td>
               <td className="px-4 py-4 text-neutral-700">
                 {cliente.telefono || "-"}
@@ -1017,7 +993,7 @@ function ClientesTable({ clientes }: { clientes: Cliente[] }) {
                 {displayTipoCliente(cliente)}
               </td>
               <td className="px-4 py-4 text-neutral-700">
-                {cliente.zona || "-"}
+                {cliente.localidad || "-"}
               </td>
               <td className="whitespace-nowrap px-4 py-4 font-semibold text-neutral-950">
                 {formatCurrency(cliente.presupuesto)}

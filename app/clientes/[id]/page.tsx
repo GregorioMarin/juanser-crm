@@ -9,6 +9,8 @@ import {
   ClienteEstadoFields,
 } from "@/app/clientes/cliente-estado-fields";
 import { DeleteClienteForm } from "@/app/clientes/delete-cliente-form";
+import { LocalidadField } from "@/app/clientes/localidad-field";
+import { localidades } from "@/app/clientes/localidades";
 import { DeletePagoCuentaForm } from "@/app/clientes/[id]/delete-pago-cuenta-form";
 import {
   MultimediaUploadForm,
@@ -69,25 +71,8 @@ const motivosRechazo = [
   "Lo hace otro carpintero",
   "Lo deja para más adelante",
   "No responde",
-  "Fuera de zona",
+  "Fuera de localidad",
   "Trabajo que no realizamos",
-  "Otro",
-] as const;
-
-const zonas = [
-  "Alcalá de Guadaíra",
-  "Sevilla capital",
-  "Dos Hermanas",
-  "Mairena del Alcor",
-  "El Viso del Alcor",
-  "Montequinto",
-  "Utrera",
-  "Los Palacios",
-  "Mairena del Aljarafe",
-  "Bormujos",
-  "Tomares",
-  "Castilleja",
-  "Camas",
   "Otro",
 ] as const;
 
@@ -223,13 +208,18 @@ function motivoRechazoValue(formData: FormData, estado: string) {
   return value;
 }
 
-function zonaValue(formData: FormData) {
-  const value = optionalString(formData, "zona") ?? "Alcalá de Guadaíra";
-  if (!zonas.includes(value as (typeof zonas)[number])) {
-    throw new Error("Zona no valida.");
+function localidadValue(formData: FormData) {
+  const selected =
+    optionalString(formData, "localidadSeleccionada") ?? localidades[0];
+  if (!localidades.includes(selected as (typeof localidades)[number])) {
+    throw new Error("Localidad no valida.");
   }
 
-  return value;
+  if (selected === "Otro") {
+    return requiredString(formData, "localidadOtro");
+  }
+
+  return selected;
 }
 
 function requiredDecimal(formData: FormData, key: string) {
@@ -297,8 +287,7 @@ function clienteEditableData(formData: FormData) {
     telefono: optionalString(formData, "telefono"),
     email: optionalString(formData, "email"),
     direccion: optionalString(formData, "direccion"),
-    localidad: optionalString(formData, "localidad"),
-    zona: zonaValue(formData),
+    localidad: localidadValue(formData),
     origenContacto: origenContactoValue(formData),
     tipoCliente: tipoClienteValue(formData),
     presupuesto: optionalCurrency(formData, "presupuesto"),
@@ -936,7 +925,6 @@ async function convertirClienteEnTrabajoTerminado(formData: FormData) {
       id: true,
       nombre: true,
       localidad: true,
-      zona: true,
       tipoTrabajo: true,
       tipoCliente: true,
       importeAceptado: true,
@@ -971,7 +959,7 @@ async function convertirClienteEnTrabajoTerminado(formData: FormData) {
     data: {
       titulo: cliente.tipoTrabajo || cliente.nombre,
       clienteNombre: cliente.nombre,
-      localidad: cliente.localidad || cliente.zona || "Sin localidad",
+      localidad: cliente.localidad || "Sin localidad",
       tipoTrabajo,
       descripcion:
         cliente.observaciones ||
@@ -1355,19 +1343,9 @@ function ClienteEditForm({ cliente }: { cliente: ClienteDetalle }) {
               defaultValue={cliente.direccion ?? ""}
             />
           </label>
-          <label className="flex flex-col gap-1.5">
-            <span className={labelClass}>Localidad</span>
-            <input
-              className={inputClass}
-              name="localidad"
-              defaultValue={cliente.localidad ?? ""}
-            />
-          </label>
-          <SelectField
-            label="Zona"
-            name="zona"
-            options={zonas}
-            defaultValue={cliente.zona}
+          <LocalidadField
+            localidades={localidades}
+            defaultValue={cliente.localidad}
           />
           <SelectField
             label="Origen del contacto"
@@ -2152,7 +2130,6 @@ function ClienteFicha({ cliente }: { cliente: ClienteDetalle }) {
             <DetailItem label="Email" value={cliente.email} />
             <DetailItem label="Direccion" value={cliente.direccion} />
             <DetailItem label="Localidad" value={cliente.localidad} />
-            <DetailItem label="Zona" value={cliente.zona} />
             <DetailItem
               label="Origen del contacto"
               value={cliente.origenContacto}

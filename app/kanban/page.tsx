@@ -126,7 +126,6 @@ async function getClientesKanban() {
       nombre: true,
       telefono: true,
       localidad: true,
-      zona: true,
       origenContacto: true,
       tipoCliente: true,
       tipoTrabajo: true,
@@ -227,12 +226,6 @@ function ClienteCard({ cliente }: { cliente: ClienteKanban }) {
           <dt className="text-neutral-500">Localidad</dt>
           <dd className="text-right font-medium text-neutral-900">
             {cliente.localidad || "-"}
-          </dd>
-        </div>
-        <div className="flex items-center justify-between gap-3">
-          <dt className="text-neutral-500">Zona</dt>
-          <dd className="text-right font-medium text-neutral-900">
-            {cliente.zona || "-"}
           </dd>
         </div>
         <div className="flex items-center justify-between gap-3">
