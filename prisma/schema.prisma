@@ -34,6 +34,14 @@ enum PresupuestoEstado {
   RECHAZADO
 }
 
+enum MetodoPago {
+  Transferencia
+  Efectivo
+  Tarjeta
+  Bizum
+  Otro
+}
+
 enum CitaOrigen {
   AMELIA
   MANUAL
@@ -52,6 +60,8 @@ enum ActividadClienteTipo {
   PRESUPUESTO_CREADO
   PRESUPUESTO_EDITADO
   PRESUPUESTO_ELIMINADO
+  PAGO_CUENTA_REGISTRADO
+  PAGO_CUENTA_ELIMINADO
   SEGUIMIENTO_CREADO
   IMAGEN_CLIENTE_SUBIDA
   IMAGEN_JUANSER_SUBIDA
@@ -81,6 +91,7 @@ model Cliente {
   seguimientos     Seguimiento[]
   fotos            FotoCliente[]
   presupuestos     Presupuesto[]
+  pagosCuenta      PagoCuenta[]
   actividades      ActividadCliente[]
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
@@ -132,6 +143,7 @@ model Presupuesto {
   publicToken          String?            @unique
   publicTokenCreatedAt DateTime?
   lineas               PresupuestoLinea[]
+  pagosCuenta          PagoCuenta[]
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
   cliente              Cliente            @relation(fields: [clienteId], references: [id], onDelete: Cascade)
@@ -152,6 +164,26 @@ model PresupuestoLinea {
   presupuesto    Presupuesto @relation(fields: [presupuestoId], references: [id], onDelete: Cascade)
 
   @@index([presupuestoId])
+}
+
+model PagoCuenta {
+  id            Int         @id @default(autoincrement())
+  clienteId     Int
+  presupuestoId Int?
+  concepto      String
+  importe       Decimal     @db.Decimal(12, 2)
+  fechaPago     DateTime
+  metodoPago    MetodoPago
+  referencia    String?
+  observaciones String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  cliente       Cliente     @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  presupuesto   Presupuesto? @relation(fields: [presupuestoId], references: [id], onDelete: SetNull)
+
+  @@index([clienteId])
+  @@index([presupuestoId])
+  @@index([fechaPago])
 }
 
 model ActividadCliente {

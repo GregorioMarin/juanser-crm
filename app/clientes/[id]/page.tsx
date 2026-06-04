@@ -9,6 +9,7 @@ import {
   ClienteEstadoFields,
 } from "@/app/clientes/cliente-estado-fields";
 import { DeleteClienteForm } from "@/app/clientes/delete-cliente-form";
+import { DeletePagoCuentaForm } from "@/app/clientes/[id]/delete-pago-cuenta-form";
 import {
   MultimediaUploadForm,
   type MultimediaUploadState,
@@ -102,6 +103,7 @@ const allowedImageExtensions = ["jpg", "jpeg", "png", "webp"];
 const allowedVideoExtensions = ["mp4", "mov", "webm"];
 const fotoTipos = ["CLIENTE", "JUANSER"] as const;
 const presupuestoEstados = ["PENDIENTE", "ACEPTADO", "RECHAZADO"] as const;
+const metodosPago = ["Transferencia", "Efectivo", "Tarjeta", "Bizum", "Otro"] as const;
 const estadosTrabajoTerminadoDestacado = [
   "Aceptado",
   "En fabricación",
@@ -110,6 +112,7 @@ const estadosTrabajoTerminadoDestacado = [
 
 type FotoTipo = (typeof fotoTipos)[number];
 type PresupuestoEstado = (typeof presupuestoEstados)[number];
+type MetodoPago = (typeof metodosPago)[number];
 
 function optionalString(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -155,6 +158,29 @@ function requiredPresupuestoEstado(formData: FormData) {
   }
 
   return value as PresupuestoEstado;
+}
+
+function requiredMetodoPago(formData: FormData) {
+  const value = optionalString(formData, "metodoPago");
+  if (!metodosPago.includes(value as MetodoPago)) {
+    throw new Error("Metodo de pago no valido.");
+  }
+
+  return value as MetodoPago;
+}
+
+function optionalPresupuestoId(formData: FormData) {
+  const raw = optionalString(formData, "presupuestoId");
+  if (!raw) {
+    return null;
+  }
+
+  const id = Number(raw);
+  if (!Number.isInteger(id) || id < 1) {
+    throw new Error("Presupuesto no valido.");
+  }
+
+  return id;
 }
 
 function estadoValue(formData: FormData) {
@@ -536,6 +562,7 @@ async function createPresupuesto(formData: FormData) {
 
   const clienteId = requiredId(formData, "clienteId");
   const lineas = presupuestoLineasData(formData);
+  const presupuestoEstado = requiredPresupuestoEstado(formData);
   const ivaPorcentaje = Number(requiredDecimal(formData, "ivaPorcentaje"));
   const totalSinIva = roundCurrency(
     lineas.reduce((sum, linea) => sum + Number(linea.total), 0),
@@ -554,7 +581,7 @@ async function createPresupuesto(formData: FormData) {
       titulo: requiredString(formData, "titulo"),
       descripcion: requiredString(formData, "descripcion"),
       importe: totalConIva.toFixed(2),
-      estado: requiredPresupuestoEstado(formData),
+      estado: presupuestoEstado,
       fecha,
       validezDias: optionalInteger(
         formData,
@@ -579,8 +606,99 @@ async function createPresupuesto(formData: FormData) {
     )}`,
   });
 
+  if (presupuestoEstado === "ACEPTADO") {
+    await registrarActividadCliente({
+      clienteId,
+      tipo: "PRESUPUESTO_EDITADO",
+      descripcion: "Recuerda registrar el pago a cuenta del 50%.",
+    });
+  }
+
   revalidatePath(`/clientes/${clienteId}`);
   revalidatePath("/clientes");
+  revalidatePath("/presupuestos");
+}
+
+async function createPagoCuenta(formData: FormData) {
+  "use server";
+
+  const clienteId = requiredId(formData, "clienteId");
+  const presupuestoId = optionalPresupuestoId(formData);
+
+  if (presupuestoId) {
+    const presupuesto = await prisma.presupuesto.findFirst({
+      where: {
+        id: presupuestoId,
+        clienteId,
+      },
+      select: { id: true },
+    });
+    if (!presupuesto) {
+      throw new Error("El presupuesto no pertenece a este cliente.");
+    }
+  }
+
+  const pago = await prisma.pagoCuenta.create({
+    data: {
+      clienteId,
+      presupuestoId,
+      concepto: requiredString(formData, "concepto"),
+      importe: requiredDecimal(formData, "importe"),
+      fechaPago: requiredDate(formData, "fechaPago"),
+      metodoPago: requiredMetodoPago(formData),
+      referencia: optionalString(formData, "referencia"),
+      observaciones: optionalString(formData, "observaciones"),
+    },
+  });
+
+  await registrarActividadCliente({
+    clienteId,
+    tipo: "PAGO_CUENTA_REGISTRADO",
+    descripcion: `Pago a cuenta registrado por importe ${formatCurrency(pago.importe)}`,
+  });
+
+  revalidatePath("/");
+  revalidatePath("/clientes");
+  revalidatePath(`/clientes/${clienteId}`);
+  revalidatePath("/presupuestos");
+}
+
+async function deletePagoCuenta(formData: FormData) {
+  "use server";
+
+  const clienteId = requiredId(formData, "clienteId");
+  const pagoId = requiredId(formData, "pagoId");
+  const pago = await prisma.pagoCuenta.findFirst({
+    where: {
+      id: pagoId,
+      clienteId,
+    },
+    select: {
+      id: true,
+      importe: true,
+      concepto: true,
+    },
+  });
+
+  if (!pago) {
+    throw new Error("Pago a cuenta no encontrado.");
+  }
+
+  await prisma.pagoCuenta.delete({
+    where: { id: pago.id },
+  });
+
+  await registrarActividadCliente({
+    clienteId,
+    tipo: "PAGO_CUENTA_ELIMINADO",
+    descripcion: `Pago a cuenta eliminado: ${pago.concepto} (${formatCurrency(
+      pago.importe,
+    )})`,
+  });
+
+  revalidatePath("/");
+  revalidatePath("/clientes");
+  revalidatePath(`/clientes/${clienteId}`);
   revalidatePath("/presupuestos");
 }
 
@@ -890,6 +1008,21 @@ async function getCliente(id: number) {
           lineas: {
             orderBy: { id: "asc" },
           },
+          pagosCuenta: {
+            orderBy: { fechaPago: "desc" },
+          },
+        },
+      },
+      pagosCuenta: {
+        orderBy: { fechaPago: "desc" },
+        include: {
+          presupuesto: {
+            select: {
+              id: true,
+              numero: true,
+              titulo: true,
+            },
+          },
         },
       },
       actividades: {
@@ -1014,6 +1147,34 @@ function DetailItem({
 
 function currencyInputValue(value: unknown) {
   return value ? Number(value).toFixed(2) : "";
+}
+
+function sumCurrency<T>(items: T[], selector: (item: T) => unknown) {
+  return items.reduce((sum, item) => sum + Number(selector(item) ?? 0), 0);
+}
+
+function presupuestoTotal(presupuesto: Pick<ClienteDetalle["presupuestos"][number], "totalConIva" | "importe">) {
+  return Number(presupuesto.totalConIva) || Number(presupuesto.importe) || 0;
+}
+
+function totalPagadoPresupuesto(
+  presupuesto: Pick<ClienteDetalle["presupuestos"][number], "pagosCuenta">,
+) {
+  return sumCurrency(presupuesto.pagosCuenta, (pago) => pago.importe);
+}
+
+function resumenPagosCliente(cliente: ClienteDetalle) {
+  const totalPresupuestadoAceptado = sumCurrency(
+    cliente.presupuestos.filter((presupuesto) => presupuesto.estado === "ACEPTADO"),
+    presupuestoTotal,
+  );
+  const totalPagadoCuenta = sumCurrency(cliente.pagosCuenta, (pago) => pago.importe);
+
+  return {
+    totalPresupuestadoAceptado,
+    totalPagadoCuenta,
+    pendienteCobro: totalPresupuestadoAceptado - totalPagadoCuenta,
+  };
 }
 
 function SelectField({
@@ -1345,6 +1506,196 @@ function FotosGaleria({
   );
 }
 
+function PagosCuentaSection({ cliente }: { cliente: ClienteDetalle }) {
+  const resumen = resumenPagosCliente(cliente);
+
+  return (
+    <section className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
+      <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-neutral-950">Pagos a cuenta</h2>
+          <p className="mt-1 text-sm text-neutral-500">
+            Importes recibidos antes de finalizar el trabajo.
+          </p>
+        </div>
+        <span className="text-sm font-semibold text-neutral-700">
+          {cliente.pagosCuenta.length} pagos
+        </span>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-md border border-neutral-200 bg-neutral-50 px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
+            Total presupuestado aceptado
+          </p>
+          <p className="mt-2 text-xl font-semibold text-neutral-950">
+            {formatCurrency(resumen.totalPresupuestadoAceptado)}
+          </p>
+        </div>
+        <div className="rounded-md border border-neutral-200 bg-neutral-50 px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
+            Total pagado a cuenta
+          </p>
+          <p className="mt-2 text-xl font-semibold text-emerald-800">
+            {formatCurrency(resumen.totalPagadoCuenta)}
+          </p>
+        </div>
+        <div className="rounded-md border border-neutral-200 bg-neutral-50 px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
+            Pendiente de cobro
+          </p>
+          <p className="mt-2 text-xl font-semibold text-neutral-950">
+            {formatCurrency(resumen.pendienteCobro)}
+          </p>
+        </div>
+      </div>
+
+      <form
+        action={createPagoCuenta}
+        className="mt-5 grid gap-4 rounded-md border border-neutral-200 bg-neutral-50 p-4"
+      >
+        <input type="hidden" name="clienteId" value={cliente.id} />
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>Presupuesto asociado</span>
+            <select className={inputClass} name="presupuestoId" defaultValue="">
+              <option value="">Sin asociar</option>
+              {cliente.presupuestos.map((presupuesto) => (
+                <option key={presupuesto.id} value={presupuesto.id}>
+                  {presupuesto.numero} · {presupuesto.titulo}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>Concepto</span>
+            <input
+              className={inputClass}
+              name="concepto"
+              defaultValue="Pago a cuenta 50%"
+              required
+            />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>Importe</span>
+            <input
+              className={inputClass}
+              name="importe"
+              type="number"
+              step="0.01"
+              min="0"
+              required
+            />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>Fecha de pago</span>
+            <input
+              className={inputClass}
+              name="fechaPago"
+              type="date"
+              defaultValue={toDateInputValue(new Date())}
+              required
+            />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>Método de pago</span>
+            <select className={inputClass} name="metodoPago" defaultValue="Transferencia">
+              {metodosPago.map((metodo) => (
+                <option key={metodo} value={metodo}>
+                  {metodo}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>Referencia</span>
+            <input className={inputClass} name="referencia" />
+          </label>
+        </div>
+        <label className="flex flex-col gap-1.5">
+          <span className={labelClass}>Observaciones</span>
+          <textarea className={`${inputClass} min-h-20 resize-y`} name="observaciones" />
+        </label>
+        <button
+          type="submit"
+          className="inline-flex h-10 w-fit items-center justify-center rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:bg-emerald-800"
+        >
+          Registrar pago
+        </button>
+      </form>
+
+      <div className="mt-5 overflow-hidden rounded-md border border-neutral-200">
+        <table className="w-full border-collapse text-left text-sm">
+          <thead className="bg-neutral-100 text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
+            <tr>
+              <th className="px-4 py-3">Fecha</th>
+              <th className="px-4 py-3">Concepto</th>
+              <th className="px-4 py-3">Presupuesto</th>
+              <th className="px-4 py-3">Método</th>
+              <th className="px-4 py-3">Referencia</th>
+              <th className="px-4 py-3 text-right">Importe</th>
+              <th className="px-4 py-3 text-right">Acciones</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-neutral-200">
+            {cliente.pagosCuenta.length > 0 ? (
+              cliente.pagosCuenta.map((pago) => (
+                <tr key={pago.id} className="align-top">
+                  <td className="whitespace-nowrap px-4 py-4 text-neutral-700">
+                    {formatDate(pago.fechaPago)}
+                  </td>
+                  <td className="px-4 py-4">
+                    <p className="font-semibold text-neutral-950">{pago.concepto}</p>
+                    {pago.observaciones ? (
+                      <p className="mt-1 whitespace-pre-wrap text-neutral-600">
+                        {pago.observaciones}
+                      </p>
+                    ) : null}
+                  </td>
+                  <td className="px-4 py-4 text-neutral-700">
+                    {pago.presupuesto ? (
+                      <>
+                        <p className="font-semibold text-neutral-950">
+                          {pago.presupuesto.numero}
+                        </p>
+                        <p className="mt-1 text-neutral-500">
+                          {pago.presupuesto.titulo}
+                        </p>
+                      </>
+                    ) : (
+                      "-"
+                    )}
+                  </td>
+                  <td className="px-4 py-4 text-neutral-700">{pago.metodoPago}</td>
+                  <td className="px-4 py-4 text-neutral-700">
+                    {pago.referencia || "-"}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-4 text-right font-semibold text-neutral-950">
+                    {formatCurrency(pago.importe)}
+                  </td>
+                  <td className="px-4 py-4 text-right">
+                    <DeletePagoCuentaForm
+                      action={deletePagoCuenta}
+                      clienteId={cliente.id}
+                      pagoId={pago.id}
+                    />
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={7} className="px-4 py-6 text-center text-neutral-500">
+                  Todavia no hay pagos a cuenta registrados.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 function PresupuestosSection({ cliente }: { cliente: ClienteDetalle }) {
   return (
     <section className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
@@ -1490,6 +1841,7 @@ function PresupuestosSection({ cliente }: { cliente: ClienteDetalle }) {
               <th className="px-4 py-3">Numero</th>
               <th className="px-4 py-3">Titulo</th>
               <th className="px-4 py-3">Importe</th>
+              <th className="px-4 py-3">Pagos</th>
               <th className="px-4 py-3">Estado</th>
               <th className="px-4 py-3">Fecha</th>
               <th className="px-4 py-3 text-right">PDF</th>
@@ -1497,79 +1849,97 @@ function PresupuestosSection({ cliente }: { cliente: ClienteDetalle }) {
           </thead>
           <tbody className="divide-y divide-neutral-200">
             {cliente.presupuestos.length > 0 ? (
-              cliente.presupuestos.map((presupuesto) => (
-                <tr key={presupuesto.id} className="align-top">
-                  <td className="px-4 py-4 font-semibold text-neutral-950">
-                    {presupuesto.numero}
-                  </td>
-                  <td className="px-4 py-4">
-                    <p className="font-semibold text-neutral-950">
-                      {presupuesto.titulo}
-                    </p>
-                    <p className="mt-1 whitespace-pre-wrap text-neutral-600">
-                      {presupuesto.descripcion}
-                    </p>
-                    <div className="mt-3 overflow-hidden rounded-md border border-neutral-200">
-                      <table className="w-full text-xs">
-                        <thead className="bg-white text-neutral-500">
-                          <tr>
-                            <th className="px-3 py-2 text-left">Concepto</th>
-                            <th className="px-3 py-2 text-right">Cant.</th>
-                            <th className="px-3 py-2 text-right">Precio</th>
-                            <th className="px-3 py-2 text-right">Total</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-neutral-200 bg-white">
-                          {presupuesto.lineas.map((linea) => (
-                            <tr key={linea.id}>
-                              <td className="px-3 py-2">
-                                <p className="font-semibold text-neutral-800">
-                                  {linea.concepto}
-                                </p>
-                                {linea.descripcion ? (
-                                  <p className="mt-1 text-neutral-500">
-                                    {linea.descripcion}
-                                  </p>
-                                ) : null}
-                              </td>
-                              <td className="px-3 py-2 text-right text-neutral-700">
-                                {Number(linea.cantidad).toLocaleString("es-ES")}
-                              </td>
-                              <td className="px-3 py-2 text-right text-neutral-700">
-                                {formatCurrency(linea.precioUnitario)}
-                              </td>
-                              <td className="px-3 py-2 text-right font-semibold text-neutral-950">
-                                {formatCurrency(linea.total)}
-                              </td>
+              cliente.presupuestos.map((presupuesto) => {
+                const totalPresupuesto = presupuestoTotal(presupuesto);
+                const pagado = totalPagadoPresupuesto(presupuesto);
+                const pendiente = totalPresupuesto - pagado;
+
+                return (
+                  <tr key={presupuesto.id} className="align-top">
+                    <td className="px-4 py-4 font-semibold text-neutral-950">
+                      {presupuesto.numero}
+                    </td>
+                    <td className="px-4 py-4">
+                      <p className="font-semibold text-neutral-950">
+                        {presupuesto.titulo}
+                      </p>
+                      <p className="mt-1 whitespace-pre-wrap text-neutral-600">
+                        {presupuesto.descripcion}
+                      </p>
+                      {presupuesto.estado === "ACEPTADO" ? (
+                        <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950">
+                          Recuerda registrar el pago a cuenta del 50%.
+                        </p>
+                      ) : null}
+                      <div className="mt-3 overflow-hidden rounded-md border border-neutral-200">
+                        <table className="w-full text-xs">
+                          <thead className="bg-white text-neutral-500">
+                            <tr>
+                              <th className="px-3 py-2 text-left">Concepto</th>
+                              <th className="px-3 py-2 text-right">Cant.</th>
+                              <th className="px-3 py-2 text-right">Precio</th>
+                              <th className="px-3 py-2 text-right">Total</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-4 font-semibold text-neutral-950">
-                    <p>{formatCurrency(presupuesto.totalConIva)}</p>
-                    <p className="mt-1 text-xs font-medium text-neutral-500">
-                      Base {formatCurrency(presupuesto.totalSinIva)}
-                    </p>
-                    <p className="text-xs font-medium text-neutral-500">
-                      IVA {formatCurrency(presupuesto.totalIva)}
-                    </p>
-                  </td>
-                  <td className="px-4 py-4">
-                    <span
-                      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${presupuestoEstadoClass(
-                        presupuesto.estado,
-                      )}`}
-                    >
-                      {presupuesto.estado}
-                    </span>
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-4 text-neutral-700">
-                    {formatDate(presupuesto.fecha)}
-                  </td>
-                  <td className="px-4 py-4 text-right">
-                    <div className="flex flex-col items-end gap-2">
+                          </thead>
+                          <tbody className="divide-y divide-neutral-200 bg-white">
+                            {presupuesto.lineas.map((linea) => (
+                              <tr key={linea.id}>
+                                <td className="px-3 py-2">
+                                  <p className="font-semibold text-neutral-800">
+                                    {linea.concepto}
+                                  </p>
+                                  {linea.descripcion ? (
+                                    <p className="mt-1 text-neutral-500">
+                                      {linea.descripcion}
+                                    </p>
+                                  ) : null}
+                                </td>
+                                <td className="px-3 py-2 text-right text-neutral-700">
+                                  {Number(linea.cantidad).toLocaleString("es-ES")}
+                                </td>
+                                <td className="px-3 py-2 text-right text-neutral-700">
+                                  {formatCurrency(linea.precioUnitario)}
+                                </td>
+                                <td className="px-3 py-2 text-right font-semibold text-neutral-950">
+                                  {formatCurrency(linea.total)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-4 font-semibold text-neutral-950">
+                      <p>{formatCurrency(presupuesto.totalConIva)}</p>
+                      <p className="mt-1 text-xs font-medium text-neutral-500">
+                        Base {formatCurrency(presupuesto.totalSinIva)}
+                      </p>
+                      <p className="text-xs font-medium text-neutral-500">
+                        IVA {formatCurrency(presupuesto.totalIva)}
+                      </p>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-4 text-sm">
+                      <p className="font-semibold text-emerald-800">
+                        Pagado {formatCurrency(pagado)}
+                      </p>
+                      <p className="mt-1 font-semibold text-neutral-950">
+                        Pendiente {formatCurrency(pendiente)}
+                      </p>
+                    </td>
+                    <td className="px-4 py-4">
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${presupuestoEstadoClass(
+                          presupuesto.estado,
+                        )}`}
+                      >
+                        {presupuesto.estado}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-4 text-neutral-700">
+                      {formatDate(presupuesto.fecha)}
+                    </td>
+                    <td className="px-4 py-4 text-right">
+                      <div className="flex flex-col items-end gap-2">
                       <Link
                         href={`/presupuestos/${presupuesto.id}/pdf`}
                         className="inline-flex h-9 items-center justify-center rounded-md border border-neutral-300 px-3 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
@@ -1605,13 +1975,14 @@ function PresupuestosSection({ cliente }: { cliente: ClienteDetalle }) {
                         presupuestoId={presupuesto.id}
                         returnTo={`/clientes/${cliente.id}`}
                       />
-                    </div>
-                  </td>
-                </tr>
-              ))
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             ) : (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-neutral-500">
+                <td colSpan={7} className="px-4 py-6 text-center text-neutral-500">
                   Todavia no hay presupuestos para este cliente.
                 </td>
               </tr>
@@ -1923,6 +2294,8 @@ function ClienteFicha({ cliente }: { cliente: ClienteDetalle }) {
         title="Propuestas de Juanser"
         subtitle="Renders IA, bocetos, disenos, videos, acabados y simulaciones."
       />
+
+      <PagosCuentaSection cliente={cliente} />
 
       <PresupuestosSection cliente={cliente} />
 

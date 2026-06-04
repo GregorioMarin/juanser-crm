@@ -72,6 +72,11 @@ async function getPresupuestos(query: string, estado: PresupuestoEstado | null) 
           telefono: true,
         },
       },
+      pagosCuenta: {
+        select: {
+          importe: true,
+        },
+      },
     },
     orderBy: { fecha: "desc" },
   });
@@ -117,6 +122,15 @@ function formatCurrency(value: unknown) {
     style: "currency",
     currency: "EUR",
   }).format(Number(value));
+}
+
+function totalPagadoPresupuesto(
+  presupuesto: Pick<Presupuesto, "pagosCuenta">,
+) {
+  return presupuesto.pagosCuenta.reduce(
+    (sum, pago) => sum + Number(pago.importe),
+    0,
+  );
 }
 
 function formatDate(date: Date) {
@@ -233,7 +247,9 @@ function PresupuestosTable({
             <th className="px-4 py-3">Cliente</th>
             <th className="px-4 py-3">Numero</th>
             <th className="px-4 py-3">Titulo</th>
-            <th className="px-4 py-3">Importe</th>
+            <th className="px-4 py-3">Total presupuesto</th>
+            <th className="px-4 py-3">Pagado a cuenta</th>
+            <th className="px-4 py-3">Pendiente</th>
             <th className="px-4 py-3">Estado</th>
             <th className="px-4 py-3">Fecha</th>
             <th className="px-4 py-3 text-right">Acciones</th>
@@ -241,42 +257,57 @@ function PresupuestosTable({
         </thead>
         <tbody className="divide-y divide-neutral-200">
           {presupuestos.length > 0 ? (
-            presupuestos.map((presupuesto) => (
-              <tr key={presupuesto.id} className="align-top">
-                <td className="px-4 py-4">
-                  <Link
-                    href={`/clientes/${presupuesto.cliente.id}`}
-                    className="font-semibold text-neutral-950 transition hover:text-emerald-800"
-                  >
-                    {presupuesto.cliente.nombre}
-                  </Link>
-                  <p className="mt-1 text-neutral-500">
-                    {presupuesto.cliente.telefono || "-"}
-                  </p>
-                </td>
-                <td className="px-4 py-4 font-semibold text-neutral-950">
-                  {presupuesto.numero}
-                </td>
-                <td className="px-4 py-4 text-neutral-700">
-                  {presupuesto.titulo}
-                </td>
-                <td className="whitespace-nowrap px-4 py-4 font-semibold text-neutral-950">
-                  {formatCurrency(presupuesto.totalConIva)}
-                </td>
-                <td className="px-4 py-4">
-                  <span
-                    className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${estadoClass(
-                      presupuesto.estado,
-                    )}`}
-                  >
-                    {presupuesto.estado}
-                  </span>
-                </td>
-                <td className="whitespace-nowrap px-4 py-4 text-neutral-700">
-                  {formatDate(presupuesto.fecha)}
-                </td>
-                <td className="px-4 py-4 text-right">
-                  <div className="flex flex-col items-end gap-2">
+            presupuestos.map((presupuesto) => {
+              const pagado = totalPagadoPresupuesto(presupuesto);
+              const pendiente = Number(presupuesto.totalConIva) - pagado;
+
+              return (
+                <tr key={presupuesto.id} className="align-top">
+                  <td className="px-4 py-4">
+                    <Link
+                      href={`/clientes/${presupuesto.cliente.id}`}
+                      className="font-semibold text-neutral-950 transition hover:text-emerald-800"
+                    >
+                      {presupuesto.cliente.nombre}
+                    </Link>
+                    <p className="mt-1 text-neutral-500">
+                      {presupuesto.cliente.telefono || "-"}
+                    </p>
+                  </td>
+                  <td className="px-4 py-4 font-semibold text-neutral-950">
+                    {presupuesto.numero}
+                  </td>
+                  <td className="px-4 py-4 text-neutral-700">
+                    <p>{presupuesto.titulo}</p>
+                    {presupuesto.estado === "ACEPTADO" ? (
+                      <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950">
+                        Recuerda registrar el pago a cuenta del 50%.
+                      </p>
+                    ) : null}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-4 font-semibold text-neutral-950">
+                    {formatCurrency(presupuesto.totalConIva)}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-4 font-semibold text-emerald-800">
+                    {formatCurrency(pagado)}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-4 font-semibold text-neutral-950">
+                    {formatCurrency(pendiente)}
+                  </td>
+                  <td className="px-4 py-4">
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${estadoClass(
+                        presupuesto.estado,
+                      )}`}
+                    >
+                      {presupuesto.estado}
+                    </span>
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-4 text-neutral-700">
+                    {formatDate(presupuesto.fecha)}
+                  </td>
+                  <td className="px-4 py-4 text-right">
+                    <div className="flex flex-col items-end gap-2">
                     <Link
                       href={`/clientes/${presupuesto.cliente.id}`}
                       className="inline-flex h-9 items-center justify-center rounded-md border border-neutral-300 px-3 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
@@ -318,13 +349,14 @@ function PresupuestosTable({
                       presupuestoId={presupuesto.id}
                       returnTo={returnTo}
                     />
-                  </div>
-                </td>
-              </tr>
-            ))
+                    </div>
+                  </td>
+                </tr>
+              );
+            })
           ) : (
             <tr>
-              <td colSpan={7} className="px-4 py-8 text-center text-neutral-500">
+              <td colSpan={9} className="px-4 py-8 text-center text-neutral-500">
                 No hay presupuestos con esos filtros.
               </td>
             </tr>

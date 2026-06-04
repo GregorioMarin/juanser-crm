@@ -186,6 +186,7 @@ export async function deletePresupuesto(formData: FormData) {
     select: {
       clienteId: true,
       numero: true,
+      estado: true,
     },
   });
   if (!presupuesto) {
@@ -229,11 +230,14 @@ export async function updatePresupuesto(formData: FormData) {
     select: {
       clienteId: true,
       numero: true,
+      estado: true,
     },
   });
   if (!presupuesto) {
     throw new Error("Presupuesto no encontrado.");
   }
+
+  const nextEstado = presupuestoEstado(formData);
 
   await prisma.$transaction([
     prisma.presupuesto.update({
@@ -241,7 +245,7 @@ export async function updatePresupuesto(formData: FormData) {
       data: {
         titulo: requiredString(formData, "titulo"),
         descripcion: requiredString(formData, "descripcion"),
-        estado: presupuestoEstado(formData),
+        estado: nextEstado,
         fecha: requiredDate(formData, "fecha"),
         validezDias: optionalInteger(
           formData,
@@ -272,6 +276,14 @@ export async function updatePresupuesto(formData: FormData) {
     tipo: "PRESUPUESTO_EDITADO",
     descripcion: `Presupuesto nº ${presupuesto.numero} editado`,
   });
+
+  if (presupuesto.estado !== "ACEPTADO" && nextEstado === "ACEPTADO") {
+    await registrarActividadCliente({
+      clienteId: presupuesto.clienteId,
+      tipo: "PRESUPUESTO_EDITADO",
+      descripcion: "Recuerda registrar el pago a cuenta del 50%.",
+    });
+  }
 
   revalidatePath(`/clientes/${presupuesto.clienteId}`);
   revalidatePath("/clientes");
