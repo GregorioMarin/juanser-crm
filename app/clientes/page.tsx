@@ -213,41 +213,6 @@ async function createCliente(formData: FormData) {
   revalidatePath("/kanban");
 }
 
-async function updateCliente(formData: FormData) {
-  "use server";
-
-  const id = Number(formData.get("id"));
-  if (!Number.isInteger(id)) {
-    throw new Error("Cliente no valido.");
-  }
-
-  const data = clienteData(formData);
-  const cliente = await prisma.cliente.findUnique({
-    where: { id },
-    select: { estado: true },
-  });
-  if (!cliente) {
-    throw new Error("Cliente no encontrado.");
-  }
-
-  await prisma.cliente.update({
-    where: { id },
-    data,
-  });
-
-  if (cliente.estado !== data.estado) {
-    await registrarActividadCliente({
-      clienteId: id,
-      tipo: "ESTADO_CAMBIADO",
-      descripcion: `Estado cambiado de ${cliente.estado} a ${data.estado}`,
-    });
-  }
-
-  revalidatePath("/clientes");
-  revalidatePath("/kanban");
-  revalidatePath(`/clientes/${id}`);
-}
-
 async function getClientes(query: string) {
   return prisma.cliente.findMany({
     where: query
@@ -1085,18 +1050,12 @@ function ClientesTable({ clientes }: { clientes: Cliente[] }) {
               </td>
               <td className="px-4 py-4 text-right">
                 <div className="flex flex-col items-end gap-2">
-                  <details className="group">
-                    <summary className="inline-flex cursor-pointer list-none items-center justify-center rounded-md border border-neutral-300 px-3 py-2 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100">
-                      Editar
-                    </summary>
-                    <div className="mt-4 rounded-md border border-neutral-200 bg-neutral-50 p-4 text-left">
-                      <ClienteForm
-                        action={updateCliente}
-                        cliente={cliente}
-                        submitLabel="Guardar cambios"
-                      />
-                    </div>
-                  </details>
+                  <Link
+                    href={`/clientes/${cliente.id}#editar-cliente`}
+                    className="inline-flex h-9 items-center justify-center rounded-md border border-neutral-300 px-3 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
+                  >
+                    Editar
+                  </Link>
                   <DeleteClienteForm clienteId={cliente.id} />
                 </div>
               </td>
@@ -1145,18 +1104,12 @@ function ClientesCards({ clientes }: { clientes: Cliente[] }) {
             </p>
           ) : null}
           <div className="mt-4 flex flex-wrap gap-2">
-            <details>
-              <summary className="inline-flex cursor-pointer list-none items-center justify-center rounded-md border border-neutral-300 px-3 py-2 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100">
-                Editar
-              </summary>
-              <div className="mt-4 rounded-md bg-neutral-50 p-4">
-                <ClienteForm
-                  action={updateCliente}
-                  cliente={cliente}
-                  submitLabel="Guardar cambios"
-                />
-              </div>
-            </details>
+            <Link
+              href={`/clientes/${cliente.id}#editar-cliente`}
+              className="inline-flex h-9 items-center justify-center rounded-md border border-neutral-300 px-3 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
+            >
+              Editar
+            </Link>
             <DeleteClienteForm clienteId={cliente.id} />
           </div>
         </article>
