@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { connection } from "next/server";
+import { PhoneContactActions } from "@/app/contact-actions";
 import { ClienteEstadoFields } from "@/app/clientes/cliente-estado-fields";
 import { DeleteClienteForm } from "@/app/clientes/delete-cliente-form";
 import { LocalidadField } from "@/app/clientes/localidad-field";
@@ -664,7 +665,7 @@ function SeguimientosPendientes({
                       </Link>
                     </td>
                     <td className="px-4 py-4 text-neutral-700">
-                      {cliente.telefono || "-"}
+                      <PhoneContactActions telefono={cliente.telefono} />
                     </td>
                     <td className="px-4 py-4">
                       <span
@@ -751,7 +752,7 @@ function SeguimientosFuturos({ clientes }: { clientes: SeguimientoFuturo[] }) {
                     </Link>
                   </td>
                   <td className="px-4 py-4 text-neutral-700">
-                    {cliente.telefono || "-"}
+                    <PhoneContactActions telefono={cliente.telefono} />
                   </td>
                   <td className="px-4 py-4">
                     <span
@@ -900,7 +901,9 @@ function ClienteDetails({ cliente }: { cliente: Cliente }) {
     <dl className="grid gap-2 text-sm text-neutral-700 sm:grid-cols-2">
       <div>
         <dt className="font-medium text-neutral-500">Telefono</dt>
-        <dd>{cliente.telefono || "-"}</dd>
+        <dd>
+          <PhoneContactActions telefono={cliente.telefono} />
+        </dd>
       </div>
       <div>
         <dt className="font-medium text-neutral-500">Presupuesto</dt>
@@ -984,7 +987,7 @@ function ClientesTable({ clientes }: { clientes: Cliente[] }) {
                 </Link>
               </td>
               <td className="px-4 py-4 text-neutral-700">
-                {cliente.telefono || "-"}
+                <PhoneContactActions telefono={cliente.telefono} />
               </td>
               <td className="px-4 py-4 text-neutral-700">
                 {cliente.origenContacto || "-"}

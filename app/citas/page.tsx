@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { connection } from "next/server";
+import {
+  EmailContactAction,
+  PhoneContactActions,
+} from "@/app/contact-actions";
 import { convertirCitaEnCliente } from "@/app/citas/actions";
 import { clienteCreadoMarker } from "@/app/citas/constants";
 import { DeleteCitaForm } from "@/app/citas/delete-cita-form";
@@ -241,8 +245,10 @@ function CitasTable({ citas }: { citas: Cita[] }) {
                 </td>
                 <td className="px-4 py-4 text-neutral-700">{citaServicio(cita) || "-"}</td>
                 <td className="px-4 py-4 text-neutral-700">
-                  <p>{cita.telefono || "-"}</p>
-                  <p className="mt-1 text-neutral-500">{cita.email || "-"}</p>
+                  <PhoneContactActions telefono={cita.telefono} />
+                  <div className="mt-1 text-neutral-500">
+                    <EmailContactAction email={cita.email} />
+                  </div>
                 </td>
                 <td className="px-4 py-4 text-neutral-700">{cita.origen}</td>
                 <td className="px-4 py-4">
@@ -317,11 +323,15 @@ function CitasCards({ citas }: { citas: Cita[] }) {
               </div>
               <div>
                 <dt className="font-medium text-neutral-500">Telefono</dt>
-                <dd>{cita.telefono || "-"}</dd>
+                <dd>
+                  <PhoneContactActions telefono={cita.telefono} />
+                </dd>
               </div>
               <div>
                 <dt className="font-medium text-neutral-500">Email</dt>
-                <dd>{cita.email || "-"}</dd>
+                <dd>
+                  <EmailContactAction email={cita.email} />
+                </dd>
               </div>
               <div>
                 <dt className="font-medium text-neutral-500">Origen</dt>

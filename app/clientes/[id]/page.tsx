@@ -1,10 +1,15 @@
 import { randomUUID } from "crypto";
 import { mkdir, stat, unlink, writeFile } from "fs/promises";
 import path from "path";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
 import { connection } from "next/server";
+import {
+  EmailContactAction,
+  PhoneContactActions,
+} from "@/app/contact-actions";
 import {
   ClienteEstadoFields,
 } from "@/app/clientes/cliente-estado-fields";
@@ -1119,16 +1124,20 @@ function isSeguimientoVencido(cliente: ClienteDetalle) {
 function DetailItem({
   label,
   value,
+  children,
 }: {
   label: string;
   value?: string | null;
+  children?: ReactNode;
 }) {
   return (
     <div className="rounded-md border border-neutral-200 bg-neutral-50 px-4 py-3">
       <dt className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
         {label}
       </dt>
-      <dd className="mt-2 text-sm font-medium text-neutral-950">{value || "-"}</dd>
+      <dd className="mt-2 text-sm font-medium text-neutral-950">
+        {children ?? value ?? "-"}
+      </dd>
     </div>
   );
 }
@@ -2126,8 +2135,12 @@ function ClienteFicha({ cliente }: { cliente: ClienteDetalle }) {
 
           <dl className="mt-5 grid gap-3 sm:grid-cols-2">
             <DetailItem label="Nombre" value={cliente.nombre} />
-            <DetailItem label="Telefono" value={cliente.telefono} />
-            <DetailItem label="Email" value={cliente.email} />
+            <DetailItem label="Telefono">
+              <PhoneContactActions telefono={cliente.telefono} />
+            </DetailItem>
+            <DetailItem label="Email">
+              <EmailContactAction email={cliente.email} />
+            </DetailItem>
             <DetailItem label="Direccion" value={cliente.direccion} />
             <DetailItem label="Localidad" value={cliente.localidad} />
             <DetailItem
