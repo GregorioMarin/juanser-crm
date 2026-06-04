@@ -597,14 +597,6 @@ async function createPresupuesto(formData: FormData) {
     )}`,
   });
 
-  if (presupuestoEstado === "ACEPTADO") {
-    await registrarActividadCliente({
-      clienteId,
-      tipo: "PRESUPUESTO_EDITADO",
-      descripcion: "Recuerda registrar el pago a cuenta del 50%.",
-    });
-  }
-
   revalidatePath(`/clientes/${clienteId}`);
   revalidatePath("/clientes");
   revalidatePath("/presupuestos");
@@ -1883,11 +1875,6 @@ function PresupuestosSection({ cliente }: { cliente: ClienteDetalle }) {
                       <p className="mt-1 whitespace-pre-wrap text-neutral-600">
                         {presupuesto.descripcion}
                       </p>
-                      {presupuesto.estado === "ACEPTADO" ? (
-                        <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950">
-                          Recuerda registrar el pago a cuenta del 50%.
-                        </p>
-                      ) : null}
                       <div className="mt-3 overflow-hidden rounded-md border border-neutral-200">
                         <table className="w-full text-xs">
                           <thead className="bg-white text-neutral-500">

@@ -277,14 +277,6 @@ export async function updatePresupuesto(formData: FormData) {
     descripcion: `Presupuesto nº ${presupuesto.numero} editado`,
   });
 
-  if (presupuesto.estado !== "ACEPTADO" && nextEstado === "ACEPTADO") {
-    await registrarActividadCliente({
-      clienteId: presupuesto.clienteId,
-      tipo: "PRESUPUESTO_EDITADO",
-      descripcion: "Recuerda registrar el pago a cuenta del 50%.",
-    });
-  }
-
   revalidatePath(`/clientes/${presupuesto.clienteId}`);
   revalidatePath("/clientes");
   revalidatePath("/presupuestos");

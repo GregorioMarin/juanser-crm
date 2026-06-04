@@ -154,6 +154,28 @@ function estadoClass(estado: string) {
   );
 }
 
+function estadoPago(pagado: number, pendiente: number) {
+  if (pendiente <= 0) {
+    return "Pagado completo";
+  }
+
+  if (pagado > 0) {
+    return "Anticipo recibido";
+  }
+
+  return "Sin anticipo";
+}
+
+function estadoPagoClass(estado: string) {
+  const styles: Record<string, string> = {
+    "Sin anticipo": "bg-neutral-100 text-neutral-800 ring-neutral-200",
+    "Anticipo recibido": "bg-amber-100 text-amber-900 ring-amber-200",
+    "Pagado completo": "bg-emerald-100 text-emerald-900 ring-emerald-200",
+  };
+
+  return styles[estado] ?? "bg-neutral-100 text-neutral-800 ring-neutral-200";
+}
+
 function TotalesResumen({ totales }: { totales: Totales }) {
   const items = [
     ["Total presupuestado", formatCurrency(totales.total)],
@@ -250,6 +272,7 @@ function PresupuestosTable({
             <th className="px-4 py-3">Total presupuesto</th>
             <th className="px-4 py-3">Pagado a cuenta</th>
             <th className="px-4 py-3">Pendiente</th>
+            <th className="px-4 py-3">Estado pago</th>
             <th className="px-4 py-3">Estado</th>
             <th className="px-4 py-3">Fecha</th>
             <th className="px-4 py-3 text-right">Acciones</th>
@@ -260,6 +283,7 @@ function PresupuestosTable({
             presupuestos.map((presupuesto) => {
               const pagado = totalPagadoPresupuesto(presupuesto);
               const pendiente = Number(presupuesto.totalConIva) - pagado;
+              const pago = estadoPago(pagado, pendiente);
 
               return (
                 <tr key={presupuesto.id} className="align-top">
@@ -278,12 +302,7 @@ function PresupuestosTable({
                     {presupuesto.numero}
                   </td>
                   <td className="px-4 py-4 text-neutral-700">
-                    <p>{presupuesto.titulo}</p>
-                    {presupuesto.estado === "ACEPTADO" ? (
-                      <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950">
-                        Recuerda registrar el pago a cuenta del 50%.
-                      </p>
-                    ) : null}
+                    {presupuesto.titulo}
                   </td>
                   <td className="whitespace-nowrap px-4 py-4 font-semibold text-neutral-950">
                     {formatCurrency(presupuesto.totalConIva)}
@@ -293,6 +312,15 @@ function PresupuestosTable({
                   </td>
                   <td className="whitespace-nowrap px-4 py-4 font-semibold text-neutral-950">
                     {formatCurrency(pendiente)}
+                  </td>
+                  <td className="px-4 py-4">
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${estadoPagoClass(
+                        pago,
+                      )}`}
+                    >
+                      {pago}
+                    </span>
                   </td>
                   <td className="px-4 py-4">
                     <span
@@ -356,7 +384,7 @@ function PresupuestosTable({
             })
           ) : (
             <tr>
-              <td colSpan={9} className="px-4 py-8 text-center text-neutral-500">
+              <td colSpan={10} className="px-4 py-8 text-center text-neutral-500">
                 No hay presupuestos con esos filtros.
               </td>
             </tr>
