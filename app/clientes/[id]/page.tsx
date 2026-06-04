@@ -176,11 +176,15 @@ function optionalPresupuestoId(formData: FormData) {
 
 function estadoValue(formData: FormData) {
   const value = optionalString(formData, "estado") ?? "Nuevo lead";
-  if (!estados.includes(value as (typeof estados)[number])) {
+  const estado = estados.find((estadoOption) => {
+    return estadoOption.toLocaleLowerCase() === value.toLocaleLowerCase();
+  });
+
+  if (!estado) {
     throw new Error("Estado no valido.");
   }
 
-  return value;
+  return estado;
 }
 
 function origenContactoValue(formData: FormData) {
@@ -206,10 +210,7 @@ function motivoRechazoValue(formData: FormData, estado: string) {
     return null;
   }
 
-  const value = optionalString(formData, "motivoRechazo");
-  if (!value) {
-    throw new Error("El motivo de rechazo es obligatorio al marcar Perdido.");
-  }
+  const value = optionalString(formData, "motivoRechazo") ?? motivosRechazo[0];
 
   if (!motivosRechazo.includes(value as (typeof motivosRechazo)[number])) {
     throw new Error("Motivo de rechazo no valido.");
@@ -880,7 +881,9 @@ async function updateClienteFicha(formData: FormData) {
 
   if (estadoCambiado || motivoCambiado) {
     const estadoDetalle = estadoCambiado
-      ? `Estado cambiado de ${cliente.estado} a ${data.estado}.`
+      ? data.estado === estadoPerdido
+        ? `Estado cambiado a ${data.estado}. Estado anterior: ${cliente.estado}.`
+        : `Estado cambiado de ${cliente.estado} a ${data.estado}.`
       : "Motivo de rechazo actualizado.";
     const motivoDetalle =
       data.estado === estadoPerdido
@@ -932,7 +935,9 @@ async function cambiarEstadoCliente(formData: FormData) {
 
   if (estadoCambiado || motivoCambiado) {
     const estadoDetalle = estadoCambiado
-      ? `Estado cambiado de ${cliente.estado} a ${clienteActualizado.estado}.`
+      ? clienteActualizado.estado === estadoPerdido
+        ? `Estado cambiado a ${clienteActualizado.estado}. Estado anterior: ${cliente.estado}.`
+        : `Estado cambiado de ${cliente.estado} a ${clienteActualizado.estado}.`
       : "Motivo de rechazo actualizado.";
     const motivoDetalle =
       clienteActualizado.estado === estadoPerdido

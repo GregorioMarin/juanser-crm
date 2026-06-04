@@ -84,11 +84,15 @@ function requiredString(formData: FormData, key: string) {
 
 function estadoValue(formData: FormData) {
   const value = optionalString(formData, "estado") ?? "Nuevo lead";
-  if (!estados.includes(value as (typeof estados)[number])) {
+  const estado = estados.find((estadoOption) => {
+    return estadoOption.toLocaleLowerCase() === value.toLocaleLowerCase();
+  });
+
+  if (!estado) {
     throw new Error("Estado no valido.");
   }
 
-  return value;
+  return estado;
 }
 
 function origenContactoValue(formData: FormData) {

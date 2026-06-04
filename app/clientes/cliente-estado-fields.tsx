@@ -19,7 +19,7 @@ export function ClienteEstadoFields({
   defaultMotivoRechazo?: string | null;
 }) {
   const [estado, setEstado] = useState(defaultEstado);
-  const isPerdido = estado === "Perdido";
+  const isPerdido = estado.toLocaleLowerCase() === "perdido";
 
   return (
     <>
@@ -45,7 +45,6 @@ export function ClienteEstadoFields({
           className={inputClass}
           name="motivoRechazo"
           defaultValue={defaultMotivoRechazo ?? motivosRechazo[0]}
-          disabled={!isPerdido}
           required={isPerdido}
         >
           {motivosRechazo.map((motivo) => (
