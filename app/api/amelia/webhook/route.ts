@@ -5,6 +5,8 @@ export const runtime = "nodejs";
 
 type JsonObject = Record<string, unknown>;
 
+const fallbackNota = "Payload Amelia pendiente de mapear";
+
 const estadoMap: Record<string, "PENDIENTE" | "CONFIRMADA" | "CANCELADA" | "REALIZADA"> =
   {
     pending: "PENDIENTE",
@@ -21,6 +23,40 @@ const estadoMap: Record<string, "PENDIENTE" | "CONFIRMADA" | "CANCELADA" | "REAL
 
 function isObject(value: unknown): value is JsonObject {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function isSensitiveKey(key: string) {
+  const normalizedKey = key.toLowerCase();
+
+  return ["auth", "cookie", "password", "passwd", "secret", "token", "apikey", "api_key"].some(
+    (pattern) => normalizedKey.includes(pattern),
+  );
+}
+
+function sanitizeForLog(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeForLog(item));
+  }
+
+  if (!isObject(value)) {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => [
+      key,
+      isSensitiveKey(key) ? "[REDACTED]" : sanitizeForLog(entry),
+    ]),
+  );
+}
+
+function basicHeaders(headers: Headers) {
+  return {
+    "content-type": headers.get("content-type"),
+    "user-agent": headers.get("user-agent"),
+    "x-forwarded-for": headers.get("x-forwarded-for"),
+    "x-real-ip": headers.get("x-real-ip"),
+  };
 }
 
 function stringValue(value: unknown) {
@@ -140,23 +176,18 @@ function nota(payload: unknown) {
 
 export async function POST(request: Request) {
   let payload: unknown;
+  let parseError = false;
+  const rawBody = await request.text();
 
   try {
-    payload = await request.json();
+    payload = JSON.parse(rawBody);
   } catch {
-    return Response.json({ error: "Payload JSON no valido." }, { status: 400 });
+    payload = null;
+    parseError = true;
   }
 
   const nombre = clienteNombre(payload);
   const date = fechaHora(payload);
-
-  if (!nombre || !date) {
-    return Response.json(
-      { error: "Faltan clienteNombre o fechaHora en el webhook." },
-      { status: 400 },
-    );
-  }
-
   const ameliaBookingId = findFirstString(payload, [
     "ameliaBookingId",
     "bookingId",
@@ -172,21 +203,30 @@ export async function POST(request: Request) {
     "appointment_id",
   ]);
   const customer = findObject(payload, ["customer", "cliente", "user"]);
+  const payloadMapped = Boolean(nombre && date && !parseError);
+
+  console.info("[Amelia webhook] POST recibido", {
+    headers: basicHeaders(request.headers),
+    body: parseError
+      ? { parseError: "Body no es JSON valido", sizeBytes: rawBody.length }
+      : sanitizeForLog(payload),
+    ameliaBookingId,
+    clienteNombre: nombre,
+    fechaHora: date?.toISOString() ?? null,
+  });
 
   const data = {
-    clienteNombre: nombre,
-    telefono: findFirstString(customer, [
-      "telefono",
-      "phone",
-      "customerPhone",
-    ]) ?? findFirstString(payload, ["telefono", "phone", "customerPhone"]),
+    clienteNombre: nombre ?? "Amelia pendiente de mapear",
+    telefono:
+      findFirstString(customer, ["telefono", "phone", "customerPhone"]) ??
+      findFirstString(payload, ["telefono", "phone", "customerPhone"]),
     email:
       findFirstString(customer, ["email", "customerEmail"]) ??
       findFirstString(payload, ["email", "customerEmail"]),
-    fechaHora: date,
+    fechaHora: date ?? new Date(),
     origen: "AMELIA" as const,
-    estado: estado(payload),
-    nota: nota(payload),
+    estado: payloadMapped ? estado(payload) : ("PENDIENTE" as const),
+    nota: payloadMapped ? nota(payload) : fallbackNota,
   };
 
   const cita = ameliaBookingId
