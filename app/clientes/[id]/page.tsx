@@ -16,6 +16,7 @@ import {
 import { DeleteClienteForm } from "@/app/clientes/delete-cliente-form";
 import { LocalidadField } from "@/app/clientes/localidad-field";
 import { localidades } from "@/app/clientes/localidades";
+import { motivosRechazo } from "@/app/clientes/motivos-rechazo";
 import { DeletePagoCuentaForm } from "@/app/clientes/[id]/delete-pago-cuenta-form";
 import {
   MultimediaUploadForm,
@@ -70,16 +71,6 @@ const tiposCliente = [
   "Constructora",
   "Tienda",
   "Otros",
-] as const;
-
-const motivosRechazo = [
-  "Muy caro",
-  "Lo hace otro carpintero",
-  "Lo deja para más adelante",
-  "No responde",
-  "Fuera de localidad",
-  "Trabajo que no realizamos",
-  "Otro",
 ] as const;
 
 const inputClass =
@@ -899,6 +890,7 @@ async function updateClienteFicha(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/clientes");
+  revalidatePath("/clientes/perdidos");
   revalidatePath("/kanban");
   revalidatePath(`/clientes/${clienteId}`);
 }
@@ -953,6 +945,7 @@ async function cambiarEstadoCliente(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/clientes");
+  revalidatePath("/clientes/perdidos");
   revalidatePath("/kanban");
   revalidatePath(`/clientes/${clienteId}`);
 }

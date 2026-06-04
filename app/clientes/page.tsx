@@ -6,6 +6,10 @@ import { ClienteEstadoFields } from "@/app/clientes/cliente-estado-fields";
 import { DeleteClienteForm } from "@/app/clientes/delete-cliente-form";
 import { LocalidadField } from "@/app/clientes/localidad-field";
 import { localidades } from "@/app/clientes/localidades";
+import {
+  motivoRechazoToParam,
+  motivosRechazo,
+} from "@/app/clientes/motivos-rechazo";
 import { registrarActividadCliente } from "@/app/lib/actividad";
 import { prisma } from "@/app/lib/prisma";
 
@@ -46,16 +50,6 @@ const tiposCliente = [
   "Constructora",
   "Tienda",
   "Otros",
-] as const;
-
-const motivosRechazo = [
-  "Muy caro",
-  "Lo hace otro carpintero",
-  "Lo deja para más adelante",
-  "No responde",
-  "Fuera de localidad",
-  "Trabajo que no realizamos",
-  "Otro",
 ] as const;
 
 const inputClass =
@@ -204,6 +198,7 @@ async function createCliente(formData: FormData) {
   });
 
   revalidatePath("/clientes");
+  revalidatePath("/clientes/perdidos");
   revalidatePath("/kanban");
 }
 
@@ -285,6 +280,7 @@ async function getResumen() {
     clientesParaTotales,
     importeAceptadoTotal,
     perdidosPorMotivo,
+    clientesPerdidosPorMotivo,
   ] = await Promise.all([
     prisma.cliente.count(),
     prisma.cliente.count({ where: { estado: "Presupuesto enviado" } }),
@@ -312,6 +308,19 @@ async function getResumen() {
       _count: { _all: true },
       orderBy: { _count: { motivoRechazo: "desc" } },
     }),
+    prisma.cliente.findMany({
+      where: {
+        estado: "Perdido",
+        motivoRechazo: {
+          not: null,
+        },
+      },
+      orderBy: { fechaAlta: "desc" },
+      select: {
+        id: true,
+        motivoRechazo: true,
+      },
+    }),
   ]);
   const totalPresupuestado = clientesParaTotales.reduce(
     (total, cliente) =>
@@ -324,6 +333,18 @@ async function getResumen() {
     0,
   );
 
+  const perdidosPorMotivoConDestino = perdidosPorMotivo.map((item) => {
+    const clientesDelMotivo = clientesPerdidosPorMotivo.filter((cliente) => {
+      return cliente.motivoRechazo === item.motivoRechazo;
+    });
+    const clienteUnico = clientesDelMotivo.length === 1 ? clientesDelMotivo[0] : null;
+
+    return {
+      ...item,
+      clienteIdUnico: clienteUnico?.id ?? null,
+    };
+  });
+
   return {
     leads,
     presupuestosEnviados,
@@ -332,7 +353,7 @@ async function getResumen() {
     instalados,
     totalPresupuestado,
     importeAceptadoTotal: importeAceptadoTotal._sum.importeAceptado,
-    perdidosPorMotivo,
+    perdidosPorMotivo: perdidosPorMotivoConDestino,
   };
 }
 
@@ -838,19 +859,29 @@ function ResumenComercial({ resumen }: { resumen: Resumen }) {
         </div>
         {resumen.perdidosPorMotivo.length > 0 ? (
           <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            {resumen.perdidosPorMotivo.map((item) => (
-              <div
-                key={item.motivoRechazo ?? "Sin motivo"}
-                className="rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2"
-              >
-                <p className="text-sm font-semibold text-neutral-950">
-                  {item.motivoRechazo ?? "Sin motivo"}
-                </p>
-                <p className="mt-1 text-sm text-neutral-500">
-                  {item._count._all} clientes
-                </p>
-              </div>
-            ))}
+            {resumen.perdidosPorMotivo.map((item) => {
+              const motivo = item.motivoRechazo ?? "Sin motivo";
+              const href = item.clienteIdUnico
+                ? `/clientes/${item.clienteIdUnico}`
+                : `/clientes/perdidos?motivo=${encodeURIComponent(
+                    motivoRechazoToParam(motivo),
+                  )}`;
+
+              return (
+                <Link
+                  key={motivo}
+                  href={href}
+                  className="group cursor-pointer rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-50 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                >
+                  <p className="text-sm font-semibold text-neutral-950 transition group-hover:text-emerald-900">
+                    {motivo}
+                  </p>
+                  <p className="mt-1 text-sm text-neutral-500 transition group-hover:text-emerald-800">
+                    {item._count._all} clientes
+                  </p>
+                </Link>
+              );
+            })}
           </div>
         ) : (
           <p className="mt-3 text-sm text-neutral-500">

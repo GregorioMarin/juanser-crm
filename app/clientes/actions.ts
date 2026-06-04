@@ -85,6 +85,7 @@ export async function deleteCliente(formData: FormData) {
   await deleteClienteUploads(clienteId);
 
   revalidatePath("/clientes");
+  revalidatePath("/clientes/perdidos");
   revalidatePath("/");
   revalidatePath("/kanban");
   revalidatePath(`/clientes/${clienteId}`);

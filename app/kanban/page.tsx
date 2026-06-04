@@ -116,6 +116,7 @@ async function cambiarEstadoCliente(formData: FormData) {
   revalidatePath("/");
   revalidatePath("/kanban");
   revalidatePath("/clientes");
+  revalidatePath("/clientes/perdidos");
   revalidatePath(`/clientes/${clienteId}`);
 }
 
