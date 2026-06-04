@@ -89,21 +89,21 @@ export default async function Home() {
   return (
     <main className="min-h-screen bg-neutral-100 px-5 py-6 text-neutral-950 sm:px-8">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
-        <header className="flex flex-col gap-4 border-b border-neutral-300 pb-6 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-col gap-3">
+        <header className="flex flex-col gap-4 border-b border-neutral-300 pb-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <Image
               src="/logo-juanser.jpeg"
               alt="Carpintería Juanser"
               width={150}
               height={100}
-              className="h-16 w-auto rounded-sm object-contain sm:h-[68px]"
+              className="h-16 w-auto rounded-sm object-contain sm:h-[66px]"
               sizes="100px"
             />
-            <h1 className="text-3xl font-semibold tracking-normal text-neutral-950 sm:text-4xl">
+            <h1 className="text-2xl font-semibold tracking-normal text-neutral-950 sm:text-3xl">
               CRM Carpintería Juanser
             </h1>
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end lg:max-w-3xl">
             <Link
               href="/clientes"
               className="inline-flex h-11 items-center justify-center rounded-md bg-emerald-700 px-5 text-sm font-semibold text-white transition hover:bg-emerald-800"
