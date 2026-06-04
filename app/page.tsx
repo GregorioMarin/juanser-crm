@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { connection } from "next/server";
 import { logout } from "@/app/auth/actions";
 import { prisma } from "@/app/lib/prisma";
@@ -89,12 +90,17 @@ export default async function Home() {
     <main className="min-h-screen bg-neutral-100 px-5 py-6 text-neutral-950 sm:px-8">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
         <header className="flex flex-col gap-4 border-b border-neutral-300 pb-6 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-medium uppercase tracking-[0.18em] text-emerald-700">
-              Carpinteria Juanser
-            </p>
-            <h1 className="mt-3 text-3xl font-semibold tracking-normal text-neutral-950 sm:text-4xl">
-              Gestor comercial
+          <div className="flex flex-col gap-3">
+            <Image
+              src="/logo-juanser.jpeg"
+              alt="Carpintería Juanser"
+              width={150}
+              height={100}
+              className="h-16 w-auto rounded-sm object-contain sm:h-[68px]"
+              sizes="100px"
+            />
+            <h1 className="text-3xl font-semibold tracking-normal text-neutral-950 sm:text-4xl">
+              CRM Carpintería Juanser
             </h1>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
