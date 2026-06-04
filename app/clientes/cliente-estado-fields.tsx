@@ -19,6 +19,7 @@ export function ClienteEstadoFields({
   defaultMotivoRechazo?: string | null;
 }) {
   const [estado, setEstado] = useState(defaultEstado);
+  const isPerdido = estado === "Perdido";
 
   return (
     <>
@@ -38,22 +39,22 @@ export function ClienteEstadoFields({
         </select>
       </label>
 
-      {estado === "Perdido" ? (
-        <label className="flex flex-col gap-1.5">
-          <span className={labelClass}>Motivo de rechazo</span>
-          <select
-            className={inputClass}
-            name="motivoRechazo"
-            defaultValue={defaultMotivoRechazo ?? motivosRechazo[0]}
-          >
-            {motivosRechazo.map((motivo) => (
-              <option key={motivo} value={motivo}>
-                {motivo}
-              </option>
-            ))}
-          </select>
-        </label>
-      ) : null}
+      <label className={isPerdido ? "flex flex-col gap-1.5" : "hidden"}>
+        <span className={labelClass}>Motivo de rechazo</span>
+        <select
+          className={inputClass}
+          name="motivoRechazo"
+          defaultValue={defaultMotivoRechazo ?? motivosRechazo[0]}
+          disabled={!isPerdido}
+          required={isPerdido}
+        >
+          {motivosRechazo.map((motivo) => (
+            <option key={motivo} value={motivo}>
+              {motivo}
+            </option>
+          ))}
+        </select>
+      </label>
     </>
   );
 }

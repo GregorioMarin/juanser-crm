@@ -299,7 +299,12 @@ async function getResumen() {
     prisma.cliente.aggregate({ _sum: { importeAceptado: true } }),
     prisma.cliente.groupBy({
       by: ["motivoRechazo"],
-      where: { estado: "Perdido" },
+      where: {
+        estado: "Perdido",
+        motivoRechazo: {
+          not: null,
+        },
+      },
       _count: { _all: true },
       orderBy: { _count: { motivoRechazo: "desc" } },
     }),

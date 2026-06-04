@@ -53,6 +53,7 @@ const estados = [
   "Instalado",
   "Perdido",
 ] as const;
+const estadoPerdido = "Perdido";
 
 const origenesContacto = [
   "WhatsApp",
@@ -201,11 +202,15 @@ function tipoClienteValue(formData: FormData) {
 }
 
 function motivoRechazoValue(formData: FormData, estado: string) {
-  if (estado !== "Perdido") {
+  if (estado !== estadoPerdido) {
     return null;
   }
 
-  const value = optionalString(formData, "motivoRechazo") ?? motivosRechazo[0];
+  const value = optionalString(formData, "motivoRechazo");
+  if (!value) {
+    throw new Error("El motivo de rechazo es obligatorio al marcar Perdido.");
+  }
+
   if (!motivosRechazo.includes(value as (typeof motivosRechazo)[number])) {
     throw new Error("Motivo de rechazo no valido.");
   }
@@ -859,7 +864,7 @@ async function updateClienteFicha(formData: FormData) {
   const data = clienteEditableData(formData);
   const cliente = await prisma.cliente.findUnique({
     where: { id: clienteId },
-    select: { estado: true },
+    select: { estado: true, motivoRechazo: true },
   });
   if (!cliente) {
     throw new Error("Cliente no encontrado.");
@@ -870,11 +875,22 @@ async function updateClienteFicha(formData: FormData) {
     data,
   });
 
-  if (cliente.estado !== data.estado) {
+  const estadoCambiado = cliente.estado !== data.estado;
+  const motivoCambiado = cliente.motivoRechazo !== data.motivoRechazo;
+
+  if (estadoCambiado || motivoCambiado) {
+    const estadoDetalle = estadoCambiado
+      ? `Estado cambiado de ${cliente.estado} a ${data.estado}.`
+      : "Motivo de rechazo actualizado.";
+    const motivoDetalle =
+      data.estado === estadoPerdido
+        ? ` Motivo de rechazo: ${data.motivoRechazo}.`
+        : "";
+
     await registrarActividadCliente({
       clienteId,
       tipo: "ESTADO_CAMBIADO",
-      descripcion: `Estado cambiado de ${cliente.estado} a ${data.estado}`,
+      descripcion: `${estadoDetalle}${motivoDetalle}`,
     });
   }
 
@@ -892,25 +908,41 @@ async function cambiarEstadoCliente(formData: FormData) {
   const motivoRechazo = motivoRechazoValue(formData, estado);
   const cliente = await prisma.cliente.findUnique({
     where: { id: clienteId },
-    select: { estado: true },
+    select: { estado: true, motivoRechazo: true },
   });
   if (!cliente) {
     throw new Error("Cliente no encontrado.");
   }
 
-  await prisma.cliente.update({
+  const clienteActualizado = await prisma.cliente.update({
     where: { id: clienteId },
     data: {
       estado,
       motivoRechazo,
     },
+    select: {
+      estado: true,
+      motivoRechazo: true,
+    },
   });
 
-  if (cliente.estado !== estado) {
+  const estadoCambiado = cliente.estado !== clienteActualizado.estado;
+  const motivoCambiado =
+    cliente.motivoRechazo !== clienteActualizado.motivoRechazo;
+
+  if (estadoCambiado || motivoCambiado) {
+    const estadoDetalle = estadoCambiado
+      ? `Estado cambiado de ${cliente.estado} a ${clienteActualizado.estado}.`
+      : "Motivo de rechazo actualizado.";
+    const motivoDetalle =
+      clienteActualizado.estado === estadoPerdido
+        ? ` Motivo de rechazo: ${clienteActualizado.motivoRechazo}.`
+        : "";
+
     await registrarActividadCliente({
       clienteId,
       tipo: "ESTADO_CAMBIADO",
-      descripcion: `Estado cambiado de ${cliente.estado} a ${estado}`,
+      descripcion: `${estadoDetalle}${motivoDetalle}`,
     });
   }
 
