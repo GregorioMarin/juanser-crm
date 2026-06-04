@@ -1,9 +1,13 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { connection } from "next/server";
+import { convertirCitaEnCliente } from "@/app/citas/actions";
+import { clienteCreadoMarker } from "@/app/citas/constants";
+import { DeleteCitaForm } from "@/app/citas/delete-cita-form";
 import { prisma } from "@/app/lib/prisma";
 
 const estados = ["PENDIENTE", "CONFIRMADA", "CANCELADA", "REALIZADA"] as const;
+const servicioPrefix = "Servicio:";
 
 const estadoStyles: Record<(typeof estados)[number], string> = {
   PENDIENTE: "bg-amber-100 text-amber-950 ring-amber-200",
@@ -159,25 +163,42 @@ function estadoClass(estado: string) {
   );
 }
 
-function clienteHref(cita: Cita) {
-  const params = new URLSearchParams({
-    nombre: cita.clienteNombre,
-    origenContacto: cita.origen === "AMELIA" ? "Formulario web" : "Otro",
-  });
+function citaLines(cita: Cita) {
+  return cita.nota?.split("\n").map((line) => line.trim()).filter(Boolean) ?? [];
+}
 
-  if (cita.telefono) {
-    params.set("telefono", cita.telefono);
-  }
+function citaServicio(cita: Cita) {
+  const serviceLine = citaLines(cita).find((line) => line.startsWith(servicioPrefix));
 
-  if (cita.email) {
-    params.set("email", cita.email);
-  }
+  return serviceLine?.slice(servicioPrefix.length).trim() || null;
+}
 
-  if (cita.nota) {
-    params.set("observaciones", cita.nota);
-  }
+function citaProcesada(cita: Cita) {
+  return citaLines(cita).includes(clienteCreadoMarker);
+}
 
-  return `/clientes?${params.toString()}`;
+function citaNotaVisible(cita: Cita) {
+  const nota = citaLines(cita)
+    .filter((line) => !line.startsWith(servicioPrefix))
+    .filter((line) => line !== clienteCreadoMarker)
+    .join("\n");
+
+  return nota || null;
+}
+
+function ConvertirCitaForm({ cita, processed }: { cita: Cita; processed: boolean }) {
+  return (
+    <form action={convertirCitaEnCliente}>
+      <input type="hidden" name="citaId" value={cita.id} />
+      <button
+        type="submit"
+        disabled={processed}
+        className="inline-flex h-9 items-center justify-center rounded-md border border-neutral-300 px-3 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100 disabled:cursor-not-allowed disabled:border-emerald-200 disabled:bg-emerald-50 disabled:text-emerald-800"
+      >
+        {processed ? clienteCreadoMarker : "Convertir en cliente"}
+      </button>
+    </form>
+  );
 }
 
 function CitasTable({ citas }: { citas: Cita[] }) {
@@ -188,6 +209,7 @@ function CitasTable({ citas }: { citas: Cita[] }) {
           <tr>
             <th className="px-4 py-3">Fecha</th>
             <th className="px-4 py-3">Cliente</th>
+            <th className="px-4 py-3">Servicio</th>
             <th className="px-4 py-3">Contacto</th>
             <th className="px-4 py-3">Origen</th>
             <th className="px-4 py-3">Estado</th>
@@ -196,46 +218,54 @@ function CitasTable({ citas }: { citas: Cita[] }) {
           </tr>
         </thead>
         <tbody className="divide-y divide-neutral-200">
-          {citas.map((cita) => (
-            <tr key={cita.id} className="align-top">
-              <td className="whitespace-nowrap px-4 py-4 font-semibold text-neutral-950">
-                {formatDateTime(cita.fechaHora)}
-              </td>
-              <td className="px-4 py-4">
-                <p className="font-semibold text-neutral-950">{cita.clienteNombre}</p>
-                {cita.ameliaBookingId ? (
-                  <p className="mt-1 text-xs text-neutral-500">
-                    Amelia #{cita.ameliaBookingId}
-                  </p>
-                ) : null}
-              </td>
-              <td className="px-4 py-4 text-neutral-700">
-                <p>{cita.telefono || "-"}</p>
-                <p className="mt-1 text-neutral-500">{cita.email || "-"}</p>
-              </td>
-              <td className="px-4 py-4 text-neutral-700">{cita.origen}</td>
-              <td className="px-4 py-4">
-                <span
-                  className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${estadoClass(
-                    cita.estado,
-                  )}`}
-                >
-                  {cita.estado}
-                </span>
-              </td>
-              <td className="max-w-sm px-4 py-4 text-neutral-700">
-                {cita.nota || "-"}
-              </td>
-              <td className="px-4 py-4 text-right">
-                <Link
-                  href={clienteHref(cita)}
-                  className="inline-flex h-9 items-center justify-center rounded-md border border-neutral-300 px-3 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
-                >
-                  Crear cliente
-                </Link>
-              </td>
-            </tr>
-          ))}
+          {citas.map((cita) => {
+            const processed = citaProcesada(cita);
+
+            return (
+              <tr key={cita.id} className="align-top">
+                <td className="whitespace-nowrap px-4 py-4 font-semibold text-neutral-950">
+                  {formatDateTime(cita.fechaHora)}
+                </td>
+                <td className="px-4 py-4">
+                  <p className="font-semibold text-neutral-950">{cita.clienteNombre}</p>
+                  {cita.ameliaBookingId ? (
+                    <p className="mt-1 text-xs text-neutral-500">
+                      Amelia #{cita.ameliaBookingId}
+                    </p>
+                  ) : null}
+                  {processed ? (
+                    <p className="mt-2 text-xs font-semibold text-emerald-700">
+                      {clienteCreadoMarker}
+                    </p>
+                  ) : null}
+                </td>
+                <td className="px-4 py-4 text-neutral-700">{citaServicio(cita) || "-"}</td>
+                <td className="px-4 py-4 text-neutral-700">
+                  <p>{cita.telefono || "-"}</p>
+                  <p className="mt-1 text-neutral-500">{cita.email || "-"}</p>
+                </td>
+                <td className="px-4 py-4 text-neutral-700">{cita.origen}</td>
+                <td className="px-4 py-4">
+                  <span
+                    className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${estadoClass(
+                      cita.estado,
+                    )}`}
+                  >
+                    {cita.estado}
+                  </span>
+                </td>
+                <td className="max-w-sm whitespace-pre-line px-4 py-4 text-neutral-700">
+                  {citaNotaVisible(cita) || "-"}
+                </td>
+                <td className="px-4 py-4">
+                  <div className="flex justify-end gap-2">
+                    <ConvertirCitaForm cita={cita} processed={processed} />
+                    <DeleteCitaForm citaId={cita.id} />
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -245,61 +275,71 @@ function CitasTable({ citas }: { citas: Cita[] }) {
 function CitasCards({ citas }: { citas: Cita[] }) {
   return (
     <div className="grid gap-4 lg:hidden">
-      {citas.map((cita) => (
-        <article
-          key={cita.id}
-          className="rounded-md border border-neutral-300 bg-white p-4 shadow-sm"
-        >
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <p className="text-lg font-semibold text-neutral-950">
-                {cita.clienteNombre}
+      {citas.map((cita) => {
+        const processed = citaProcesada(cita);
+
+        return (
+          <article
+            key={cita.id}
+            className="rounded-md border border-neutral-300 bg-white p-4 shadow-sm"
+          >
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-lg font-semibold text-neutral-950">
+                  {cita.clienteNombre}
+                </p>
+                <p className="mt-1 text-sm text-neutral-500">
+                  {formatDateTime(cita.fechaHora)}
+                </p>
+                {cita.ameliaBookingId ? (
+                  <p className="mt-1 text-xs text-neutral-500">
+                    Amelia #{cita.ameliaBookingId}
+                  </p>
+                ) : null}
+                {processed ? (
+                  <p className="mt-2 text-xs font-semibold text-emerald-700">
+                    {clienteCreadoMarker}
+                  </p>
+                ) : null}
+              </div>
+              <span
+                className={`inline-flex w-fit rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${estadoClass(
+                  cita.estado,
+                )}`}
+              >
+                {cita.estado}
+              </span>
+            </div>
+            <dl className="mt-4 grid gap-2 text-sm text-neutral-700 sm:grid-cols-2">
+              <div>
+                <dt className="font-medium text-neutral-500">Servicio</dt>
+                <dd>{citaServicio(cita) || "-"}</dd>
+              </div>
+              <div>
+                <dt className="font-medium text-neutral-500">Telefono</dt>
+                <dd>{cita.telefono || "-"}</dd>
+              </div>
+              <div>
+                <dt className="font-medium text-neutral-500">Email</dt>
+                <dd>{cita.email || "-"}</dd>
+              </div>
+              <div>
+                <dt className="font-medium text-neutral-500">Origen</dt>
+                <dd>{cita.origen}</dd>
+              </div>
+            </dl>
+            {citaNotaVisible(cita) ? (
+              <p className="mt-4 whitespace-pre-line border-t border-neutral-200 pt-4 text-sm text-neutral-700">
+                {citaNotaVisible(cita)}
               </p>
-              <p className="mt-1 text-sm text-neutral-500">
-                {formatDateTime(cita.fechaHora)}
-              </p>
+            ) : null}
+            <div className="mt-4 flex flex-wrap gap-2">
+              <ConvertirCitaForm cita={cita} processed={processed} />
+              <DeleteCitaForm citaId={cita.id} />
             </div>
-            <span
-              className={`inline-flex w-fit rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${estadoClass(
-                cita.estado,
-              )}`}
-            >
-              {cita.estado}
-            </span>
-          </div>
-          <dl className="mt-4 grid gap-2 text-sm text-neutral-700 sm:grid-cols-2">
-            <div>
-              <dt className="font-medium text-neutral-500">Telefono</dt>
-              <dd>{cita.telefono || "-"}</dd>
-            </div>
-            <div>
-              <dt className="font-medium text-neutral-500">Email</dt>
-              <dd>{cita.email || "-"}</dd>
-            </div>
-            <div>
-              <dt className="font-medium text-neutral-500">Origen</dt>
-              <dd>{cita.origen}</dd>
-            </div>
-            <div>
-              <dt className="font-medium text-neutral-500">Amelia</dt>
-              <dd>{cita.ameliaBookingId || "-"}</dd>
-            </div>
-          </dl>
-          {cita.nota ? (
-            <p className="mt-4 border-t border-neutral-200 pt-4 text-sm text-neutral-700">
-              {cita.nota}
-            </p>
-          ) : null}
-          <div className="mt-4">
-            <Link
-              href={clienteHref(cita)}
-              className="inline-flex h-9 items-center justify-center rounded-md border border-neutral-300 px-3 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
-            >
-              Crear cliente
-            </Link>
-          </div>
-        </article>
-      ))}
+          </article>
+        );
+      })}
     </div>
   );
 }
