@@ -150,12 +150,15 @@ export default async function GastoPage({ params }: GastoPageProps) {
             </span>
           </div>
           <div className="overflow-x-auto rounded-md border border-neutral-200">
-            <table className="w-full min-w-[760px] border-collapse text-left text-sm">
+            <table className="w-full min-w-[1080px] border-collapse text-left text-sm">
               <thead className="bg-neutral-100 text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
                 <tr>
                   <th className="px-4 py-3">Descripción</th>
                   <th className="px-4 py-3 text-right">Cantidad</th>
                   <th className="px-4 py-3 text-right">Precio unitario</th>
+                  <th className="px-4 py-3 text-right">Piezas</th>
+                  <th className="px-4 py-3 text-right">Medida</th>
+                  <th className="px-4 py-3 text-right">Precio/medida</th>
                   <th className="px-4 py-3 text-right">Importe</th>
                 </tr>
               </thead>
@@ -172,6 +175,15 @@ export default async function GastoPage({ params }: GastoPageProps) {
                       <td className="px-4 py-4 text-right text-neutral-700">
                         {formatMoney(linea.precioUnitario)}
                       </td>
+                      <td className="px-4 py-4 text-right text-neutral-700">
+                        {linea.piezas?.toString() ?? "-"}
+                      </td>
+                      <td className="px-4 py-4 text-right text-neutral-700">
+                        {linea.medida?.toString() ?? "-"}
+                      </td>
+                      <td className="px-4 py-4 text-right text-neutral-700">
+                        {linea.precioUnidadMedida?.toString() ?? "-"}
+                      </td>
                       <td className="px-4 py-4 text-right font-semibold text-neutral-950">
                         {formatMoney(linea.importe)}
                       </td>
@@ -179,7 +191,7 @@ export default async function GastoPage({ params }: GastoPageProps) {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={4} className="px-4 py-6 text-center text-neutral-500">
+                    <td colSpan={7} className="px-4 py-6 text-center text-neutral-500">
                       Este gasto todavía no tiene líneas de artículos.
                     </td>
                   </tr>

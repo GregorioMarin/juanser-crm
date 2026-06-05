@@ -49,6 +49,9 @@ export type GastoLineaAnalizada = {
   descripcion: string;
   cantidad: string;
   precioUnitario: string;
+  piezas: string;
+  medida: string;
+  precioUnidadMedida: string;
   importe: string;
 };
 

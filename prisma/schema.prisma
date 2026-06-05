@@ -283,6 +283,9 @@ model GastoLinea {
   descripcion    String
   cantidad       Decimal? @db.Decimal(10, 2)
   precioUnitario Decimal? @db.Decimal(10, 2)
+  piezas         Decimal? @db.Decimal(10, 2)
+  medida         Decimal? @db.Decimal(10, 3)
+  precioUnidadMedida Decimal? @db.Decimal(10, 3)
   importe        Decimal? @db.Decimal(10, 2)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt

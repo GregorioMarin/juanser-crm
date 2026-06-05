@@ -138,6 +138,9 @@ function valuesFromGasto(gasto?: GastoEditable | null): GastoAnalizado {
         descripcion: linea.descripcion,
         cantidad: moneyValue(linea.cantidad),
         precioUnitario: moneyValue(linea.precioUnitario),
+        piezas: moneyValue(linea.piezas),
+        medida: moneyValue(linea.medida),
+        precioUnidadMedida: moneyValue(linea.precioUnidadMedida),
         importe: moneyValue(linea.importe),
       })) ?? [],
   };
@@ -152,6 +155,9 @@ function initialLineas(data?: GastoAnalizado, gasto?: GastoEditable | null) {
     descripcion: linea.descripcion,
     cantidad: linea.cantidad,
     precioUnitario: linea.precioUnitario,
+    piezas: linea.piezas,
+    medida: linea.medida,
+    precioUnidadMedida: linea.precioUnidadMedida,
     importe: linea.importe,
   }));
 }
@@ -192,6 +198,9 @@ function LineasTable({
                 descripcion: "",
                 cantidad: "",
                 precioUnitario: "",
+                piezas: "",
+                medida: "",
+                precioUnidadMedida: "",
                 importe: "",
               },
             ]);
@@ -203,12 +212,15 @@ function LineasTable({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[820px] border-collapse text-left text-sm">
+        <table className="w-full min-w-[1180px] border-collapse text-left text-sm">
           <thead className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
             <tr>
               <th className="px-2 py-2">Descripción</th>
               <th className="px-2 py-2">Cantidad</th>
               <th className="px-2 py-2">Precio unitario</th>
+              <th className="px-2 py-2">Piezas</th>
+              <th className="px-2 py-2">Medida</th>
+              <th className="px-2 py-2">Precio/medida</th>
               <th className="px-2 py-2">Importe</th>
               <th className="px-2 py-2 text-right">Acciones</th>
             </tr>
@@ -244,6 +256,42 @@ function LineasTable({
                     value={linea.cantidad}
                     onChange={(event) =>
                       updateLinea(index, "cantidad", event.target.value)
+                    }
+                  />
+                </td>
+                <td className="px-2 py-2">
+                  <input
+                    className={inputClass}
+                    name={`linea-${linea.key}-piezas`}
+                    type="number"
+                    step="0.01"
+                    value={linea.piezas}
+                    onChange={(event) =>
+                      updateLinea(index, "piezas", event.target.value)
+                    }
+                  />
+                </td>
+                <td className="px-2 py-2">
+                  <input
+                    className={inputClass}
+                    name={`linea-${linea.key}-medida`}
+                    type="number"
+                    step="0.001"
+                    value={linea.medida}
+                    onChange={(event) =>
+                      updateLinea(index, "medida", event.target.value)
+                    }
+                  />
+                </td>
+                <td className="px-2 py-2">
+                  <input
+                    className={inputClass}
+                    name={`linea-${linea.key}-precioUnidadMedida`}
+                    type="number"
+                    step="0.001"
+                    value={linea.precioUnidadMedida}
+                    onChange={(event) =>
+                      updateLinea(index, "precioUnidadMedida", event.target.value)
                     }
                   />
                 </td>

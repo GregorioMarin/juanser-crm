@@ -85,7 +85,7 @@ function optionalDecimal(formData: FormData, key: string) {
   return Number(normalized).toFixed(2);
 }
 
-function optionalDecimalFromValue(raw: string | null, fieldLabel: string) {
+function optionalDecimalFromValue(raw: string | null, fieldLabel: string, scale = 2) {
   if (!raw) {
     return null;
   }
@@ -95,11 +95,12 @@ function optionalDecimalFromValue(raw: string | null, fieldLabel: string) {
     return null;
   }
 
-  if (!/^\d+(\.\d{1,2})?$/.test(normalized)) {
+  const decimalPattern = new RegExp(`^\\d+(\\.\\d{1,${scale}})?$`);
+  if (!decimalPattern.test(normalized)) {
     throw new Error(`${fieldLabel} debe ser un importe decimal valido.`);
   }
 
-  return Number(normalized).toFixed(2);
+  return Number(normalized).toFixed(scale);
 }
 
 function optionValue<T extends readonly string[]>(
@@ -177,12 +178,34 @@ function lineasData(formData: FormData) {
         optionalString(formData, `linea-${index}-precioUnitario`),
         "Precio unitario de linea",
       );
+      const piezas = optionalDecimalFromValue(
+        optionalString(formData, `linea-${index}-piezas`),
+        "Piezas de linea",
+      );
+      const medida = optionalDecimalFromValue(
+        optionalString(formData, `linea-${index}-medida`),
+        "Medida de linea",
+        3,
+      );
+      const precioUnidadMedida = optionalDecimalFromValue(
+        optionalString(formData, `linea-${index}-precioUnidadMedida`),
+        "Precio por unidad de medida de linea",
+        3,
+      );
       const importe = optionalDecimalFromValue(
         optionalString(formData, `linea-${index}-importe`),
         "Importe de linea",
       );
 
-      if (!descripcion && !cantidad && !precioUnitario && !importe) {
+      if (
+        !descripcion &&
+        !cantidad &&
+        !precioUnitario &&
+        !piezas &&
+        !medida &&
+        !precioUnidadMedida &&
+        !importe
+      ) {
         return null;
       }
 
@@ -196,6 +219,9 @@ function lineasData(formData: FormData) {
           descripcion,
           cantidad,
           precioUnitario,
+          piezas,
+          medida,
+          precioUnidadMedida,
           importe,
         },
       };
@@ -304,8 +330,19 @@ function normalizeLineas(input: unknown): GastoLineaAnalizada[] {
       const descripcion = value("descripcion");
       const cantidad = value("cantidad");
       const precioUnitario = value("precioUnitario");
+      const piezas = value("piezas");
+      const medida = value("medida");
+      const precioUnidadMedida = value("precioUnidadMedida");
       const importe = value("importe");
-      if (!descripcion && !cantidad && !precioUnitario && !importe) {
+      if (
+        !descripcion &&
+        !cantidad &&
+        !precioUnitario &&
+        !piezas &&
+        !medida &&
+        !precioUnidadMedida &&
+        !importe
+      ) {
         return null;
       }
 
@@ -313,6 +350,9 @@ function normalizeLineas(input: unknown): GastoLineaAnalizada[] {
         descripcion,
         cantidad,
         precioUnitario,
+        piezas,
+        medida,
+        precioUnidadMedida,
         importe,
       };
     })
@@ -393,7 +433,8 @@ async function analyzeWithOpenAI(file: File, buffer: Buffer) {
   const prompt = `Extrae datos de este documento de compra de Carpinteria Juanser.
 Devuelve solo JSON estricto con estas claves: proveedor, fecha, tipoDocumento, numeroDocumento, categoria, baseImponible, iva, total, formaPago, descripcion, observaciones, lineas.
 Reglas generales: si un dato no se ve claro deja string vacio; no inventes; fecha en YYYY-MM-DD si aparece; importes con punto decimal; tipoDocumento solo factura, albaran, ticket u otro; categoria solo una de: ${categoriasGasto.join(", ")}.
-Reglas de lineas: cada articulo o material comprado debe ser un objeto separado en lineas; no concatenes productos en descripcion; si hay 3 articulos devuelve 3 lineas; extrae cantidad, precioUnitario e importe si aparecen.`;
+Reglas de lineas: cada articulo o material comprado debe ser un objeto separado en lineas; no concatenes productos en descripcion; si hay 3 articulos devuelve 3 lineas; extrae cantidad, precioUnitario e importe si aparecen.
+Reglas especificas para proveedor Serrería Almeriense o Serreria Almeriense: sus lineas suelen traer descripcion, medida del tablero, piezas, medida, neto, importe e IVA. En ese proveedor, "Piezas" es el numero de unidades fisicas y debe ir en piezas; "Medida" normalmente son m2 totales y debe ir en medida; "Neto" normalmente es precio por m2 y debe ir en precioUnidadMedida; "Importe" es medida x neto y debe ir en importe. No interpretes Neto como precio por pieza. No calcules precioUnitario por tablero salvo que aparezca expresamente. Si Medida x Neto se aproxima a Importe, confirma esa interpretacion. Para otros proveedores usa cantidad y precioUnitario cuando corresponda.`;
 
   const fileContent = isPdf
     ? {
@@ -449,12 +490,18 @@ Reglas de lineas: cada articulo o material comprado debe ser un objeto separado 
                     descripcion: { type: "string" },
                     cantidad: { type: "string" },
                     precioUnitario: { type: "string" },
+                    piezas: { type: "string" },
+                    medida: { type: "string" },
+                    precioUnidadMedida: { type: "string" },
                     importe: { type: "string" },
                   },
                   required: [
                     "descripcion",
                     "cantidad",
                     "precioUnitario",
+                    "piezas",
+                    "medida",
+                    "precioUnidadMedida",
                     "importe",
                   ],
                 },
