@@ -63,6 +63,9 @@ export default async function GastoPage({ params }: GastoPageProps) {
     where: { id },
     include: {
       cliente: { select: { id: true, nombre: true } },
+      lineas: {
+        orderBy: { createdAt: "asc" },
+      },
     },
   });
   if (!gasto) {
@@ -127,6 +130,62 @@ export default async function GastoPage({ params }: GastoPageProps) {
             <p className="mt-2 whitespace-pre-wrap text-sm text-neutral-800">
               {gasto.observaciones || "-"}
             </p>
+          </div>
+        </section>
+
+        <section className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold text-neutral-950">
+                Artículos del documento
+              </h2>
+              <p className="mt-1 text-sm text-neutral-500">
+                Desglose de productos y materiales extraídos del albarán o factura.
+              </p>
+            </div>
+            <span className="text-sm font-semibold text-neutral-700">
+              {gasto.lineas.length === 1
+                ? "1 línea"
+                : `${gasto.lineas.length} líneas`}
+            </span>
+          </div>
+          <div className="overflow-x-auto rounded-md border border-neutral-200">
+            <table className="w-full min-w-[760px] border-collapse text-left text-sm">
+              <thead className="bg-neutral-100 text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
+                <tr>
+                  <th className="px-4 py-3">Descripción</th>
+                  <th className="px-4 py-3 text-right">Cantidad</th>
+                  <th className="px-4 py-3 text-right">Precio unitario</th>
+                  <th className="px-4 py-3 text-right">Importe</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-200">
+                {gasto.lineas.length > 0 ? (
+                  gasto.lineas.map((linea) => (
+                    <tr key={linea.id}>
+                      <td className="px-4 py-4 font-medium text-neutral-950">
+                        {linea.descripcion}
+                      </td>
+                      <td className="px-4 py-4 text-right text-neutral-700">
+                        {linea.cantidad?.toString() ?? "-"}
+                      </td>
+                      <td className="px-4 py-4 text-right text-neutral-700">
+                        {formatMoney(linea.precioUnitario)}
+                      </td>
+                      <td className="px-4 py-4 text-right font-semibold text-neutral-950">
+                        {formatMoney(linea.importe)}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-6 text-center text-neutral-500">
+                      Este gasto todavía no tiene líneas de artículos.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </section>
 

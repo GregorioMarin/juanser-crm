@@ -41,6 +41,15 @@ export type GastoAnalizado = {
   formaPago: string;
   descripcion: string;
   observaciones: string;
+  lineas: GastoLineaAnalizada[];
+};
+
+export type GastoLineaAnalizada = {
+  id?: string;
+  descripcion: string;
+  cantidad: string;
+  precioUnitario: string;
+  importe: string;
 };
 
 export const emptyGastoAnalizado: GastoAnalizado = {
@@ -55,4 +64,5 @@ export const emptyGastoAnalizado: GastoAnalizado = {
   formaPago: "",
   descripcion: "",
   observaciones: "",
+  lineas: [],
 };

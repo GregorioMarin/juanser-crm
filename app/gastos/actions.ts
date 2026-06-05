@@ -11,6 +11,7 @@ import {
   emptyGastoAnalizado,
   formasPagoGasto,
   GastoAnalizado,
+  GastoLineaAnalizada,
   tiposDocumentoGasto,
 } from "@/app/gastos/constants";
 
@@ -84,6 +85,23 @@ function optionalDecimal(formData: FormData, key: string) {
   return Number(normalized).toFixed(2);
 }
 
+function optionalDecimalFromValue(raw: string | null, fieldLabel: string) {
+  if (!raw) {
+    return null;
+  }
+
+  const normalized = raw.trim().replace(",", ".");
+  if (!normalized) {
+    return null;
+  }
+
+  if (!/^\d+(\.\d{1,2})?$/.test(normalized)) {
+    throw new Error(`${fieldLabel} debe ser un importe decimal valido.`);
+  }
+
+  return Number(normalized).toFixed(2);
+}
+
 function optionValue<T extends readonly string[]>(
   value: string | null,
   options: T,
@@ -140,6 +158,49 @@ function gastoData(formData: FormData) {
     archivoUrl: optionalString(formData, "archivoUrl"),
     clienteId: optionalClienteId(formData),
   };
+}
+
+function lineasData(formData: FormData) {
+  const indexes = formData
+    .getAll("lineaIndex")
+    .filter((value): value is string => typeof value === "string");
+
+  return indexes
+    .map((index) => {
+      const id = optionalString(formData, `linea-${index}-id`);
+      const descripcion = optionalString(formData, `linea-${index}-descripcion`);
+      const cantidad = optionalDecimalFromValue(
+        optionalString(formData, `linea-${index}-cantidad`),
+        "Cantidad de linea",
+      );
+      const precioUnitario = optionalDecimalFromValue(
+        optionalString(formData, `linea-${index}-precioUnitario`),
+        "Precio unitario de linea",
+      );
+      const importe = optionalDecimalFromValue(
+        optionalString(formData, `linea-${index}-importe`),
+        "Importe de linea",
+      );
+
+      if (!descripcion && !cantidad && !precioUnitario && !importe) {
+        return null;
+      }
+
+      if (!descripcion) {
+        throw new Error("Cada linea de gasto debe tener descripcion.");
+      }
+
+      return {
+        id,
+        data: {
+          descripcion,
+          cantidad,
+          precioUnitario,
+          importe,
+        },
+      };
+    })
+    .filter((linea): linea is NonNullable<typeof linea> => linea !== null);
 }
 
 function uploadsRootDir() {
@@ -225,6 +286,39 @@ function uploadFilePathFromUrl(url: string) {
   return filePath;
 }
 
+function normalizeLineas(input: unknown): GastoLineaAnalizada[] {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+
+  return input
+    .map((linea) => {
+      if (!linea || typeof linea !== "object") {
+        return null;
+      }
+
+      const record = linea as Partial<Record<keyof GastoLineaAnalizada, unknown>>;
+      const value = (key: keyof GastoLineaAnalizada) =>
+        typeof record[key] === "string" ? record[key].trim().replace(",", ".") : "";
+
+      const descripcion = value("descripcion");
+      const cantidad = value("cantidad");
+      const precioUnitario = value("precioUnitario");
+      const importe = value("importe");
+      if (!descripcion && !cantidad && !precioUnitario && !importe) {
+        return null;
+      }
+
+      return {
+        descripcion,
+        cantidad,
+        precioUnitario,
+        importe,
+      };
+    })
+    .filter((linea): linea is GastoLineaAnalizada => linea !== null);
+}
+
 function normalizeAnalysis(input: Partial<GastoAnalizado>): GastoAnalizado {
   const value = (key: keyof GastoAnalizado) =>
     typeof input[key] === "string" ? input[key]?.trim() ?? "" : "";
@@ -251,6 +345,7 @@ function normalizeAnalysis(input: Partial<GastoAnalizado>): GastoAnalizado {
     formaPago: value("formaPago"),
     descripcion: value("descripcion"),
     observaciones: value("observaciones"),
+    lineas: normalizeLineas(input.lineas),
   };
 }
 
@@ -296,8 +391,9 @@ async function analyzeWithOpenAI(file: File, buffer: Buffer) {
   const base64 = buffer.toString("base64");
   const isPdf = file.type === "application/pdf";
   const prompt = `Extrae datos de este documento de compra de Carpinteria Juanser.
-Devuelve solo JSON estricto con estas claves: proveedor, fecha, tipoDocumento, numeroDocumento, categoria, baseImponible, iva, total, formaPago, descripcion, observaciones.
-Reglas: si un dato no se ve claro deja string vacio; no inventes; fecha en YYYY-MM-DD si aparece; importes con punto decimal; tipoDocumento solo factura, albaran, ticket u otro; categoria solo una de: ${categoriasGasto.join(", ")}.`;
+Devuelve solo JSON estricto con estas claves: proveedor, fecha, tipoDocumento, numeroDocumento, categoria, baseImponible, iva, total, formaPago, descripcion, observaciones, lineas.
+Reglas generales: si un dato no se ve claro deja string vacio; no inventes; fecha en YYYY-MM-DD si aparece; importes con punto decimal; tipoDocumento solo factura, albaran, ticket u otro; categoria solo una de: ${categoriasGasto.join(", ")}.
+Reglas de lineas: cada articulo o material comprado debe ser un objeto separado en lineas; no concatenes productos en descripcion; si hay 3 articulos devuelve 3 lineas; extrae cantidad, precioUnitario e importe si aparecen.`;
 
   const fileContent = isPdf
     ? {
@@ -344,6 +440,25 @@ Reglas: si un dato no se ve claro deja string vacio; no inventes; fecha en YYYY-
               formaPago: { type: "string" },
               descripcion: { type: "string" },
               observaciones: { type: "string" },
+              lineas: {
+                type: "array",
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    descripcion: { type: "string" },
+                    cantidad: { type: "string" },
+                    precioUnitario: { type: "string" },
+                    importe: { type: "string" },
+                  },
+                  required: [
+                    "descripcion",
+                    "cantidad",
+                    "precioUnitario",
+                    "importe",
+                  ],
+                },
+              },
             },
             required: [
               "proveedor",
@@ -357,6 +472,7 @@ Reglas: si un dato no se ve claro deja string vacio; no inventes; fecha en YYYY-
               "formaPago",
               "descripcion",
               "observaciones",
+              "lineas",
             ],
           },
         },
@@ -430,8 +546,17 @@ export async function createGasto(
 ): Promise<GastoFormState> {
   let gastoId: string | null = null;
   try {
+    const lineas = lineasData(formData);
     const gasto = await prisma.gasto.create({
-      data: gastoData(formData),
+      data: {
+        ...gastoData(formData),
+        lineas:
+          lineas.length > 0
+            ? {
+                create: lineas.map((linea) => linea.data),
+              }
+            : undefined,
+      },
     });
     gastoId = gasto.id;
 
@@ -456,9 +581,47 @@ export async function updateGasto(
   try {
     const id = requiredGastoId(formData);
     gastoId = id;
-    await prisma.gasto.update({
-      where: { id },
-      data: gastoData(formData),
+    const lineas = lineasData(formData);
+    await prisma.$transaction(async (tx) => {
+      await tx.gasto.update({
+        where: { id },
+        data: gastoData(formData),
+      });
+
+      const existing = await tx.gastoLinea.findMany({
+        where: { gastoId: id },
+        select: { id: true },
+      });
+      const submittedIds = new Set(
+        lineas
+          .map((linea) => linea.id)
+          .filter((lineaId): lineaId is string => Boolean(lineaId)),
+      );
+      const idsToDelete = existing
+        .map((linea) => linea.id)
+        .filter((lineaId) => !submittedIds.has(lineaId));
+
+      if (idsToDelete.length > 0) {
+        await tx.gastoLinea.deleteMany({
+          where: { id: { in: idsToDelete }, gastoId: id },
+        });
+      }
+
+      for (const linea of lineas) {
+        if (linea.id) {
+          await tx.gastoLinea.updateMany({
+            where: { id: linea.id, gastoId: id },
+            data: linea.data,
+          });
+        } else {
+          await tx.gastoLinea.create({
+            data: {
+              gastoId: id,
+              ...linea.data,
+            },
+          });
+        }
+      }
     });
 
     revalidatePath("/");

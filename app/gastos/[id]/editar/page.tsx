@@ -13,7 +13,14 @@ export default async function EditarGastoPage({ params }: EditarGastoPageProps) 
   await connection();
 
   const { id } = await params;
-  const gasto = await prisma.gasto.findUnique({ where: { id } });
+  const gasto = await prisma.gasto.findUnique({
+    where: { id },
+    include: {
+      lineas: {
+        orderBy: { createdAt: "asc" },
+      },
+    },
+  });
   if (!gasto) {
     notFound();
   }

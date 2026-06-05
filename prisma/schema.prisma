@@ -266,6 +266,7 @@ model Gasto {
   archivoUrl      String?
   clienteId       Int?
   cliente         Cliente?  @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  lineas          GastoLinea[]
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -274,6 +275,21 @@ model Gasto {
   @@index([tipoDocumento])
   @@index([categoria])
   @@index([clienteId])
+}
+
+model GastoLinea {
+  id             String   @id @default(cuid())
+  gastoId        String
+  descripcion    String
+  cantidad       Decimal? @db.Decimal(10, 2)
+  precioUnitario Decimal? @db.Decimal(10, 2)
+  importe        Decimal? @db.Decimal(10, 2)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  gasto          Gasto    @relation(fields: [gastoId], references: [id], onDelete: Cascade)
+
+  @@index([gastoId])
+  @@index([descripcion])
 }
 
 model Cita {

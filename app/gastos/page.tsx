@@ -84,6 +84,11 @@ async function getGastos(filters: {
         hasta ? { fecha: { lt: hasta } } : {},
       ],
     },
+    include: {
+      _count: {
+        select: { lineas: true },
+      },
+    },
     orderBy: [{ fecha: "desc" }, { createdAt: "desc" }],
   });
 }
@@ -225,6 +230,7 @@ function GastosTable({ gastos }: { gastos: Gasto[] }) {
             <th className="px-4 py-3">Tipo</th>
             <th className="px-4 py-3">Número</th>
             <th className="px-4 py-3">Categoría</th>
+            <th className="px-4 py-3">Líneas</th>
             <th className="px-4 py-3 text-right">Base</th>
             <th className="px-4 py-3 text-right">IVA</th>
             <th className="px-4 py-3 text-right">Total</th>
@@ -252,6 +258,11 @@ function GastosTable({ gastos }: { gastos: Gasto[] }) {
                 <td className="px-4 py-4 text-neutral-700">{gasto.tipoDocumento || "-"}</td>
                 <td className="px-4 py-4 text-neutral-700">{gasto.numeroDocumento || "-"}</td>
                 <td className="px-4 py-4 text-neutral-700">{gasto.categoria || "-"}</td>
+                <td className="whitespace-nowrap px-4 py-4 text-neutral-700">
+                  {gasto._count.lineas === 1
+                    ? "1 línea"
+                    : `${gasto._count.lineas} líneas`}
+                </td>
                 <td className="px-4 py-4 text-right text-neutral-700">
                   {formatMoney(gasto.baseImponible)}
                 </td>
@@ -282,7 +293,7 @@ function GastosTable({ gastos }: { gastos: Gasto[] }) {
             ))
           ) : (
             <tr>
-              <td colSpan={9} className="px-4 py-8 text-center text-neutral-500">
+              <td colSpan={10} className="px-4 py-8 text-center text-neutral-500">
                 No hay gastos con esos filtros.
               </td>
             </tr>
