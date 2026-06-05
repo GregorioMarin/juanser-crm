@@ -92,6 +92,7 @@ model Cliente {
   presupuestos     Presupuesto[]
   pagosCuenta      PagoCuenta[]
   actividades      ActividadCliente[]
+  gastos           Gasto[]
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
 }
@@ -247,6 +248,32 @@ model ActividadProveedor {
 
   @@index([proveedorId])
   @@index([fecha])
+}
+
+model Gasto {
+  id              String    @id @default(cuid())
+  proveedor       String?
+  fecha           DateTime?
+  tipoDocumento   String?
+  numeroDocumento String?
+  categoria       String?
+  baseImponible   Decimal?  @db.Decimal(10, 2)
+  iva             Decimal?  @db.Decimal(10, 2)
+  total           Decimal?  @db.Decimal(10, 2)
+  formaPago       String?
+  descripcion     String?
+  observaciones   String?
+  archivoUrl      String?
+  clienteId       Int?
+  cliente         Cliente?  @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([proveedor])
+  @@index([fecha])
+  @@index([tipoDocumento])
+  @@index([categoria])
+  @@index([clienteId])
 }
 
 model Cita {

@@ -1,0 +1,510 @@
+"use server";
+
+import { randomUUID } from "crypto";
+import { mkdir, stat, unlink, writeFile } from "fs/promises";
+import path from "path";
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { prisma } from "@/app/lib/prisma";
+import {
+  categoriasGasto,
+  emptyGastoAnalizado,
+  formasPagoGasto,
+  GastoAnalizado,
+  tiposDocumentoGasto,
+} from "@/app/gastos/constants";
+
+export type AnalizarGastoState = {
+  status: "idle" | "success" | "error";
+  message: string | null;
+  archivoUrl: string | null;
+  fileName: string | null;
+  mimeType: string | null;
+  data: GastoAnalizado;
+};
+
+export type GastoFormState = {
+  status: "idle" | "error";
+  message: string | null;
+};
+
+const maxDocumentSize = 20 * 1024 * 1024;
+const allowedExtensions = ["jpg", "jpeg", "png", "webp", "pdf"] as const;
+const allowedMimeTypes = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "application/pdf",
+];
+
+function optionalString(formData: FormData, key: string) {
+  const value = formData.get(key);
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function requiredGastoId(formData: FormData) {
+  const id = optionalString(formData, "gastoId");
+  if (!id) {
+    throw new Error("Gasto no valido.");
+  }
+
+  return id;
+}
+
+function optionalDate(formData: FormData, key: string) {
+  const value = optionalString(formData, key);
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) {
+    throw new Error(`El campo ${key} debe ser una fecha valida.`);
+  }
+
+  return date;
+}
+
+function optionalDecimal(formData: FormData, key: string) {
+  const raw = optionalString(formData, key);
+  if (!raw) {
+    return null;
+  }
+
+  const normalized = raw.replace(",", ".");
+  if (!/^\d+(\.\d{1,2})?$/.test(normalized)) {
+    throw new Error(`El campo ${key} debe ser un importe decimal valido.`);
+  }
+
+  return Number(normalized).toFixed(2);
+}
+
+function optionValue<T extends readonly string[]>(
+  value: string | null,
+  options: T,
+  fallback: T[number] | null,
+) {
+  if (!value) {
+    return fallback;
+  }
+
+  return options.includes(value) ? value : fallback;
+}
+
+function optionalClienteId(formData: FormData) {
+  const raw = optionalString(formData, "clienteId");
+  if (!raw) {
+    return null;
+  }
+
+  const id = Number(raw);
+  if (!Number.isInteger(id) || id < 1) {
+    throw new Error("Cliente no valido.");
+  }
+
+  return id;
+}
+
+function gastoData(formData: FormData) {
+  const proveedor = optionalString(formData, "proveedor");
+  const total = optionalDecimal(formData, "total");
+  const allowIncomplete = formData.get("allowIncomplete") === "on";
+
+  if ((!proveedor || !total) && !allowIncomplete) {
+    throw new Error(
+      "Proveedor y total son obligatorios salvo confirmacion de guardado incompleto.",
+    );
+  }
+
+  return {
+    proveedor,
+    fecha: optionalDate(formData, "fecha"),
+    tipoDocumento: optionValue(
+      optionalString(formData, "tipoDocumento"),
+      tiposDocumentoGasto,
+      null,
+    ),
+    numeroDocumento: optionalString(formData, "numeroDocumento"),
+    categoria: optionValue(optionalString(formData, "categoria"), categoriasGasto, "Otros"),
+    baseImponible: optionalDecimal(formData, "baseImponible"),
+    iva: optionalDecimal(formData, "iva"),
+    total,
+    formaPago: optionValue(optionalString(formData, "formaPago"), formasPagoGasto, null),
+    descripcion: optionalString(formData, "descripcion"),
+    observaciones: optionalString(formData, "observaciones"),
+    archivoUrl: optionalString(formData, "archivoUrl"),
+    clienteId: optionalClienteId(formData),
+  };
+}
+
+function uploadsRootDir() {
+  return path.resolve(process.cwd(), "uploads");
+}
+
+function gastoUploadsDir(uploadId: string) {
+  return path.join(uploadsRootDir(), "gastos", uploadId);
+}
+
+function gastoUploadUrl(uploadId: string, fileName: string) {
+  return `/api/uploads/gastos/${uploadId}/${fileName}`;
+}
+
+function safeFileName(name: string) {
+  const baseName = name.replace(/\.[^.]+$/, "");
+  const safe = baseName
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+
+  return safe || "gasto";
+}
+
+function requiredDocumentFile(formData: FormData) {
+  const file = formData.get("archivo");
+  if (!(file instanceof File) || file.size === 0) {
+    throw new Error("Selecciona una imagen o PDF.");
+  }
+
+  if (file.size > maxDocumentSize) {
+    throw new Error("El archivo no puede superar 20 MB.");
+  }
+
+  const extension = file.name.split(".").pop()?.toLowerCase();
+  const validExtension =
+    extension &&
+    allowedExtensions.includes(extension as (typeof allowedExtensions)[number]);
+  const validMimeType = !file.type || allowedMimeTypes.includes(file.type);
+  if (!validExtension || !validMimeType) {
+    throw new Error("Solo se aceptan JPG, JPEG, PNG, WEBP o PDF.");
+  }
+
+  return { file, extension };
+}
+
+async function saveGastoFile(file: File, extension: string) {
+  const uploadId = randomUUID();
+  const fileName = `${Date.now()}-${safeFileName(file.name)}.${extension}`;
+  const uploadDir = gastoUploadsDir(uploadId);
+  const filePath = path.join(uploadDir, fileName);
+  const archivoUrl = gastoUploadUrl(uploadId, fileName);
+
+  await mkdir(uploadDir, { recursive: true });
+  const buffer = Buffer.from(await file.arrayBuffer());
+  await writeFile(filePath, buffer);
+
+  const savedFile = await stat(filePath);
+  if (!savedFile.isFile() || savedFile.size === 0) {
+    throw new Error("El archivo no se ha guardado correctamente.");
+  }
+
+  return { archivoUrl, buffer };
+}
+
+function uploadFilePathFromUrl(url: string) {
+  const prefix = "/api/uploads/gastos/";
+  if (!url.startsWith(prefix) || url.includes("\\") || url.includes("..")) {
+    return null;
+  }
+
+  const relativePath = url.replace(/^\/api\/uploads\//, "");
+  const rootDir = uploadsRootDir();
+  const filePath = path.resolve(rootDir, relativePath);
+  const relativeToRoot = path.relative(rootDir, filePath);
+
+  if (relativeToRoot.startsWith("..") || path.isAbsolute(relativeToRoot)) {
+    return null;
+  }
+
+  return filePath;
+}
+
+function normalizeAnalysis(input: Partial<GastoAnalizado>): GastoAnalizado {
+  const value = (key: keyof GastoAnalizado) =>
+    typeof input[key] === "string" ? input[key]?.trim() ?? "" : "";
+  const validTipo = value("tipoDocumento");
+  const validCategoria = value("categoria");
+
+  return {
+    proveedor: value("proveedor"),
+    fecha: value("fecha"),
+    tipoDocumento: tiposDocumentoGasto.includes(
+      validTipo as (typeof tiposDocumentoGasto)[number],
+    )
+      ? validTipo
+      : "",
+    numeroDocumento: value("numeroDocumento"),
+    categoria: categoriasGasto.includes(
+      validCategoria as (typeof categoriasGasto)[number],
+    )
+      ? validCategoria
+      : "",
+    baseImponible: value("baseImponible").replace(",", "."),
+    iva: value("iva").replace(",", "."),
+    total: value("total").replace(",", "."),
+    formaPago: value("formaPago"),
+    descripcion: value("descripcion"),
+    observaciones: value("observaciones"),
+  };
+}
+
+function extractJson(text: string) {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1];
+  const candidate = fenced ?? text;
+  const start = candidate.indexOf("{");
+  const end = candidate.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) {
+    throw new Error("La IA no devolvio un JSON valido.");
+  }
+
+  return JSON.parse(candidate.slice(start, end + 1)) as Partial<GastoAnalizado>;
+}
+
+function collectTextValues(value: unknown): string[] {
+  if (!value || typeof value !== "object") {
+    return [];
+  }
+
+  if (
+    "type" in value &&
+    value.type === "output_text" &&
+    "text" in value &&
+    typeof value.text === "string"
+  ) {
+    return [value.text];
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap(collectTextValues);
+  }
+
+  return Object.values(value).flatMap(collectTextValues);
+}
+
+async function analyzeWithOpenAI(file: File, buffer: Buffer) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY no esta configurada.");
+  }
+
+  const base64 = buffer.toString("base64");
+  const isPdf = file.type === "application/pdf";
+  const prompt = `Extrae datos de este documento de compra de Carpinteria Juanser.
+Devuelve solo JSON estricto con estas claves: proveedor, fecha, tipoDocumento, numeroDocumento, categoria, baseImponible, iva, total, formaPago, descripcion, observaciones.
+Reglas: si un dato no se ve claro deja string vacio; no inventes; fecha en YYYY-MM-DD si aparece; importes con punto decimal; tipoDocumento solo factura, albaran, ticket u otro; categoria solo una de: ${categoriasGasto.join(", ")}.`;
+
+  const fileContent = isPdf
+    ? {
+        type: "input_file",
+        filename: file.name,
+        file_data: `data:application/pdf;base64,${base64}`,
+      }
+    : {
+        type: "input_image",
+        image_url: `data:${file.type || "image/jpeg"};base64,${base64}`,
+      };
+
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: process.env.OPENAI_GASTOS_MODEL ?? "gpt-4.1-mini",
+      input: [
+        {
+          role: "user",
+          content: [{ type: "input_text", text: prompt }, fileContent],
+        },
+      ],
+      text: {
+        format: {
+          type: "json_schema",
+          name: "gasto_documento",
+          strict: true,
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              proveedor: { type: "string" },
+              fecha: { type: "string" },
+              tipoDocumento: { type: "string" },
+              numeroDocumento: { type: "string" },
+              categoria: { type: "string" },
+              baseImponible: { type: "string" },
+              iva: { type: "string" },
+              total: { type: "string" },
+              formaPago: { type: "string" },
+              descripcion: { type: "string" },
+              observaciones: { type: "string" },
+            },
+            required: [
+              "proveedor",
+              "fecha",
+              "tipoDocumento",
+              "numeroDocumento",
+              "categoria",
+              "baseImponible",
+              "iva",
+              "total",
+              "formaPago",
+              "descripcion",
+              "observaciones",
+            ],
+          },
+        },
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`OpenAI no pudo analizar el documento: ${errorText}`);
+  }
+
+  const payload = (await response.json()) as { output_text?: string };
+  const outputText = payload.output_text ?? collectTextValues(payload)[0];
+  if (!outputText) {
+    throw new Error("La IA no devolvio contenido legible.");
+  }
+
+  return normalizeAnalysis(extractJson(outputText));
+}
+
+export async function analizarDocumentoGasto(
+  _state: AnalizarGastoState,
+  formData: FormData,
+): Promise<AnalizarGastoState> {
+  try {
+    const { file, extension } = requiredDocumentFile(formData);
+    const { archivoUrl, buffer } = await saveGastoFile(file, extension);
+
+    try {
+      const data = await analyzeWithOpenAI(file, buffer);
+      return {
+        status: "success",
+        message: "Documento analizado. Revisa los datos antes de guardar.",
+        archivoUrl,
+        fileName: file.name,
+        mimeType: file.type || null,
+        data,
+      };
+    } catch (error) {
+      return {
+        status: "error",
+        message:
+          error instanceof Error
+            ? `${error.message} Puedes completar el formulario manualmente.`
+            : "No se pudo analizar el documento. Puedes completar el formulario manualmente.",
+        archivoUrl,
+        fileName: file.name,
+        mimeType: file.type || null,
+        data: emptyGastoAnalizado,
+      };
+    }
+  } catch (error) {
+    return {
+      status: "error",
+      message:
+        error instanceof Error
+          ? error.message
+          : "No se pudo subir el documento.",
+      archivoUrl: null,
+      fileName: null,
+      mimeType: null,
+      data: emptyGastoAnalizado,
+    };
+  }
+}
+
+export async function createGasto(
+  _state: GastoFormState,
+  formData: FormData,
+): Promise<GastoFormState> {
+  let gastoId: string | null = null;
+  try {
+    const gasto = await prisma.gasto.create({
+      data: gastoData(formData),
+    });
+    gastoId = gasto.id;
+
+    revalidatePath("/");
+    revalidatePath("/gastos");
+  } catch (error) {
+    return {
+      status: "error",
+      message:
+        error instanceof Error ? error.message : "No se pudo guardar el gasto.",
+    };
+  }
+
+  redirect(`/gastos/${gastoId}`);
+}
+
+export async function updateGasto(
+  _state: GastoFormState,
+  formData: FormData,
+): Promise<GastoFormState> {
+  let gastoId: string | null = null;
+  try {
+    const id = requiredGastoId(formData);
+    gastoId = id;
+    await prisma.gasto.update({
+      where: { id },
+      data: gastoData(formData),
+    });
+
+    revalidatePath("/");
+    revalidatePath("/gastos");
+    revalidatePath(`/gastos/${id}`);
+  } catch (error) {
+    return {
+      status: "error",
+      message:
+        error instanceof Error ? error.message : "No se pudo actualizar el gasto.",
+    };
+  }
+
+  redirect(`/gastos/${gastoId}`);
+}
+
+export async function deleteGasto(formData: FormData) {
+  const id = requiredGastoId(formData);
+  const gasto = await prisma.gasto.findUnique({
+    where: { id },
+    select: { id: true, archivoUrl: true },
+  });
+  if (!gasto) {
+    throw new Error("Gasto no encontrado.");
+  }
+
+  if (gasto.archivoUrl) {
+    const usos = await prisma.gasto.count({
+      where: {
+        archivoUrl: gasto.archivoUrl,
+        NOT: { id },
+      },
+    });
+    const filePath = usos === 0 ? uploadFilePathFromUrl(gasto.archivoUrl) : null;
+    if (filePath) {
+      await unlink(filePath).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== "ENOENT") {
+          throw error;
+        }
+      });
+    }
+  }
+
+  await prisma.gasto.delete({ where: { id } });
+
+  revalidatePath("/");
+  revalidatePath("/gastos");
+  redirect("/gastos");
+}

@@ -21,6 +21,17 @@ async function getActividadReciente() {
 
 type ActividadReciente = Awaited<ReturnType<typeof getActividadReciente>>;
 
+async function getGastosMesActual() {
+  const now = new Date();
+  const from = new Date(now.getFullYear(), now.getMonth(), 1);
+  const to = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+  return prisma.gasto.aggregate({
+    where: { fecha: { gte: from, lt: to } },
+    _sum: { total: true },
+  });
+}
+
 function formatDateTime(date: Date) {
   return new Intl.DateTimeFormat("es-ES", {
     day: "2-digit",
@@ -29,6 +40,14 @@ function formatDateTime(date: Date) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+function formatMoney(value?: { toString(): string } | null) {
+  const number = value ? Number(value.toString()) : 0;
+  return new Intl.NumberFormat("es-ES", {
+    style: "currency",
+    currency: "EUR",
+  }).format(number);
 }
 
 function ActividadRecienteCard({
@@ -81,10 +100,40 @@ function ActividadRecienteCard({
   );
 }
 
+function GastosMesCard({
+  total,
+}: {
+  total?: { toString(): string } | null;
+}) {
+  return (
+    <section className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-neutral-950">
+            GASTOS DEL MES
+          </h2>
+          <p className="mt-1 text-2xl font-semibold text-neutral-950">
+            {formatMoney(total)}
+          </p>
+        </div>
+        <Link
+          href="/gastos"
+          className="inline-flex h-10 items-center justify-center rounded-md border border-neutral-300 bg-white px-4 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
+        >
+          Ver gastos
+        </Link>
+      </div>
+    </section>
+  );
+}
+
 export default async function Home() {
   await connection();
 
-  const actividades = await getActividadReciente();
+  const [actividades, gastosMes] = await Promise.all([
+    getActividadReciente(),
+    getGastosMesActual(),
+  ]);
 
   return (
     <main className="min-h-screen bg-neutral-100 px-5 py-6 text-neutral-950 sm:px-8">
@@ -135,6 +184,12 @@ export default async function Home() {
               Proveedores
             </Link>
             <Link
+              href="/gastos"
+              className="inline-flex h-11 items-center justify-center rounded-md border border-neutral-300 bg-white px-5 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
+            >
+              Gastos y Compras
+            </Link>
+            <Link
               href="/trabajos"
               className="inline-flex h-11 items-center justify-center rounded-md border border-neutral-300 bg-white px-5 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
             >
@@ -150,6 +205,8 @@ export default async function Home() {
             </form>
           </div>
         </header>
+
+        <GastosMesCard total={gastosMes._sum.total} />
 
         <ActividadRecienteCard actividades={actividades} />
       </div>
