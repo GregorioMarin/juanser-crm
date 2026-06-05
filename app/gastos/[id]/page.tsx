@@ -32,6 +32,14 @@ function formatMoney(value?: { toString(): string } | null) {
   }).format(number);
 }
 
+function isSerreriaAlmeriense(proveedor?: string | null) {
+  return proveedor
+    ?.normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .includes("serreria almeriense") ?? false;
+}
+
 function DetailItem({
   label,
   value,
@@ -73,6 +81,7 @@ export default async function GastoPage({ params }: GastoPageProps) {
   }
 
   const archivoEsImagen = /\.(jpe?g|png|webp)$/i.test(gasto.archivoUrl ?? "");
+  const serreriaFormat = isSerreriaAlmeriense(gasto.proveedor);
 
   return (
     <main className="min-h-screen bg-neutral-100 px-5 py-6 text-neutral-950 sm:px-8">
@@ -150,15 +159,22 @@ export default async function GastoPage({ params }: GastoPageProps) {
             </span>
           </div>
           <div className="overflow-x-auto rounded-md border border-neutral-200">
-            <table className="w-full min-w-[1080px] border-collapse text-left text-sm">
+            <table className="w-full min-w-[820px] border-collapse text-left text-sm">
               <thead className="bg-neutral-100 text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
                 <tr>
                   <th className="px-4 py-3">Descripción</th>
-                  <th className="px-4 py-3 text-right">Cantidad</th>
-                  <th className="px-4 py-3 text-right">Precio unitario</th>
-                  <th className="px-4 py-3 text-right">Piezas</th>
-                  <th className="px-4 py-3 text-right">Medida</th>
-                  <th className="px-4 py-3 text-right">Precio/medida</th>
+                  {serreriaFormat ? (
+                    <>
+                      <th className="px-4 py-3 text-right">Piezas</th>
+                      <th className="px-4 py-3 text-right">Medida</th>
+                      <th className="px-4 py-3 text-right">Precio/medida</th>
+                    </>
+                  ) : (
+                    <>
+                      <th className="px-4 py-3 text-right">Cantidad</th>
+                      <th className="px-4 py-3 text-right">Precio unitario</th>
+                    </>
+                  )}
                   <th className="px-4 py-3 text-right">Importe</th>
                 </tr>
               </thead>
@@ -169,21 +185,28 @@ export default async function GastoPage({ params }: GastoPageProps) {
                       <td className="px-4 py-4 font-medium text-neutral-950">
                         {linea.descripcion}
                       </td>
-                      <td className="px-4 py-4 text-right text-neutral-700">
-                        {linea.cantidad?.toString() ?? "-"}
-                      </td>
-                      <td className="px-4 py-4 text-right text-neutral-700">
-                        {formatMoney(linea.precioUnitario)}
-                      </td>
-                      <td className="px-4 py-4 text-right text-neutral-700">
-                        {linea.piezas?.toString() ?? "-"}
-                      </td>
-                      <td className="px-4 py-4 text-right text-neutral-700">
-                        {linea.medida?.toString() ?? "-"}
-                      </td>
-                      <td className="px-4 py-4 text-right text-neutral-700">
-                        {linea.precioUnidadMedida?.toString() ?? "-"}
-                      </td>
+                      {serreriaFormat ? (
+                        <>
+                          <td className="px-4 py-4 text-right text-neutral-700">
+                            {linea.piezas?.toString() ?? "-"}
+                          </td>
+                          <td className="px-4 py-4 text-right text-neutral-700">
+                            {linea.medida?.toString() ?? "-"}
+                          </td>
+                          <td className="px-4 py-4 text-right text-neutral-700">
+                            {linea.precioUnidadMedida?.toString() ?? "-"}
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="px-4 py-4 text-right text-neutral-700">
+                            {linea.cantidad?.toString() ?? "-"}
+                          </td>
+                          <td className="px-4 py-4 text-right text-neutral-700">
+                            {formatMoney(linea.precioUnitario)}
+                          </td>
+                        </>
+                      )}
                       <td className="px-4 py-4 text-right font-semibold text-neutral-950">
                         {formatMoney(linea.importe)}
                       </td>
@@ -191,7 +214,10 @@ export default async function GastoPage({ params }: GastoPageProps) {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={7} className="px-4 py-6 text-center text-neutral-500">
+                    <td
+                      colSpan={serreriaFormat ? 5 : 4}
+                      className="px-4 py-6 text-center text-neutral-500"
+                    >
                       Este gasto todavía no tiene líneas de artículos.
                     </td>
                   </tr>

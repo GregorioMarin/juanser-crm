@@ -22,21 +22,36 @@ const inputClass =
 
 const labelClass = "text-sm font-medium text-neutral-700";
 
-type FormLinea = GastoLineaAnalizada & {
+type FormLinea = {
   key: string;
   id?: string;
+  descripcion: string;
+  cantidad: string;
+  precioUnitario: string;
+  piezas: string;
+  medida: string;
+  precioUnidadMedida: string;
+  importe: string;
 };
 
-function dateValue(date?: Date | string | null) {
-  if (!date) {
-    return "";
-  }
+function isSerreriaAlmeriense(proveedor: string) {
+  return proveedor
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .includes("serreria almeriense");
+}
 
-  return new Date(date).toISOString().slice(0, 10);
+function dateValue(date?: Date | string | null) {
+  return date ? new Date(date).toISOString().slice(0, 10) : "";
 }
 
 function moneyValue(value?: { toString(): string } | string | null) {
   return value?.toString() ?? "";
+}
+
+function textValue(value?: string | null) {
+  return value ?? "";
 }
 
 function Field({
@@ -136,12 +151,12 @@ function valuesFromGasto(gasto?: GastoEditable | null): GastoAnalizado {
       gasto.lineas?.map((linea) => ({
         id: linea.id,
         descripcion: linea.descripcion,
-        cantidad: moneyValue(linea.cantidad),
-        precioUnitario: moneyValue(linea.precioUnitario),
-        piezas: moneyValue(linea.piezas),
-        medida: moneyValue(linea.medida),
-        precioUnidadMedida: moneyValue(linea.precioUnidadMedida),
-        importe: moneyValue(linea.importe),
+        cantidad: moneyValue(linea.cantidad) || null,
+        precioUnitario: moneyValue(linea.precioUnitario) || null,
+        piezas: moneyValue(linea.piezas) || null,
+        medida: moneyValue(linea.medida) || null,
+        precioUnidadMedida: moneyValue(linea.precioUnidadMedida) || null,
+        importe: moneyValue(linea.importe) || null,
       })) ?? [],
   };
 }
@@ -149,23 +164,45 @@ function valuesFromGasto(gasto?: GastoEditable | null): GastoAnalizado {
 function initialLineas(data?: GastoAnalizado, gasto?: GastoEditable | null) {
   const source = data?.lineas ?? valuesFromGasto(gasto).lineas;
 
-  return source.map((linea, index) => ({
+  return source.map((linea, index): FormLinea => ({
     key: linea.id ?? `linea-${index}-${Date.now()}`,
     id: linea.id,
     descripcion: linea.descripcion,
-    cantidad: linea.cantidad,
-    precioUnitario: linea.precioUnitario,
-    piezas: linea.piezas,
-    medida: linea.medida,
-    precioUnidadMedida: linea.precioUnidadMedida,
-    importe: linea.importe,
+    cantidad: textValue(linea.cantidad),
+    precioUnitario: textValue(linea.precioUnitario),
+    piezas: textValue(linea.piezas),
+    medida: textValue(linea.medida),
+    precioUnidadMedida: textValue(linea.precioUnidadMedida),
+    importe: textValue(linea.importe),
   }));
+}
+
+function DecimalInput({
+  name,
+  value,
+  onChange,
+}: {
+  name: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <input
+      className={inputClass}
+      name={name}
+      inputMode="decimal"
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+    />
+  );
 }
 
 function LineasTable({
   initial,
+  serreriaFormat,
 }: {
   initial: FormLinea[];
+  serreriaFormat: boolean;
 }) {
   const [lineas, setLineas] = useState<FormLinea[]>(initial);
 
@@ -212,15 +249,22 @@ function LineasTable({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1180px] border-collapse text-left text-sm">
+        <table className="w-full min-w-[900px] border-collapse text-left text-sm">
           <thead className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
             <tr>
               <th className="px-2 py-2">Descripción</th>
-              <th className="px-2 py-2">Cantidad</th>
-              <th className="px-2 py-2">Precio unitario</th>
-              <th className="px-2 py-2">Piezas</th>
-              <th className="px-2 py-2">Medida</th>
-              <th className="px-2 py-2">Precio/medida</th>
+              {serreriaFormat ? (
+                <>
+                  <th className="px-2 py-2">Piezas</th>
+                  <th className="px-2 py-2">Medida</th>
+                  <th className="px-2 py-2">Precio/medida</th>
+                </>
+              ) : (
+                <>
+                  <th className="px-2 py-2">Cantidad</th>
+                  <th className="px-2 py-2">Precio unitario</th>
+                </>
+              )}
               <th className="px-2 py-2">Importe</th>
               <th className="px-2 py-2 text-right">Acciones</th>
             </tr>
@@ -247,76 +291,57 @@ function LineasTable({
                     placeholder="Producto o material"
                   />
                 </td>
+                {serreriaFormat ? (
+                  <>
+                    <td className="px-2 py-2">
+                      <DecimalInput
+                        name={`linea-${linea.key}-piezas`}
+                        value={linea.piezas}
+                        onChange={(value) => updateLinea(index, "piezas", value)}
+                      />
+                    </td>
+                    <td className="px-2 py-2">
+                      <DecimalInput
+                        name={`linea-${linea.key}-medida`}
+                        value={linea.medida}
+                        onChange={(value) => updateLinea(index, "medida", value)}
+                      />
+                    </td>
+                    <td className="px-2 py-2">
+                      <DecimalInput
+                        name={`linea-${linea.key}-precioUnidadMedida`}
+                        value={linea.precioUnidadMedida}
+                        onChange={(value) =>
+                          updateLinea(index, "precioUnidadMedida", value)
+                        }
+                      />
+                    </td>
+                  </>
+                ) : (
+                  <>
+                    <td className="px-2 py-2">
+                      <DecimalInput
+                        name={`linea-${linea.key}-cantidad`}
+                        value={linea.cantidad}
+                        onChange={(value) => updateLinea(index, "cantidad", value)}
+                      />
+                    </td>
+                    <td className="px-2 py-2">
+                      <DecimalInput
+                        name={`linea-${linea.key}-precioUnitario`}
+                        value={linea.precioUnitario}
+                        onChange={(value) =>
+                          updateLinea(index, "precioUnitario", value)
+                        }
+                      />
+                    </td>
+                  </>
+                )}
                 <td className="px-2 py-2">
-                  <input
-                    className={inputClass}
-                    name={`linea-${linea.key}-cantidad`}
-                    type="number"
-                    step="0.01"
-                    value={linea.cantidad}
-                    onChange={(event) =>
-                      updateLinea(index, "cantidad", event.target.value)
-                    }
-                  />
-                </td>
-                <td className="px-2 py-2">
-                  <input
-                    className={inputClass}
-                    name={`linea-${linea.key}-piezas`}
-                    type="number"
-                    step="0.01"
-                    value={linea.piezas}
-                    onChange={(event) =>
-                      updateLinea(index, "piezas", event.target.value)
-                    }
-                  />
-                </td>
-                <td className="px-2 py-2">
-                  <input
-                    className={inputClass}
-                    name={`linea-${linea.key}-medida`}
-                    type="number"
-                    step="0.001"
-                    value={linea.medida}
-                    onChange={(event) =>
-                      updateLinea(index, "medida", event.target.value)
-                    }
-                  />
-                </td>
-                <td className="px-2 py-2">
-                  <input
-                    className={inputClass}
-                    name={`linea-${linea.key}-precioUnidadMedida`}
-                    type="number"
-                    step="0.001"
-                    value={linea.precioUnidadMedida}
-                    onChange={(event) =>
-                      updateLinea(index, "precioUnidadMedida", event.target.value)
-                    }
-                  />
-                </td>
-                <td className="px-2 py-2">
-                  <input
-                    className={inputClass}
-                    name={`linea-${linea.key}-precioUnitario`}
-                    type="number"
-                    step="0.01"
-                    value={linea.precioUnitario}
-                    onChange={(event) =>
-                      updateLinea(index, "precioUnitario", event.target.value)
-                    }
-                  />
-                </td>
-                <td className="px-2 py-2">
-                  <input
-                    className={inputClass}
+                  <DecimalInput
                     name={`linea-${linea.key}-importe`}
-                    type="number"
-                    step="0.01"
                     value={linea.importe}
-                    onChange={(event) =>
-                      updateLinea(index, "importe", event.target.value)
-                    }
+                    onChange={(value) => updateLinea(index, "importe", value)}
                   />
                 </td>
                 <td className="px-2 py-2 text-right">
@@ -366,8 +391,10 @@ export function GastoForm({
   const [state, formAction, pending] = useActionState(action, initialGastoFormState);
   const allowIncompleteRef = useRef<HTMLInputElement>(null);
   const values = data ?? valuesFromGasto(gasto);
+  const [proveedor, setProveedor] = useState(values.proveedor);
   const fileUrl = archivoUrl ?? gasto?.archivoUrl ?? "";
   const lineas = initialLineas(data, gasto);
+  const serreriaFormat = isSerreriaAlmeriense(proveedor);
 
   return (
     <form
@@ -376,11 +403,11 @@ export function GastoForm({
       onSubmit={(event) => {
         const form = event.currentTarget;
         const formData = new FormData(form);
-        const proveedor = formData.get("proveedor");
+        const proveedorValue = formData.get("proveedor");
         const total = formData.get("total");
         const isIncomplete =
-          typeof proveedor !== "string" ||
-          proveedor.trim() === "" ||
+          typeof proveedorValue !== "string" ||
+          proveedorValue.trim() === "" ||
           typeof total !== "string" ||
           total.trim() === "";
 
@@ -412,7 +439,15 @@ export function GastoForm({
           Datos generales
         </h3>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <Field label="Proveedor" name="proveedor" defaultValue={values.proveedor} />
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>Proveedor</span>
+            <input
+              className={inputClass}
+              name="proveedor"
+              value={proveedor}
+              onChange={(event) => setProveedor(event.target.value)}
+            />
+          </label>
           <Field label="Fecha" name="fecha" type="date" defaultValue={values.fecha} />
           <SelectField
             label="Tipo de documento"
@@ -474,7 +509,7 @@ export function GastoForm({
         </label>
       </section>
 
-      <LineasTable initial={lineas} />
+      <LineasTable initial={lineas} serreriaFormat={serreriaFormat} />
 
       {state.message ? (
         <p className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-900">

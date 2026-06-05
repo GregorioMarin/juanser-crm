@@ -47,12 +47,12 @@ export type GastoAnalizado = {
 export type GastoLineaAnalizada = {
   id?: string;
   descripcion: string;
-  cantidad: string;
-  precioUnitario: string;
-  piezas: string;
-  medida: string;
-  precioUnidadMedida: string;
-  importe: string;
+  cantidad: string | null;
+  precioUnitario: string | null;
+  piezas: string | null;
+  medida: string | null;
+  precioUnidadMedida: string | null;
+  importe: string | null;
 };
 
 export const emptyGastoAnalizado: GastoAnalizado = {

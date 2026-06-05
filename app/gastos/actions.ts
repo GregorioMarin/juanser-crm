@@ -38,6 +38,14 @@ const allowedMimeTypes = [
   "application/pdf",
 ];
 
+function isSerreriaAlmeriense(proveedor: string | null) {
+  return proveedor
+    ?.normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .includes("serreria almeriense") ?? false;
+}
+
 function optionalString(formData: FormData, key: string) {
   const value = formData.get(key);
   if (typeof value !== "string") {
@@ -162,6 +170,8 @@ function gastoData(formData: FormData) {
 }
 
 function lineasData(formData: FormData) {
+  const proveedor = optionalString(formData, "proveedor");
+  const useSerreriaFormat = isSerreriaAlmeriense(proveedor);
   const indexes = formData
     .getAll("lineaIndex")
     .filter((value): value is string => typeof value === "string");
@@ -170,14 +180,18 @@ function lineasData(formData: FormData) {
     .map((index) => {
       const id = optionalString(formData, `linea-${index}-id`);
       const descripcion = optionalString(formData, `linea-${index}-descripcion`);
-      const cantidad = optionalDecimalFromValue(
-        optionalString(formData, `linea-${index}-cantidad`),
-        "Cantidad de linea",
-      );
-      const precioUnitario = optionalDecimalFromValue(
-        optionalString(formData, `linea-${index}-precioUnitario`),
-        "Precio unitario de linea",
-      );
+      const cantidad = useSerreriaFormat
+        ? null
+        : optionalDecimalFromValue(
+            optionalString(formData, `linea-${index}-cantidad`),
+            "Cantidad de linea",
+          );
+      const precioUnitario = useSerreriaFormat
+        ? null
+        : optionalDecimalFromValue(
+            optionalString(formData, `linea-${index}-precioUnitario`),
+            "Precio unitario de linea",
+          );
       const piezas = optionalDecimalFromValue(
         optionalString(formData, `linea-${index}-piezas`),
         "Piezas de linea",
@@ -211,6 +225,12 @@ function lineasData(formData: FormData) {
 
       if (!descripcion) {
         throw new Error("Cada linea de gasto debe tener descripcion.");
+      }
+
+      if (useSerreriaFormat && (!piezas || !medida || !precioUnidadMedida || !importe)) {
+        throw new Error(
+          "Las lineas de Serrería Almeriense deben tener piezas, medida, precio/medida e importe.",
+        );
       }
 
       return {
@@ -325,9 +345,13 @@ function normalizeLineas(input: unknown): GastoLineaAnalizada[] {
 
       const record = linea as Partial<Record<keyof GastoLineaAnalizada, unknown>>;
       const value = (key: keyof GastoLineaAnalizada) =>
-        typeof record[key] === "string" ? record[key].trim().replace(",", ".") : "";
+        typeof record[key] === "string"
+          ? record[key].trim().replace(",", ".")
+          : null;
+      const textValue = (key: keyof GastoLineaAnalizada) =>
+        typeof record[key] === "string" ? record[key].trim() : "";
 
-      const descripcion = value("descripcion");
+      const descripcion = textValue("descripcion");
       const cantidad = value("cantidad");
       const precioUnitario = value("precioUnitario");
       const piezas = value("piezas");
@@ -434,7 +458,7 @@ async function analyzeWithOpenAI(file: File, buffer: Buffer) {
 Devuelve solo JSON estricto con estas claves: proveedor, fecha, tipoDocumento, numeroDocumento, categoria, baseImponible, iva, total, formaPago, descripcion, observaciones, lineas.
 Reglas generales: si un dato no se ve claro deja string vacio; no inventes; fecha en YYYY-MM-DD si aparece; importes con punto decimal; tipoDocumento solo factura, albaran, ticket u otro; categoria solo una de: ${categoriasGasto.join(", ")}.
 Reglas de lineas: cada articulo o material comprado debe ser un objeto separado en lineas; no concatenes productos en descripcion; si hay 3 articulos devuelve 3 lineas; extrae cantidad, precioUnitario e importe si aparecen.
-Reglas especificas para proveedor Serrería Almeriense o Serreria Almeriense: sus lineas suelen traer descripcion, medida del tablero, piezas, medida, neto, importe e IVA. En ese proveedor, "Piezas" es el numero de unidades fisicas y debe ir en piezas; "Medida" normalmente son m2 totales y debe ir en medida; "Neto" normalmente es precio por m2 y debe ir en precioUnidadMedida; "Importe" es medida x neto y debe ir en importe. No interpretes Neto como precio por pieza. No calcules precioUnitario por tablero salvo que aparezca expresamente. Si Medida x Neto se aproxima a Importe, confirma esa interpretacion. Para otros proveedores usa cantidad y precioUnitario cuando corresponda.`;
+Reglas especificas para proveedor Serrería Almeriense o Serreria Almeriense: usa siempre el formato especifico de lineas con descripcion, piezas, medida, precioUnidadMedida e importe. Devuelve cantidad=null y precioUnitario=null. "Piezas" es el numero de tableros o unidades fisicas y debe ir en piezas. "Medida" NO es precio; normalmente son m2 totales o medida total de la linea y debe ir en medida. "Neto" normalmente es precio por m2 o por unidad de medida y debe ir en precioUnidadMedida. "Importe" es medida x precioUnidadMedida y debe ir en importe. No interpretes Neto como precio por pieza. No devuelvas cantidad=medida ni precioUnitario=piezas. No calcules precioUnitario por tablero salvo que aparezca expresamente. Si Medida x Neto se aproxima a Importe, confirma esa interpretacion. Ejemplo: piezas=4, medida=23.940, precioUnidadMedida=10.384, importe=248.59. Para otros proveedores usa cantidad y precioUnitario cuando corresponda.`;
 
   const fileContent = isPdf
     ? {
@@ -488,12 +512,12 @@ Reglas especificas para proveedor Serrería Almeriense o Serreria Almeriense: su
                   additionalProperties: false,
                   properties: {
                     descripcion: { type: "string" },
-                    cantidad: { type: "string" },
-                    precioUnitario: { type: "string" },
-                    piezas: { type: "string" },
-                    medida: { type: "string" },
-                    precioUnidadMedida: { type: "string" },
-                    importe: { type: "string" },
+                    cantidad: { type: ["string", "null"] },
+                    precioUnitario: { type: ["string", "null"] },
+                    piezas: { type: ["string", "null"] },
+                    medida: { type: ["string", "null"] },
+                    precioUnidadMedida: { type: ["string", "null"] },
+                    importe: { type: ["string", "null"] },
                   },
                   required: [
                     "descripcion",
