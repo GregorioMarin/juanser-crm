@@ -45,6 +45,11 @@ function parseDecimal(value: string, key: string) {
   return normalized;
 }
 
+function optionalDecimal(formData: FormData, key: string, fallback = "0") {
+  const value = optionalString(formData, key);
+  return value ? parseDecimal(value, key) : fallback;
+}
+
 function requiredDecimal(formData: FormData, key: string) {
   return parseDecimal(requiredString(formData, key), key);
 }
@@ -84,6 +89,67 @@ function presupuestoEstado(formData: FormData) {
 
 function roundCurrency(value: number) {
   return Math.round(value * 100) / 100;
+}
+
+export type PresupuestoCostesState = {
+  status: "idle" | "success" | "error";
+  message: string | null;
+};
+
+function costeMaterialesData(formData: FormData) {
+  const indexes = formData
+    .getAll("costeMaterialIndex")
+    .filter((value): value is string => typeof value === "string");
+
+  return indexes
+    .map((index) => {
+      const materialId = optionalString(formData, `costeMaterial-${index}-materialId`);
+      const descripcion = optionalString(
+        formData,
+        `costeMaterial-${index}-descripcion`,
+      );
+      const cantidadRaw = optionalString(formData, `costeMaterial-${index}-cantidad`);
+      const precioRaw = optionalString(formData, `costeMaterial-${index}-precioCoste`);
+
+      if (!materialId && !descripcion && !cantidadRaw && !precioRaw) {
+        return null;
+      }
+
+      const cantidad = parseDecimal(cantidadRaw ?? "1", "cantidad material");
+      const precioCoste = parseDecimal(precioRaw ?? "0", "precio coste");
+      const subtotal = roundCurrency(Number(cantidad) * Number(precioCoste));
+
+      return {
+        materialId,
+        descripcion: descripcion ?? "Material pendiente",
+        cantidad,
+        precioCoste,
+        subtotal: subtotal.toFixed(2),
+      };
+    })
+    .filter((linea): linea is NonNullable<typeof linea> => linea !== null);
+}
+
+function otrosCostesData(formData: FormData) {
+  const indexes = formData
+    .getAll("otroCosteIndex")
+    .filter((value): value is string => typeof value === "string");
+
+  return indexes
+    .map((index) => {
+      const descripcion = optionalString(formData, `otroCoste-${index}-descripcion`);
+      const importeRaw = optionalString(formData, `otroCoste-${index}-importe`);
+
+      if (!descripcion && !importeRaw) {
+        return null;
+      }
+
+      return {
+        descripcion: descripcion ?? "Coste pendiente",
+        importe: parseDecimal(importeRaw ?? "0", "importe de otro coste"),
+      };
+    })
+    .filter((linea): linea is NonNullable<typeof linea> => linea !== null);
 }
 
 function presupuestoLineasData(formData: FormData) {
@@ -284,6 +350,72 @@ export async function updatePresupuesto(formData: FormData) {
   revalidatePath(`/presupuestos/${presupuestoId}/pdf/ver`);
 
   redirect(safeReturnTo(formData, `/clientes/${presupuesto.clienteId}`));
+}
+
+export async function updatePresupuestoCostes(
+  _state: PresupuestoCostesState,
+  formData: FormData,
+): Promise<PresupuestoCostesState> {
+  try {
+    const presupuestoId = requiredId(formData, "presupuestoId");
+    const presupuesto = await prisma.presupuesto.findUnique({
+      where: { id: presupuestoId },
+      select: { clienteId: true },
+    });
+    if (!presupuesto) {
+      throw new Error("Presupuesto no encontrado.");
+    }
+
+    const materiales = costeMaterialesData(formData);
+    const otrosCostes = otrosCostesData(formData);
+
+    await prisma.$transaction([
+      prisma.presupuesto.update({
+        where: { id: presupuestoId },
+        data: {
+          costeHorasEstimadas: optionalDecimal(formData, "costeHorasEstimadas"),
+          costeHora: optionalDecimal(formData, "costeHora"),
+          costeTransporte: optionalDecimal(formData, "costeTransporte"),
+          costeMontaje: optionalDecimal(formData, "costeMontaje"),
+        },
+      }),
+      prisma.presupuestoCosteMaterial.deleteMany({
+        where: { presupuestoId },
+      }),
+      prisma.presupuestoCosteOtro.deleteMany({
+        where: { presupuestoId },
+      }),
+      prisma.presupuestoCosteMaterial.createMany({
+        data: materiales.map((linea) => ({
+          presupuestoId,
+          ...linea,
+        })),
+      }),
+      prisma.presupuestoCosteOtro.createMany({
+        data: otrosCostes.map((linea) => ({
+          presupuestoId,
+          ...linea,
+        })),
+      }),
+    ]);
+
+    revalidatePath(`/clientes/${presupuesto.clienteId}`);
+    revalidatePath("/presupuestos");
+    revalidatePath(`/presupuestos/${presupuestoId}`);
+
+    return {
+      status: "success",
+      message: "Costes y rentabilidad actualizados.",
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message:
+        error instanceof Error
+          ? error.message
+          : "No se pudieron guardar los costes.",
+    };
+  }
 }
 
 export async function ensurePresupuestoPublicToken(presupuestoId: number) {

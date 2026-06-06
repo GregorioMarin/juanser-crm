@@ -140,9 +140,15 @@ model Presupuesto {
   totalSinIva          Decimal            @default(0) @db.Decimal(12, 2)
   totalIva             Decimal            @default(0) @db.Decimal(12, 2)
   totalConIva          Decimal            @default(0) @db.Decimal(12, 2)
+  costeHorasEstimadas  Decimal            @default(0) @db.Decimal(10, 2)
+  costeHora            Decimal            @default(0) @db.Decimal(10, 2)
+  costeTransporte      Decimal            @default(0) @db.Decimal(12, 2)
+  costeMontaje         Decimal            @default(0) @db.Decimal(12, 2)
   publicToken          String?            @unique
   publicTokenCreatedAt DateTime?
   lineas               PresupuestoLinea[]
+  costesMateriales     PresupuestoCosteMaterial[]
+  otrosCostes          PresupuestoCosteOtro[]
   pagosCuenta          PagoCuenta[]
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
@@ -150,6 +156,35 @@ model Presupuesto {
 
   @@index([clienteId])
   @@index([estado])
+}
+
+model PresupuestoCosteMaterial {
+  id            Int         @id @default(autoincrement())
+  presupuestoId Int
+  materialId    String?
+  descripcion   String
+  cantidad      Decimal     @default(1) @db.Decimal(10, 2)
+  precioCoste   Decimal     @default(0) @db.Decimal(12, 2)
+  subtotal      Decimal     @default(0) @db.Decimal(12, 2)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  presupuesto   Presupuesto @relation(fields: [presupuestoId], references: [id], onDelete: Cascade)
+  material      Material?   @relation(fields: [materialId], references: [id], onDelete: SetNull)
+
+  @@index([presupuestoId])
+  @@index([materialId])
+}
+
+model PresupuestoCosteOtro {
+  id            Int         @id @default(autoincrement())
+  presupuestoId Int
+  descripcion   String
+  importe       Decimal     @default(0) @db.Decimal(12, 2)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  presupuesto   Presupuesto @relation(fields: [presupuestoId], references: [id], onDelete: Cascade)
+
+  @@index([presupuestoId])
 }
 
 model PresupuestoLinea {
@@ -313,6 +348,7 @@ model Material {
   updatedAt   DateTime     @updatedAt
 
   lineas      GastoLinea[]
+  costesPresupuesto PresupuestoCosteMaterial[]
 
   @@index([nombre])
   @@index([categoria])
