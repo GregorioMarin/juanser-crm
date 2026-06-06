@@ -13,14 +13,26 @@ export default async function EditarGastoPage({ params }: EditarGastoPageProps) 
   await connection();
 
   const { id } = await params;
-  const gasto = await prisma.gasto.findUnique({
-    where: { id },
-    include: {
-      lineas: {
-        orderBy: { createdAt: "asc" },
+  const [gasto, materiales] = await Promise.all([
+    prisma.gasto.findUnique({
+      where: { id },
+      include: {
+        lineas: {
+          orderBy: { createdAt: "asc" },
+        },
       },
-    },
-  });
+    }),
+    prisma.material.findMany({
+      orderBy: [{ categoria: "asc" }, { codigo: "asc" }],
+      select: {
+        id: true,
+        codigo: true,
+        nombre: true,
+        categoria: true,
+        unidadBase: true,
+      },
+    }),
+  ]);
   if (!gasto) {
     notFound();
   }
@@ -44,7 +56,12 @@ export default async function EditarGastoPage({ params }: EditarGastoPageProps) 
         </header>
 
         <section className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
-          <GastoForm action={updateGasto} submitLabel="Guardar cambios" gasto={gasto} />
+          <GastoForm
+            action={updateGasto}
+            submitLabel="Guardar cambios"
+            gasto={gasto}
+            materiales={materiales}
+          />
         </section>
       </div>
     </main>

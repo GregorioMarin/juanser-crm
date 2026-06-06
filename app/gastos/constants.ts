@@ -46,6 +46,8 @@ export type GastoAnalizado = {
 
 export type GastoLineaAnalizada = {
   id?: string;
+  materialId?: string | null;
+  codigoMaterialDetectado?: string | null;
   descripcion: string;
   cantidad: string | null;
   precioUnitario: string | null;

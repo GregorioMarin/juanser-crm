@@ -14,6 +14,10 @@ import {
   GastoLineaAnalizada,
   tiposDocumentoGasto,
 } from "@/app/gastos/constants";
+import {
+  categoriasMaterial,
+  prefijoCategoriaMaterial,
+} from "@/app/materiales/constants";
 
 export type AnalizarGastoState = {
   status: "idle" | "success" | "error";
@@ -179,6 +183,11 @@ function lineasData(formData: FormData) {
   return indexes
     .map((index) => {
       const id = optionalString(formData, `linea-${index}-id`);
+      const materialId = optionalString(formData, `linea-${index}-materialId`);
+      const codigoMaterialDetectado = optionalString(
+        formData,
+        `linea-${index}-codigoMaterialDetectado`,
+      );
       const descripcion = optionalString(formData, `linea-${index}-descripcion`);
       const cantidad = useSerreriaFormat
         ? null
@@ -236,6 +245,8 @@ function lineasData(formData: FormData) {
       return {
         id,
         data: {
+          materialId,
+          codigoMaterialDetectado,
           descripcion,
           cantidad,
           precioUnitario,
@@ -337,8 +348,7 @@ function normalizeLineas(input: unknown): GastoLineaAnalizada[] {
     return [];
   }
 
-  return input
-    .map((linea) => {
+  const lineas = input.map((linea): GastoLineaAnalizada | null => {
       if (!linea || typeof linea !== "object") {
         return null;
       }
@@ -352,6 +362,8 @@ function normalizeLineas(input: unknown): GastoLineaAnalizada[] {
         typeof record[key] === "string" ? record[key].trim() : "";
 
       const descripcion = textValue("descripcion");
+      const materialId = value("materialId");
+      const codigoMaterialDetectado = textValue("codigoMaterialDetectado");
       const cantidad = value("cantidad");
       const precioUnitario = value("precioUnitario");
       const piezas = value("piezas");
@@ -372,6 +384,8 @@ function normalizeLineas(input: unknown): GastoLineaAnalizada[] {
 
       return {
         descripcion,
+        materialId,
+        codigoMaterialDetectado,
         cantidad,
         precioUnitario,
         piezas,
@@ -379,8 +393,9 @@ function normalizeLineas(input: unknown): GastoLineaAnalizada[] {
         precioUnidadMedida,
         importe,
       };
-    })
-    .filter((linea): linea is GastoLineaAnalizada => linea !== null);
+    });
+
+  return lineas.filter((linea): linea is GastoLineaAnalizada => linea !== null);
 }
 
 function normalizeAnalysis(input: Partial<GastoAnalizado>): GastoAnalizado {
@@ -454,10 +469,32 @@ async function analyzeWithOpenAI(file: File, buffer: Buffer) {
 
   const base64 = buffer.toString("base64");
   const isPdf = file.type === "application/pdf";
+  const materialPrefixes = categoriasMaterial
+    .map((categoria) => `${categoria}: ${prefijoCategoriaMaterial(categoria)}`)
+    .join(", ");
+  const materialesExistentes = await prisma.material.findMany({
+    orderBy: [{ categoria: "asc" }, { codigo: "asc" }],
+    take: 120,
+    select: {
+      codigo: true,
+      nombre: true,
+      categoria: true,
+    },
+  });
+  const materialCatalog =
+    materialesExistentes.length > 0
+      ? materialesExistentes
+          .map(
+            (material) =>
+              `${material.codigo} - ${material.nombre} (${material.categoria ?? "Sin categoria"})`,
+          )
+          .join("; ")
+      : "No hay materiales internos creados todavia.";
   const prompt = `Extrae datos de este documento de compra de Carpinteria Juanser.
 Devuelve solo JSON estricto con estas claves: proveedor, fecha, tipoDocumento, numeroDocumento, categoria, baseImponible, iva, total, formaPago, descripcion, observaciones, lineas.
 Reglas generales: si un dato no se ve claro deja string vacio; no inventes; fecha en YYYY-MM-DD si aparece; importes con punto decimal; tipoDocumento solo factura, albaran, ticket u otro; categoria solo una de: ${categoriasGasto.join(", ")}.
 Reglas de lineas: cada articulo o material comprado debe ser un objeto separado en lineas; no concatenes productos en descripcion; si hay 3 articulos devuelve 3 lineas; extrae cantidad, precioUnitario e importe si aparecen.
+Reglas de materiales internos: no cambies ni resumas la descripcion original del proveedor. Catalogo interno disponible: ${materialCatalog}. Para cada linea, si reconoces un material parecido del catalogo, rellena codigoMaterialDetectado con su codigo exacto. Si no hay coincidencia clara, rellena codigoMaterialDetectado con el prefijo de categoria mas probable; si no puedes deducirlo, string vacio. Prefijos disponibles: ${materialPrefixes}. Ejemplos de codigoMaterialDetectado: TAB-000001 si coincide un material existente; TAB, CAN, HER, BAR, FER, HER-MAQ u OTR si solo detectas categoria. materialId debe ser null.
 Reglas especificas para proveedor Serrería Almeriense o Serreria Almeriense: usa siempre el formato especifico de lineas con descripcion, piezas, medida, precioUnidadMedida e importe. Devuelve cantidad=null y precioUnitario=null. "Piezas" es el numero de tableros o unidades fisicas y debe ir en piezas. "Medida" NO es precio; normalmente son m2 totales o medida total de la linea y debe ir en medida. "Neto" normalmente es precio por m2 o por unidad de medida y debe ir en precioUnidadMedida. "Importe" es medida x precioUnidadMedida y debe ir en importe. No interpretes Neto como precio por pieza. No devuelvas cantidad=medida ni precioUnitario=piezas. No calcules precioUnitario por tablero salvo que aparezca expresamente. Si Medida x Neto se aproxima a Importe, confirma esa interpretacion. Ejemplo: piezas=4, medida=23.940, precioUnidadMedida=10.384, importe=248.59. Para otros proveedores usa cantidad y precioUnitario cuando corresponda.`;
 
   const fileContent = isPdf
@@ -511,6 +548,8 @@ Reglas especificas para proveedor Serrería Almeriense o Serreria Almeriense: us
                   type: "object",
                   additionalProperties: false,
                   properties: {
+                    materialId: { type: ["string", "null"] },
+                    codigoMaterialDetectado: { type: "string" },
                     descripcion: { type: "string" },
                     cantidad: { type: ["string", "null"] },
                     precioUnitario: { type: ["string", "null"] },
@@ -520,6 +559,8 @@ Reglas especificas para proveedor Serrería Almeriense o Serreria Almeriense: us
                     importe: { type: ["string", "null"] },
                   },
                   required: [
+                    "materialId",
+                    "codigoMaterialDetectado",
                     "descripcion",
                     "cantidad",
                     "precioUnitario",
@@ -633,6 +674,7 @@ export async function createGasto(
 
     revalidatePath("/");
     revalidatePath("/gastos");
+    revalidatePath("/materiales");
   } catch (error) {
     return {
       status: "error",
@@ -697,6 +739,7 @@ export async function updateGasto(
 
     revalidatePath("/");
     revalidatePath("/gastos");
+    revalidatePath("/materiales");
     revalidatePath(`/gastos/${id}`);
   } catch (error) {
     return {

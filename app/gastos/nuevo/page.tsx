@@ -1,9 +1,20 @@
 import Link from "next/link";
 import { connection } from "next/server";
 import { NuevoGastoForm } from "@/app/gastos/nuevo-gasto-form";
+import { prisma } from "@/app/lib/prisma";
 
 export default async function NuevoGastoPage() {
   await connection();
+  const materiales = await prisma.material.findMany({
+    orderBy: [{ categoria: "asc" }, { codigo: "asc" }],
+    select: {
+      id: true,
+      codigo: true,
+      nombre: true,
+      categoria: true,
+      unidadBase: true,
+    },
+  });
 
   return (
     <main className="min-h-screen bg-neutral-100 px-5 py-6 text-neutral-950 sm:px-8">
@@ -23,7 +34,7 @@ export default async function NuevoGastoPage() {
           </p>
         </header>
 
-        <NuevoGastoForm />
+        <NuevoGastoForm materiales={materiales} />
       </div>
     </main>
   );

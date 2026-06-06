@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useRef, useState } from "react";
-import type { Gasto, GastoLinea } from "@/app/generated/prisma/client";
+import type { Gasto, GastoLinea, Material } from "@/app/generated/prisma/client";
 import {
   categoriasGasto,
   emptyGastoAnalizado,
@@ -25,6 +25,8 @@ const labelClass = "text-sm font-medium text-neutral-700";
 type FormLinea = {
   key: string;
   id?: string;
+  materialId: string;
+  codigoMaterialDetectado: string;
   descripcion: string;
   cantidad: string;
   precioUnitario: string;
@@ -33,6 +35,11 @@ type FormLinea = {
   precioUnidadMedida: string;
   importe: string;
 };
+
+type MaterialOption = Pick<
+  Material,
+  "id" | "codigo" | "nombre" | "categoria" | "unidadBase"
+>;
 
 function isSerreriaAlmeriense(proveedor: string) {
   return proveedor
@@ -150,6 +157,8 @@ function valuesFromGasto(gasto?: GastoEditable | null): GastoAnalizado {
     lineas:
       gasto.lineas?.map((linea) => ({
         id: linea.id,
+        materialId: linea.materialId,
+        codigoMaterialDetectado: linea.codigoMaterialDetectado,
         descripcion: linea.descripcion,
         cantidad: moneyValue(linea.cantidad) || null,
         precioUnitario: moneyValue(linea.precioUnitario) || null,
@@ -167,6 +176,8 @@ function initialLineas(data?: GastoAnalizado, gasto?: GastoEditable | null) {
   return source.map((linea, index): FormLinea => ({
     key: linea.id ?? `linea-${index}-${Date.now()}`,
     id: linea.id,
+    materialId: textValue(linea.materialId),
+    codigoMaterialDetectado: textValue(linea.codigoMaterialDetectado),
     descripcion: linea.descripcion,
     cantidad: textValue(linea.cantidad),
     precioUnitario: textValue(linea.precioUnitario),
@@ -200,9 +211,13 @@ function DecimalInput({
 function LineasTable({
   initial,
   serreriaFormat,
+  materiales,
+  gastoId,
 }: {
   initial: FormLinea[];
   serreriaFormat: boolean;
+  materiales: MaterialOption[];
+  gastoId?: string;
 }) {
   const [lineas, setLineas] = useState<FormLinea[]>(initial);
 
@@ -212,6 +227,36 @@ function LineasTable({
         currentIndex === index ? { ...linea, [field]: value } : linea,
       ),
     );
+  }
+
+  function updateLineaMaterial(index: number, materialId: string) {
+    const material = materiales.find((item) => item.id === materialId);
+    setLineas((current) =>
+      current.map((linea, currentIndex) =>
+        currentIndex === index
+          ? {
+              ...linea,
+              materialId,
+              codigoMaterialDetectado: material?.codigo ?? linea.codigoMaterialDetectado,
+            }
+          : linea,
+      ),
+    );
+  }
+
+  function materialCreateHref(linea: FormLinea) {
+    const params = new URLSearchParams();
+    if (gastoId) {
+      params.set("gastoId", gastoId);
+    }
+    if (linea.id) {
+      params.set("lineaId", linea.id);
+    }
+    if (linea.descripcion) {
+      params.set("nombre", linea.descripcion);
+    }
+
+    return `/materiales/nuevo?${params.toString()}`;
   }
 
   return (
@@ -233,6 +278,8 @@ function LineasTable({
               {
                 key: `nueva-${Date.now()}-${current.length}`,
                 descripcion: "",
+                materialId: "",
+                codigoMaterialDetectado: "",
                 cantidad: "",
                 precioUnitario: "",
                 piezas: "",
@@ -252,7 +299,9 @@ function LineasTable({
         <table className="w-full min-w-[900px] border-collapse text-left text-sm">
           <thead className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
             <tr>
+              <th className="px-2 py-2">Código interno</th>
               <th className="px-2 py-2">Descripción</th>
+              <th className="px-2 py-2">Material vinculado</th>
               {serreriaFormat ? (
                 <>
                   <th className="px-2 py-2">Piezas</th>
@@ -283,6 +332,17 @@ function LineasTable({
                   ) : null}
                   <input
                     className={inputClass}
+                    name={`linea-${linea.key}-codigoMaterialDetectado`}
+                    value={linea.codigoMaterialDetectado}
+                    onChange={(event) =>
+                      updateLinea(index, "codigoMaterialDetectado", event.target.value)
+                    }
+                    placeholder="TAB, TAB-000001..."
+                  />
+                </td>
+                <td className="px-2 py-2">
+                  <input
+                    className={inputClass}
                     name={`linea-${linea.key}-descripcion`}
                     value={linea.descripcion}
                     onChange={(event) =>
@@ -290,6 +350,31 @@ function LineasTable({
                     }
                     placeholder="Producto o material"
                   />
+                </td>
+                <td className="px-2 py-2">
+                  <div className="grid gap-2">
+                    <select
+                      className={inputClass}
+                      name={`linea-${linea.key}-materialId`}
+                      value={linea.materialId}
+                      onChange={(event) =>
+                        updateLineaMaterial(index, event.target.value)
+                      }
+                    >
+                      <option value="">Sin vincular</option>
+                      {materiales.map((material) => (
+                        <option key={material.id} value={material.id}>
+                          {material.codigo} · {material.nombre}
+                        </option>
+                      ))}
+                    </select>
+                    <a
+                      href={materialCreateHref(linea)}
+                      className="text-xs font-semibold text-emerald-700 transition hover:text-emerald-900"
+                    >
+                      Crear nuevo desde esta línea
+                    </a>
+                  </div>
                 </td>
                 {serreriaFormat ? (
                   <>
@@ -378,6 +463,7 @@ export function GastoForm({
   data,
   archivoUrl,
   gasto,
+  materiales = [],
 }: {
   action: (
     state: GastoFormState,
@@ -387,6 +473,7 @@ export function GastoForm({
   data?: GastoAnalizado;
   archivoUrl?: string | null;
   gasto?: GastoEditable | null;
+  materiales?: MaterialOption[];
 }) {
   const [state, formAction, pending] = useActionState(action, initialGastoFormState);
   const allowIncompleteRef = useRef<HTMLInputElement>(null);
@@ -509,7 +596,12 @@ export function GastoForm({
         </label>
       </section>
 
-      <LineasTable initial={lineas} serreriaFormat={serreriaFormat} />
+      <LineasTable
+        initial={lineas}
+        serreriaFormat={serreriaFormat}
+        materiales={materiales}
+        gastoId={gasto?.id}
+      />
 
       {state.message ? (
         <p className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-900">

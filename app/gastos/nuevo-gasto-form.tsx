@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useMemo, useState } from "react";
+import type { Material } from "@/app/generated/prisma/client";
 import {
   analizarDocumentoGasto,
   createGasto,
@@ -21,7 +22,12 @@ const initialAnalizarGastoState: AnalizarGastoState = {
 const inputClass =
   "w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-950 outline-none transition placeholder:text-neutral-400 focus:border-emerald-700 focus:ring-2 focus:ring-emerald-100";
 
-export function NuevoGastoForm() {
+type MaterialOption = Pick<
+  Material,
+  "id" | "codigo" | "nombre" | "categoria" | "unidadBase"
+>;
+
+export function NuevoGastoForm({ materiales }: { materiales: MaterialOption[] }) {
   const [state, formAction, pending] = useActionState(
     analizarDocumentoGasto,
     initialAnalizarGastoState,
@@ -157,6 +163,7 @@ export function NuevoGastoForm() {
             submitLabel="Guardar gasto"
             data={state.data}
             archivoUrl={state.archivoUrl}
+            materiales={materiales}
           />
         </section>
       ) : null}

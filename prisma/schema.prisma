@@ -280,6 +280,8 @@ model Gasto {
 model GastoLinea {
   id             String   @id @default(cuid())
   gastoId        String
+  materialId     String?
+  codigoMaterialDetectado String?
   descripcion    String
   cantidad       Decimal? @db.Decimal(10, 2)
   precioUnitario Decimal? @db.Decimal(10, 2)
@@ -290,9 +292,28 @@ model GastoLinea {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   gasto          Gasto    @relation(fields: [gastoId], references: [id], onDelete: Cascade)
+  material       Material? @relation(fields: [materialId], references: [id])
 
   @@index([gastoId])
+  @@index([materialId])
+  @@index([codigoMaterialDetectado])
   @@index([descripcion])
+}
+
+model Material {
+  id          String       @id @default(cuid())
+  codigo      String       @unique
+  nombre      String
+  categoria   String?
+  unidadBase  String?
+  descripcion String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  lineas      GastoLinea[]
+
+  @@index([nombre])
+  @@index([categoria])
 }
 
 model Cita {

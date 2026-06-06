@@ -73,6 +73,15 @@ export default async function GastoPage({ params }: GastoPageProps) {
       cliente: { select: { id: true, nombre: true } },
       lineas: {
         orderBy: { createdAt: "asc" },
+        include: {
+          material: {
+            select: {
+              id: true,
+              codigo: true,
+              nombre: true,
+            },
+          },
+        },
       },
     },
   });
@@ -159,10 +168,12 @@ export default async function GastoPage({ params }: GastoPageProps) {
             </span>
           </div>
           <div className="overflow-x-auto rounded-md border border-neutral-200">
-            <table className="w-full min-w-[820px] border-collapse text-left text-sm">
+            <table className="w-full min-w-[1080px] border-collapse text-left text-sm">
               <thead className="bg-neutral-100 text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
                 <tr>
-                  <th className="px-4 py-3">Descripción</th>
+                  <th className="px-4 py-3">Código interno</th>
+                  <th className="px-4 py-3">Descripción proveedor</th>
+                  <th className="px-4 py-3">Material vinculado</th>
                   {serreriaFormat ? (
                     <>
                       <th className="px-4 py-3 text-right">Piezas</th>
@@ -182,8 +193,25 @@ export default async function GastoPage({ params }: GastoPageProps) {
                 {gasto.lineas.length > 0 ? (
                   gasto.lineas.map((linea) => (
                     <tr key={linea.id}>
+                      <td className="whitespace-nowrap px-4 py-4 font-semibold text-neutral-950">
+                        {linea.material?.codigo ??
+                          linea.codigoMaterialDetectado ??
+                          "-"}
+                      </td>
                       <td className="px-4 py-4 font-medium text-neutral-950">
                         {linea.descripcion}
+                      </td>
+                      <td className="px-4 py-4 text-neutral-700">
+                        {linea.material ? (
+                          <Link
+                            href={`/materiales/${linea.material.id}`}
+                            className="font-semibold text-emerald-700 transition hover:text-emerald-900"
+                          >
+                            {linea.material.nombre}
+                          </Link>
+                        ) : (
+                          "-"
+                        )}
                       </td>
                       {serreriaFormat ? (
                         <>
@@ -215,7 +243,7 @@ export default async function GastoPage({ params }: GastoPageProps) {
                 ) : (
                   <tr>
                     <td
-                      colSpan={serreriaFormat ? 5 : 4}
+                      colSpan={serreriaFormat ? 7 : 6}
                       className="px-4 py-6 text-center text-neutral-500"
                     >
                       Este gasto todavía no tiene líneas de artículos.
