@@ -4,42 +4,58 @@ import { connection } from "next/server";
 import { logout } from "@/app/auth/actions";
 import { prisma } from "@/app/lib/prisma";
 
-async function getActividadReciente() {
-  return prisma.actividadCliente.findMany({
-    orderBy: { fecha: "desc" },
-    take: 20,
-    include: {
-      cliente: {
-        select: {
-          id: true,
-          nombre: true,
-        },
-      },
-    },
-  });
-}
-
-type ActividadReciente = Awaited<ReturnType<typeof getActividadReciente>>;
-
-async function getGastosMesActual() {
+function currentMonthRange() {
   const now = new Date();
-  const from = new Date(now.getFullYear(), now.getMonth(), 1);
-  const to = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
-  return prisma.gasto.aggregate({
-    where: { fecha: { gte: from, lt: to } },
-    _sum: { total: true },
-  });
+  return {
+    from: new Date(now.getFullYear(), now.getMonth(), 1),
+    to: new Date(now.getFullYear(), now.getMonth() + 1, 1),
+  };
 }
 
-function formatDateTime(date: Date) {
-  return new Intl.DateTimeFormat("es-ES", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
+function recentRange(days: number) {
+  const to = new Date();
+  const from = new Date(to);
+  from.setDate(to.getDate() - days);
+
+  return { from, to };
+}
+
+async function getHomeMetrics() {
+  const month = currentMonthRange();
+  const recent = recentRange(30);
+  const [
+    gastosMes,
+    presupuestosPendientes,
+    clientesNuevosMes,
+    clientesActivos,
+    trabajosRecientes,
+  ] = await Promise.all([
+    prisma.gasto.aggregate({
+      where: { fecha: { gte: month.from, lt: month.to } },
+      _sum: { total: true },
+    }),
+    prisma.presupuesto.count({
+      where: { estado: "PENDIENTE", cliente: { id: { gt: 0 } } },
+    }),
+    prisma.cliente.count({
+      where: { fechaAlta: { gte: month.from, lt: month.to } },
+    }),
+    prisma.cliente.count({
+      where: { estado: { in: ["Aceptado", "En fabricación"] } },
+    }),
+    prisma.trabajoTerminado.count({
+      where: { fechaTrabajo: { gte: recent.from, lte: recent.to } },
+    }),
+  ]);
+
+  return {
+    gastosMes: gastosMes._sum.total,
+    presupuestosPendientes,
+    clientesNuevosMes,
+    trabajosActivosORecientes: clientesActivos + trabajosRecientes,
+    trabajosDetalle: `${clientesActivos} activos · ${trabajosRecientes} recientes`,
+  };
 }
 
 function formatMoney(value?: { toString(): string } | null) {
@@ -50,90 +66,30 @@ function formatMoney(value?: { toString(): string } | null) {
   }).format(number);
 }
 
-function ActividadRecienteCard({
-  actividades,
+function SummaryCard({
+  label,
+  value,
+  detail,
 }: {
-  actividades: ActividadReciente;
+  label: string;
+  value: string;
+  detail?: string;
 }) {
   return (
-    <section className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-neutral-950">
-            ACTIVIDAD RECIENTE
-          </h2>
-          <p className="mt-1 text-sm text-neutral-500">
-            Ultimas acciones registradas en el CRM.
-          </p>
-        </div>
-        <span className="text-sm font-semibold text-neutral-700">
-          {actividades.length} acciones
-        </span>
-      </div>
-
-      {actividades.length > 0 ? (
-        <ol className="mt-4 divide-y divide-neutral-200 rounded-md border border-neutral-200">
-          {actividades.map((actividad) => (
-            <li
-              key={actividad.id}
-              className="grid gap-2 px-4 py-3 sm:grid-cols-[170px_1fr_auto] sm:items-center"
-            >
-              <time className="text-sm font-semibold text-neutral-950">
-                {formatDateTime(actividad.fecha)}
-              </time>
-              <p className="text-sm text-neutral-700">{actividad.descripcion}</p>
-              <Link
-                href={`/clientes/${actividad.cliente.id}`}
-                className="text-sm font-semibold text-emerald-700 transition hover:text-emerald-900"
-              >
-                {actividad.cliente.nombre}
-              </Link>
-            </li>
-          ))}
-        </ol>
-      ) : (
-        <p className="mt-4 rounded-md border border-dashed border-neutral-300 px-4 py-6 text-sm text-neutral-500">
-          Todavia no hay actividad registrada.
-        </p>
-      )}
-    </section>
-  );
-}
-
-function GastosMesCard({
-  total,
-}: {
-  total?: { toString(): string } | null;
-}) {
-  return (
-    <section className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-neutral-950">
-            GASTOS DEL MES
-          </h2>
-          <p className="mt-1 text-2xl font-semibold text-neutral-950">
-            {formatMoney(total)}
-          </p>
-        </div>
-        <Link
-          href="/gastos"
-          className="inline-flex h-10 items-center justify-center rounded-md border border-neutral-300 bg-white px-4 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
-        >
-          Ver gastos
-        </Link>
-      </div>
-    </section>
+    <article className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
+        {label}
+      </p>
+      <p className="mt-2 text-2xl font-semibold text-neutral-950">{value}</p>
+      {detail ? <p className="mt-1 text-sm text-neutral-500">{detail}</p> : null}
+    </article>
   );
 }
 
 export default async function Home() {
   await connection();
 
-  const [actividades, gastosMes] = await Promise.all([
-    getActividadReciente(),
-    getGastosMesActual(),
-  ]);
+  const metrics = await getHomeMetrics();
 
   return (
     <main className="min-h-screen bg-neutral-100 px-5 py-6 text-neutral-950 sm:px-8">
@@ -190,6 +146,12 @@ export default async function Home() {
               Gastos y Compras
             </Link>
             <Link
+              href="/actividad"
+              className="inline-flex h-11 items-center justify-center rounded-md border border-neutral-300 bg-white px-5 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
+            >
+              Actividad
+            </Link>
+            <Link
               href="/materiales"
               className="inline-flex h-11 items-center justify-center rounded-md border border-neutral-300 bg-white px-5 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
             >
@@ -212,9 +174,58 @@ export default async function Home() {
           </div>
         </header>
 
-        <GastosMesCard total={gastosMes._sum.total} />
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <SummaryCard
+            label="Gastos del mes"
+            value={formatMoney(metrics.gastosMes)}
+          />
+          <SummaryCard
+            label="Presupuestos pendientes"
+            value={String(metrics.presupuestosPendientes)}
+          />
+          <SummaryCard
+            label="Clientes nuevos del mes"
+            value={String(metrics.clientesNuevosMes)}
+          />
+          <SummaryCard
+            label="Trabajos activos o recientes"
+            value={String(metrics.trabajosActivosORecientes)}
+            detail={metrics.trabajosDetalle}
+          />
+        </section>
 
-        <ActividadRecienteCard actividades={actividades} />
+        <section className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-neutral-950">
+                Accesos rápidos
+              </h2>
+              <p className="mt-1 text-sm text-neutral-500">
+                Atajos principales para revisar la actividad comercial y compras.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+              <Link
+                href="/gastos"
+                className="inline-flex h-10 items-center justify-center rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:bg-emerald-800"
+              >
+                Ver gastos
+              </Link>
+              <Link
+                href="/presupuestos"
+                className="inline-flex h-10 items-center justify-center rounded-md border border-neutral-300 px-4 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
+              >
+                Ver presupuestos
+              </Link>
+              <Link
+                href="/clientes"
+                className="inline-flex h-10 items-center justify-center rounded-md border border-neutral-300 px-4 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
+              >
+                Ver clientes
+              </Link>
+            </div>
+          </div>
+        </section>
       </div>
     </main>
   );
