@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { DeleteGastoForm } from "@/app/gastos/delete-gasto-form";
+import { MaterialLineaAction } from "@/app/gastos/[id]/material-linea-action";
 
 function formatDate(date?: Date | null) {
   return date
@@ -67,24 +68,36 @@ export default async function GastoPage({ params }: GastoPageProps) {
   await connection();
 
   const { id } = await params;
-  const gasto = await prisma.gasto.findUnique({
-    where: { id },
-    include: {
-      cliente: { select: { id: true, nombre: true } },
-      lineas: {
-        orderBy: { createdAt: "asc" },
-        include: {
-          material: {
-            select: {
-              id: true,
-              codigo: true,
-              nombre: true,
+  const [gasto, materiales] = await Promise.all([
+    prisma.gasto.findUnique({
+      where: { id },
+      include: {
+        cliente: { select: { id: true, nombre: true } },
+        lineas: {
+          orderBy: { createdAt: "asc" },
+          include: {
+            material: {
+              select: {
+                id: true,
+                codigo: true,
+                nombre: true,
+              },
             },
           },
         },
       },
-    },
-  });
+    }),
+    prisma.material.findMany({
+      orderBy: [{ categoria: "asc" }, { codigo: "asc" }],
+      select: {
+        id: true,
+        codigo: true,
+        nombre: true,
+        categoria: true,
+        unidadBase: true,
+      },
+    }),
+  ]);
   if (!gasto) {
     notFound();
   }
@@ -168,7 +181,7 @@ export default async function GastoPage({ params }: GastoPageProps) {
             </span>
           </div>
           <div className="overflow-x-auto rounded-md border border-neutral-200">
-            <table className="w-full min-w-[1080px] border-collapse text-left text-sm">
+            <table className="w-full min-w-[1180px] border-collapse text-left text-sm">
               <thead className="bg-neutral-100 text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
                 <tr>
                   <th className="px-4 py-3">Código interno</th>
@@ -187,6 +200,7 @@ export default async function GastoPage({ params }: GastoPageProps) {
                     </>
                   )}
                   <th className="px-4 py-3 text-right">Importe</th>
+                  <th className="px-4 py-3 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200">
@@ -238,12 +252,21 @@ export default async function GastoPage({ params }: GastoPageProps) {
                       <td className="px-4 py-4 text-right font-semibold text-neutral-950">
                         {formatMoney(linea.importe)}
                       </td>
+                      <td className="px-4 py-4 text-right">
+                        <MaterialLineaAction
+                          gastoId={gasto.id}
+                          lineaId={linea.id}
+                          descripcion={linea.descripcion}
+                          currentMaterialId={linea.materialId}
+                          materiales={materiales}
+                        />
+                      </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
                     <td
-                      colSpan={serreriaFormat ? 7 : 6}
+                      colSpan={serreriaFormat ? 8 : 7}
                       className="px-4 py-6 text-center text-neutral-500"
                     >
                       Este gasto todavía no tiene líneas de artículos.

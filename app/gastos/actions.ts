@@ -17,6 +17,7 @@ import {
 import {
   categoriasMaterial,
   prefijoCategoriaMaterial,
+  unidadesMaterial,
 } from "@/app/materiales/constants";
 
 export type AnalizarGastoState = {
@@ -30,6 +31,11 @@ export type AnalizarGastoState = {
 
 export type GastoFormState = {
   status: "idle" | "error";
+  message: string | null;
+};
+
+export type MaterialLineaState = {
+  status: "idle" | "success" | "error";
   message: string | null;
 };
 
@@ -139,6 +145,56 @@ function optionalClienteId(formData: FormData) {
   }
 
   return id;
+}
+
+function requiredString(formData: FormData, key: string) {
+  const value = optionalString(formData, key);
+  if (!value) {
+    throw new Error(`El campo ${key} es obligatorio.`);
+  }
+
+  return value;
+}
+
+function requiredLineaMaterialIds(formData: FormData) {
+  const gastoId = requiredGastoId(formData);
+  const lineaId = requiredString(formData, "lineaId");
+
+  return { gastoId, lineaId };
+}
+
+function categoriaMaterialValue(formData: FormData) {
+  const value = optionalString(formData, "categoria") ?? "Otros";
+  if (!categoriasMaterial.includes(value as (typeof categoriasMaterial)[number])) {
+    throw new Error("Categoria de material no valida.");
+  }
+
+  return value;
+}
+
+function unidadBaseMaterialValue(formData: FormData) {
+  const value = optionalString(formData, "unidadBase");
+  if (!value) {
+    return null;
+  }
+
+  if (!unidadesMaterial.includes(value as (typeof unidadesMaterial)[number])) {
+    throw new Error("Unidad base no valida.");
+  }
+
+  return value;
+}
+
+async function nextMaterialCode(categoria: string) {
+  const prefix = prefijoCategoriaMaterial(categoria);
+  const lastMaterial = await prisma.material.findFirst({
+    where: { codigo: { startsWith: `${prefix}-` } },
+    orderBy: { codigo: "desc" },
+    select: { codigo: true },
+  });
+  const lastNumber = Number(lastMaterial?.codigo.match(/-(\d+)$/)?.[1] ?? 0);
+
+  return `${prefix}-${String(lastNumber + 1).padStart(6, "0")}`;
 }
 
 function gastoData(formData: FormData) {
@@ -784,4 +840,103 @@ export async function deleteGasto(formData: FormData) {
   revalidatePath("/");
   revalidatePath("/gastos");
   redirect("/gastos");
+}
+
+export async function asignarMaterialGastoLinea(
+  _state: MaterialLineaState,
+  formData: FormData,
+): Promise<MaterialLineaState> {
+  try {
+    const { gastoId, lineaId } = requiredLineaMaterialIds(formData);
+    const materialId = requiredString(formData, "materialId");
+    const material = await prisma.material.findUnique({
+      where: { id: materialId },
+      select: { id: true, codigo: true, nombre: true },
+    });
+    if (!material) {
+      throw new Error("Material no encontrado.");
+    }
+
+    const result = await prisma.gastoLinea.updateMany({
+      where: { id: lineaId, gastoId },
+      data: {
+        materialId: material.id,
+        codigoMaterialDetectado: material.codigo,
+      },
+    });
+    if (result.count === 0) {
+      throw new Error("Linea de gasto no encontrada.");
+    }
+
+    revalidatePath(`/gastos/${gastoId}`);
+    revalidatePath(`/gastos/${gastoId}/editar`);
+    revalidatePath("/materiales");
+    revalidatePath(`/materiales/${material.id}`);
+
+    return {
+      status: "success",
+      message: `Material asignado: ${material.codigo} · ${material.nombre}`,
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message:
+        error instanceof Error ? error.message : "No se pudo asignar el material.",
+    };
+  }
+}
+
+export async function crearYAsignarMaterialGastoLinea(
+  _state: MaterialLineaState,
+  formData: FormData,
+): Promise<MaterialLineaState> {
+  try {
+    const { gastoId, lineaId } = requiredLineaMaterialIds(formData);
+    const categoria = categoriaMaterialValue(formData);
+    const codigo = await nextMaterialCode(categoria);
+
+    const material = await prisma.$transaction(async (tx) => {
+      const createdMaterial = await tx.material.create({
+        data: {
+          codigo,
+          nombre: requiredString(formData, "nombre"),
+          categoria,
+          unidadBase: unidadBaseMaterialValue(formData),
+          descripcion: optionalString(formData, "descripcion"),
+        },
+        select: { id: true, codigo: true, nombre: true },
+      });
+
+      const result = await tx.gastoLinea.updateMany({
+        where: { id: lineaId, gastoId },
+        data: {
+          materialId: createdMaterial.id,
+          codigoMaterialDetectado: createdMaterial.codigo,
+        },
+      });
+      if (result.count === 0) {
+        throw new Error("Linea de gasto no encontrada.");
+      }
+
+      return createdMaterial;
+    });
+
+    revalidatePath(`/gastos/${gastoId}`);
+    revalidatePath(`/gastos/${gastoId}/editar`);
+    revalidatePath("/materiales");
+    revalidatePath(`/materiales/${material.id}`);
+
+    return {
+      status: "success",
+      message: `Material creado y asignado: ${material.codigo} · ${material.nombre}`,
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message:
+        error instanceof Error
+          ? error.message
+          : "No se pudo crear y asignar el material.",
+    };
+  }
 }
