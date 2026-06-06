@@ -37,6 +37,7 @@ export function NuevoGastoForm({ materiales }: { materiales: MaterialOption[] })
     type: string;
     name: string;
   } | null>(null);
+  const [mode, setMode] = useState<"documento" | "manual">("documento");
 
   const savedIsImage = state.mimeType?.startsWith("image/");
   const previewNode = useMemo(() => {
@@ -91,6 +92,32 @@ export function NuevoGastoForm({ materiales }: { materiales: MaterialOption[] })
 
   return (
     <div className="grid gap-6">
+      <div className="grid gap-3 rounded-md border border-neutral-300 bg-white p-3 shadow-sm sm:grid-cols-2">
+        <button
+          type="button"
+          onClick={() => setMode("documento")}
+          className={`h-11 rounded-md px-4 text-sm font-semibold transition ${
+            mode === "documento"
+              ? "bg-neutral-950 text-white"
+              : "bg-neutral-100 text-neutral-800 hover:bg-neutral-200"
+          }`}
+        >
+          Crear con IA
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode("manual")}
+          className={`h-11 rounded-md px-4 text-sm font-semibold transition ${
+            mode === "manual"
+              ? "bg-neutral-950 text-white"
+              : "bg-neutral-100 text-neutral-800 hover:bg-neutral-200"
+          }`}
+        >
+          Crear manualmente
+        </button>
+      </div>
+
+      {mode === "documento" ? (
       <section className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
         <h2 className="text-xl font-semibold text-neutral-950">
           Documento original
@@ -147,8 +174,9 @@ export function NuevoGastoForm({ materiales }: { materiales: MaterialOption[] })
 
         <div className="mt-5">{previewNode}</div>
       </section>
+      ) : null}
 
-      {state.archivoUrl ? (
+      {mode === "documento" && state.archivoUrl ? (
         <section className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
           <div className="mb-4">
             <h2 className="text-xl font-semibold text-neutral-950">
@@ -163,6 +191,26 @@ export function NuevoGastoForm({ materiales }: { materiales: MaterialOption[] })
             submitLabel="Guardar gasto"
             data={state.data}
             archivoUrl={state.archivoUrl}
+            materiales={materiales}
+          />
+        </section>
+      ) : null}
+
+      {mode === "manual" ? (
+        <section className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
+          <div className="mb-4">
+            <h2 className="text-xl font-semibold text-neutral-950">
+              Gasto manual
+            </h2>
+            <p className="mt-1 text-sm text-neutral-500">
+              Crea un albarán, factura, ticket u otro gasto sin subir archivo.
+            </p>
+          </div>
+          <GastoForm
+            action={createGasto}
+            submitLabel="Guardar gasto manual"
+            data={emptyGastoAnalizado}
+            archivoUrl=""
             materiales={materiales}
           />
         </section>

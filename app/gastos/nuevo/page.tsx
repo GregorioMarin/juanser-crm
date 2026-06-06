@@ -30,7 +30,7 @@ export default async function NuevoGastoPage() {
             Nuevo gasto
           </h1>
           <p className="mt-2 text-sm text-neutral-600">
-            Sube un albarán, factura o ticket y revisa los datos antes de guardar.
+            Sube un documento para analizarlo con IA o crea el gasto directamente.
           </p>
         </header>
 

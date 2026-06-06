@@ -122,6 +122,32 @@ function optionalDecimalFromValue(raw: string | null, fieldLabel: string, scale 
   return Number(normalized).toFixed(scale);
 }
 
+function requiredOrCalculatedTotal(formData: FormData) {
+  const total = optionalDecimal(formData, "total");
+  if (total) {
+    return total;
+  }
+
+  const baseImponible = optionalDecimal(formData, "baseImponible");
+  const iva = optionalDecimal(formData, "iva");
+  if (baseImponible && iva) {
+    return (Number(baseImponible) + Number(iva)).toFixed(2);
+  }
+
+  const lineasTotal = formData
+    .getAll("lineaIndex")
+    .filter((value): value is string => typeof value === "string")
+    .reduce((sum, index) => {
+      const importe = optionalDecimalFromValue(
+        optionalString(formData, `linea-${index}-importe`),
+        "Importe de linea",
+      );
+      return sum + Number(importe ?? 0);
+    }, 0);
+
+  return lineasTotal > 0 ? lineasTotal.toFixed(2) : null;
+}
+
 function optionValue<T extends readonly string[]>(
   value: string | null,
   options: T,
@@ -211,15 +237,59 @@ async function nextMaterialCode(categoria: string) {
   return `${prefix}-${String(lastNumber + 1).padStart(6, "0")}`;
 }
 
-function gastoData(formData: FormData) {
-  const proveedor = optionalString(formData, "proveedor");
-  const total = optionalDecimal(formData, "total");
-  const allowIncomplete = formData.get("allowIncomplete") === "on";
+async function lineasCreateData(
+  lineas: ReturnType<typeof lineasData>,
+  tx: Pick<typeof prisma, "material">,
+) {
+  const data = [];
 
-  if ((!proveedor || !total) && !allowIncomplete) {
-    throw new Error(
-      "Proveedor y total son obligatorios salvo confirmacion de guardado incompleto.",
-    );
+  for (const linea of lineas) {
+    const materialNombre = linea.newMaterial.nombre;
+    if (materialNombre) {
+      const categoria = linea.newMaterial.categoria ?? "Otros";
+      if (!categoriasMaterial.includes(categoria as (typeof categoriasMaterial)[number])) {
+        throw new Error("Categoria de material no valida.");
+      }
+
+      const unidadBase = linea.newMaterial.unidadBase;
+      if (
+        unidadBase &&
+        !unidadesMaterial.includes(unidadBase as (typeof unidadesMaterial)[number])
+      ) {
+        throw new Error("Unidad base no valida.");
+      }
+
+      const codigo = await nextMaterialCode(categoria);
+      const material = await tx.material.create({
+        data: {
+          codigo,
+          nombre: materialNombre,
+          categoria,
+          unidadBase,
+          descripcion: linea.data.descripcion,
+        },
+        select: { id: true, codigo: true },
+      });
+
+      data.push({
+        ...linea.data,
+        materialId: material.id,
+        codigoMaterialDetectado: material.codigo,
+      });
+    } else {
+      data.push(linea.data);
+    }
+  }
+
+  return data;
+}
+
+function gastoData(formData: FormData) {
+  const proveedor = requiredString(formData, "proveedor");
+  const total = requiredOrCalculatedTotal(formData);
+
+  if (!total) {
+    throw new Error("El total es obligatorio o debe poder calcularse.");
   }
 
   return {
@@ -263,7 +333,8 @@ function lineasData(formData: FormData) {
         formData,
         `linea-${index}-codigoMaterialDetectado`,
       );
-      const descripcion = optionalString(formData, `linea-${index}-descripcion`);
+      const descripcion =
+        optionalString(formData, `linea-${index}-descripcion`) ?? "Linea pendiente";
       const cantidad = useSerreriaFormat
         ? null
         : optionalDecimalFromValue(
@@ -296,7 +367,7 @@ function lineasData(formData: FormData) {
       );
 
       if (
-        !descripcion &&
+        descripcion === "Linea pendiente" &&
         !cantidad &&
         !precioUnitario &&
         !piezas &&
@@ -307,18 +378,13 @@ function lineasData(formData: FormData) {
         return null;
       }
 
-      if (!descripcion) {
-        throw new Error("Cada linea de gasto debe tener descripcion.");
-      }
-
-      if (useSerreriaFormat && (!piezas || !medida || !precioUnidadMedida || !importe)) {
-        throw new Error(
-          "Las lineas de Serrería Almeriense deben tener piezas, medida, precio/medida e importe.",
-        );
-      }
-
       return {
         id,
+        newMaterial: {
+          nombre: optionalString(formData, `linea-${index}-newMaterialNombre`),
+          categoria: optionalString(formData, `linea-${index}-newMaterialCategoria`),
+          unidadBase: optionalString(formData, `linea-${index}-newMaterialUnidadBase`),
+        },
         data: {
           materialId,
           codigoMaterialDetectado,
@@ -740,16 +806,21 @@ export async function createGasto(
   let gastoId: string | null = null;
   try {
     const lineas = lineasData(formData);
-    const gasto = await prisma.gasto.create({
-      data: {
-        ...gastoData(formData),
-        lineas:
-          lineas.length > 0
-            ? {
-                create: lineas.map((linea) => linea.data),
-              }
-            : undefined,
-      },
+    const gastoInput = gastoData(formData);
+    const gasto = await prisma.$transaction(async (tx) => {
+      const lineasCreate = await lineasCreateData(lineas, tx);
+
+      return tx.gasto.create({
+        data: {
+          ...gastoInput,
+          lineas:
+            lineasCreate.length > 0
+              ? {
+                  create: lineasCreate,
+                }
+              : undefined,
+        },
+      });
     });
     gastoId = gasto.id;
 
@@ -805,20 +876,25 @@ export async function updateGasto(
         }
 
         for (const linea of lineas) {
+          const [lineaInput] = await lineasCreateData([linea], tx);
           if (linea.id) {
             await tx.gastoLinea.updateMany({
               where: { id: linea.id, gastoId: id },
-              data: linea.data,
+              data: lineaInput,
             });
           } else {
             await tx.gastoLinea.create({
               data: {
                 gastoId: id,
-                ...linea.data,
+                ...lineaInput,
               },
             });
           }
         }
+      } else {
+        await tx.gastoLinea.deleteMany({
+          where: { gastoId: id },
+        });
       }
     });
 

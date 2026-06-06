@@ -1,17 +1,20 @@
 "use client";
 
-import { useActionState, useRef, useState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import type { Gasto, GastoLinea, Material } from "@/app/generated/prisma/client";
 import {
   categoriasGasto,
   emptyGastoAnalizado,
   formasPagoGasto,
   GastoAnalizado,
-  GastoLineaAnalizada,
   tiposDocumentoGasto,
   tiposGasto,
 } from "@/app/gastos/constants";
 import { type GastoFormState } from "@/app/gastos/actions";
+import {
+  categoriasMaterial,
+  unidadesMaterial,
+} from "@/app/materiales/constants";
 
 const initialGastoFormState: GastoFormState = {
   status: "idle",
@@ -35,20 +38,16 @@ type FormLinea = {
   medida: string;
   precioUnidadMedida: string;
   importe: string;
+  newMaterialOpen: boolean;
+  newMaterialNombre: string;
+  newMaterialCategoria: string;
+  newMaterialUnidadBase: string;
 };
 
 type MaterialOption = Pick<
   Material,
   "id" | "codigo" | "nombre" | "categoria" | "unidadBase"
 >;
-
-function isSerreriaAlmeriense(proveedor: string) {
-  return proveedor
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .includes("serreria almeriense");
-}
 
 function dateValue(date?: Date | string | null) {
   return date ? new Date(date).toISOString().slice(0, 10) : "";
@@ -188,6 +187,10 @@ function initialLineas(data?: GastoAnalizado, gasto?: GastoEditable | null) {
     medida: textValue(linea.medida),
     precioUnidadMedida: textValue(linea.precioUnidadMedida),
     importe: textValue(linea.importe),
+    newMaterialOpen: false,
+    newMaterialNombre: "",
+    newMaterialCategoria: "Otros",
+    newMaterialUnidadBase: "",
   }));
 }
 
@@ -211,21 +214,59 @@ function DecimalInput({
   );
 }
 
+function decimalNumber(value: string) {
+  const normalized = value.trim().replace(",", ".");
+  if (!normalized) {
+    return null;
+  }
+
+  const number = Number(normalized);
+  return Number.isFinite(number) ? number : null;
+}
+
+function decimalText(value: number) {
+  return value.toFixed(2);
+}
+
+function initialImporteLineas(lineas: FormLinea[]) {
+  return lineas.reduce((sum, linea) => {
+    const number = decimalNumber(linea.importe);
+    return number === null ? sum : sum + number;
+  }, 0);
+}
+
 function LineasTable({
   initial,
-  serreriaFormat,
   materiales,
   gastoId,
+  onImportesChange,
 }: {
   initial: FormLinea[];
-  serreriaFormat: boolean;
   materiales: MaterialOption[];
   gastoId?: string;
+  onImportesChange: (total: number) => void;
 }) {
   const [lineas, setLineas] = useState<FormLinea[]>(initial);
 
-  function updateLinea(index: number, field: keyof GastoLineaAnalizada, value: string) {
-    setLineas((current) =>
+  function emitImportes(next: FormLinea[]) {
+    onImportesChange(
+      next.reduce((sum, linea) => {
+        const number = Number(linea.importe.replace(",", "."));
+        return Number.isFinite(number) ? sum + number : sum;
+      }, 0),
+    );
+  }
+
+  function updateLineas(updater: (current: FormLinea[]) => FormLinea[]) {
+    setLineas((current) => {
+      const next = updater(current);
+      emitImportes(next);
+      return next;
+    });
+  }
+
+  function updateLinea(index: number, field: keyof FormLinea, value: string | boolean) {
+    updateLineas((current) =>
       current.map((linea, currentIndex) =>
         currentIndex === index ? { ...linea, [field]: value } : linea,
       ),
@@ -234,7 +275,7 @@ function LineasTable({
 
   function updateLineaMaterial(index: number, materialId: string) {
     const material = materiales.find((item) => item.id === materialId);
-    setLineas((current) =>
+    updateLineas((current) =>
       current.map((linea, currentIndex) =>
         currentIndex === index
           ? {
@@ -275,8 +316,8 @@ function LineasTable({
         </div>
         <button
           type="button"
-          onClick={() => {
-            setLineas((current) => [
+        onClick={() => {
+            updateLineas((current) => [
               ...current,
               {
                 key: `nueva-${Date.now()}-${current.length}`,
@@ -289,6 +330,10 @@ function LineasTable({
                 medida: "",
                 precioUnidadMedida: "",
                 importe: "",
+                newMaterialOpen: false,
+                newMaterialNombre: "",
+                newMaterialCategoria: "Otros",
+                newMaterialUnidadBase: "",
               },
             ]);
           }}
@@ -299,24 +344,15 @@ function LineasTable({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[900px] border-collapse text-left text-sm">
+        <table className="w-full min-w-[1180px] border-collapse text-left text-sm">
           <thead className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
             <tr>
               <th className="px-2 py-2">Código interno</th>
               <th className="px-2 py-2">Descripción</th>
               <th className="px-2 py-2">Material vinculado</th>
-              {serreriaFormat ? (
-                <>
-                  <th className="px-2 py-2">Piezas</th>
-                  <th className="px-2 py-2">Medida</th>
-                  <th className="px-2 py-2">Precio/medida</th>
-                </>
-              ) : (
-                <>
-                  <th className="px-2 py-2">Cantidad</th>
-                  <th className="px-2 py-2">Precio unitario</th>
-                </>
-              )}
+              <th className="px-2 py-2">Piezas</th>
+              <th className="px-2 py-2">Medida</th>
+              <th className="px-2 py-2">Precio/medida</th>
               <th className="px-2 py-2">Importe</th>
               <th className="px-2 py-2 text-right">Acciones</th>
             </tr>
@@ -333,6 +369,16 @@ function LineasTable({
                       value={linea.id}
                     />
                   ) : null}
+                  <input
+                    type="hidden"
+                    name={`linea-${linea.key}-cantidad`}
+                    value={linea.cantidad}
+                  />
+                  <input
+                    type="hidden"
+                    name={`linea-${linea.key}-precioUnitario`}
+                    value={linea.precioUnitario}
+                  />
                   <input
                     className={inputClass}
                     name={`linea-${linea.key}-codigoMaterialDetectado`}
@@ -375,56 +421,84 @@ function LineasTable({
                       href={materialCreateHref(linea)}
                       className="text-xs font-semibold text-emerald-700 transition hover:text-emerald-900"
                     >
-                      Crear nuevo desde esta línea
+                      Crear material en otra pantalla
                     </a>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateLinea(index, "newMaterialOpen", !linea.newMaterialOpen)
+                      }
+                      className="w-fit text-xs font-semibold text-neutral-700 transition hover:text-neutral-950"
+                    >
+                      {linea.newMaterialOpen ? "Ocultar alta rápida" : "Crear material nuevo"}
+                    </button>
+                    {linea.newMaterialOpen ? (
+                      <div className="grid gap-2 rounded-md border border-neutral-200 bg-white p-2">
+                        <input
+                          className={inputClass}
+                          name={`linea-${linea.key}-newMaterialNombre`}
+                          value={linea.newMaterialNombre}
+                          onChange={(event) =>
+                            updateLinea(index, "newMaterialNombre", event.target.value)
+                          }
+                          placeholder="Nombre interno"
+                        />
+                        <select
+                          className={inputClass}
+                          name={`linea-${linea.key}-newMaterialCategoria`}
+                          value={linea.newMaterialCategoria}
+                          onChange={(event) =>
+                            updateLinea(index, "newMaterialCategoria", event.target.value)
+                          }
+                        >
+                          {categoriasMaterial.map((categoria) => (
+                            <option key={categoria} value={categoria}>
+                              {categoria}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          className={inputClass}
+                          name={`linea-${linea.key}-newMaterialUnidadBase`}
+                          value={linea.newMaterialUnidadBase}
+                          onChange={(event) =>
+                            updateLinea(index, "newMaterialUnidadBase", event.target.value)
+                          }
+                        >
+                          <option value="">Sin unidad</option>
+                          {unidadesMaterial.map((unidad) => (
+                            <option key={unidad} value={unidad}>
+                              {unidad}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : null}
                   </div>
                 </td>
-                {serreriaFormat ? (
-                  <>
-                    <td className="px-2 py-2">
-                      <DecimalInput
-                        name={`linea-${linea.key}-piezas`}
-                        value={linea.piezas}
-                        onChange={(value) => updateLinea(index, "piezas", value)}
-                      />
-                    </td>
-                    <td className="px-2 py-2">
-                      <DecimalInput
-                        name={`linea-${linea.key}-medida`}
-                        value={linea.medida}
-                        onChange={(value) => updateLinea(index, "medida", value)}
-                      />
-                    </td>
-                    <td className="px-2 py-2">
-                      <DecimalInput
-                        name={`linea-${linea.key}-precioUnidadMedida`}
-                        value={linea.precioUnidadMedida}
-                        onChange={(value) =>
-                          updateLinea(index, "precioUnidadMedida", value)
-                        }
-                      />
-                    </td>
-                  </>
-                ) : (
-                  <>
-                    <td className="px-2 py-2">
-                      <DecimalInput
-                        name={`linea-${linea.key}-cantidad`}
-                        value={linea.cantidad}
-                        onChange={(value) => updateLinea(index, "cantidad", value)}
-                      />
-                    </td>
-                    <td className="px-2 py-2">
-                      <DecimalInput
-                        name={`linea-${linea.key}-precioUnitario`}
-                        value={linea.precioUnitario}
-                        onChange={(value) =>
-                          updateLinea(index, "precioUnitario", value)
-                        }
-                      />
-                    </td>
-                  </>
-                )}
+                <td className="px-2 py-2">
+                  <DecimalInput
+                    name={`linea-${linea.key}-piezas`}
+                    value={linea.piezas}
+                    onChange={(value) => updateLinea(index, "piezas", value)}
+                  />
+                </td>
+                <td className="px-2 py-2">
+                  <DecimalInput
+                    name={`linea-${linea.key}-medida`}
+                    value={linea.medida}
+                    onChange={(value) => updateLinea(index, "medida", value)}
+                  />
+                </td>
+                <td className="px-2 py-2">
+                  <DecimalInput
+                    name={`linea-${linea.key}-precioUnidadMedida`}
+                    value={linea.precioUnidadMedida}
+                    onChange={(value) =>
+                      updateLinea(index, "precioUnidadMedida", value)
+                    }
+                  />
+                </td>
                 <td className="px-2 py-2">
                   <DecimalInput
                     name={`linea-${linea.key}-importe`}
@@ -436,7 +510,7 @@ function LineasTable({
                   <button
                     type="button"
                     onClick={() =>
-                      setLineas((current) =>
+                      updateLineas((current) =>
                         current.filter((_, currentIndex) => currentIndex !== index),
                       )
                     }
@@ -479,14 +553,57 @@ export function GastoForm({
   materiales?: MaterialOption[];
 }) {
   const [state, formAction, pending] = useActionState(action, initialGastoFormState);
-  const allowIncompleteRef = useRef<HTMLInputElement>(null);
   const values = data ?? valuesFromGasto(gasto);
   const [tipoGasto, setTipoGasto] = useState(values.tipoGasto || "Otros");
   const [proveedor, setProveedor] = useState(values.proveedor);
+  const [baseImponible, setBaseImponible] = useState(values.baseImponible);
+  const [iva, setIva] = useState(values.iva);
+  const [total, setTotal] = useState(values.total);
+  const [ivaPorcentaje, setIvaPorcentaje] = useState("21");
   const fileUrl = archivoUrl ?? gasto?.archivoUrl ?? "";
-  const lineas = initialLineas(data, gasto);
-  const serreriaFormat = isSerreriaAlmeriense(proveedor);
+  const lineas = useMemo(() => initialLineas(data, gasto), [data, gasto]);
+  const [importeLineas, setImporteLineas] = useState(initialImporteLineas(lineas));
   const isMateriales = tipoGasto === "Materiales";
+
+  function calcularTotalDesdeBase() {
+    const base = decimalNumber(baseImponible);
+    if (base === null) {
+      return;
+    }
+
+    const ivaManual = decimalNumber(iva);
+    const percent = decimalNumber(ivaPorcentaje) ?? 21;
+    const ivaCalculado = ivaManual ?? base * (percent / 100);
+    setIva(decimalText(ivaCalculado));
+    setTotal(decimalText(base + ivaCalculado));
+  }
+
+  function calcularBaseDesdeTotal() {
+    const totalNumber = decimalNumber(total);
+    if (totalNumber === null) {
+      return;
+    }
+
+    const ivaManual = decimalNumber(iva);
+    if (ivaManual !== null) {
+      setBaseImponible(decimalText(totalNumber - ivaManual));
+      return;
+    }
+
+    const percent = decimalNumber(ivaPorcentaje) ?? 21;
+    const base = totalNumber / (1 + percent / 100);
+    const ivaCalculado = totalNumber - base;
+    setBaseImponible(decimalText(base));
+    setIva(decimalText(ivaCalculado));
+  }
+
+  function usarSumaLineas() {
+    setBaseImponible(decimalText(importeLineas));
+    const percent = decimalNumber(ivaPorcentaje) ?? 21;
+    const ivaCalculado = importeLineas * (percent / 100);
+    setIva(decimalText(ivaCalculado));
+    setTotal(decimalText(importeLineas + ivaCalculado));
+  }
 
   return (
     <form
@@ -496,35 +613,14 @@ export function GastoForm({
         const form = event.currentTarget;
         const formData = new FormData(form);
         const proveedorValue = formData.get("proveedor");
-        const total = formData.get("total");
-        const isIncomplete =
-          typeof proveedorValue !== "string" ||
-          proveedorValue.trim() === "" ||
-          typeof total !== "string" ||
-          total.trim() === "";
-
-        if (allowIncompleteRef.current) {
-          allowIncompleteRef.current.checked = false;
-        }
-
-        if (
-          isIncomplete &&
-          !window.confirm(
-            "El gasto no tiene proveedor o total. ¿Quieres guardarlo incompleto?",
-          )
-        ) {
+        if (typeof proveedorValue !== "string" || proveedorValue.trim() === "") {
+          window.alert("El proveedor es obligatorio.");
           event.preventDefault();
-          return;
-        }
-
-        if (isIncomplete && allowIncompleteRef.current) {
-          allowIncompleteRef.current.checked = true;
         }
       }}
     >
       {gasto ? <input type="hidden" name="gastoId" value={gasto.id} /> : null}
       <input type="hidden" name="archivoUrl" value={fileUrl} />
-      <input ref={allowIncompleteRef} type="checkbox" name="allowIncomplete" hidden />
 
       <section className="grid gap-4">
         <h3 className="text-lg font-semibold text-neutral-950">
@@ -554,6 +650,7 @@ export function GastoForm({
               name="proveedor"
               value={proveedor}
               onChange={(event) => setProveedor(event.target.value)}
+              required
             />
           </label>
           <Field label="Fecha" name="fecha" type="date" defaultValue={values.fecha} />
@@ -581,21 +678,66 @@ export function GastoForm({
             defaultValue={values.formaPago}
           />
           <Field
-            label="Base imponible"
-            name="baseImponible"
-            type="number"
-            defaultValue={values.baseImponible}
-            placeholder="0.00"
-          />
-          <Field label="IVA" name="iva" type="number" defaultValue={values.iva} />
-          <Field label="Total" name="total" type="number" defaultValue={values.total} />
-          <Field
             label="Cliente vinculado"
             name="clienteId"
             type="number"
             defaultValue={gasto?.clienteId?.toString() ?? ""}
             placeholder="ID de cliente"
           />
+        </div>
+
+        <div className="grid gap-3 rounded-md border border-neutral-200 bg-neutral-50 p-4">
+          <div className="grid gap-4 md:grid-cols-4">
+            <label className="flex flex-col gap-1.5">
+              <span className={labelClass}>Base imponible</span>
+              <DecimalInput
+                name="baseImponible"
+                value={baseImponible}
+                onChange={setBaseImponible}
+              />
+            </label>
+            <label className="flex flex-col gap-1.5">
+              <span className={labelClass}>IVA %</span>
+              <DecimalInput
+                name="ivaPorcentaje"
+                value={ivaPorcentaje}
+                onChange={setIvaPorcentaje}
+              />
+            </label>
+            <label className="flex flex-col gap-1.5">
+              <span className={labelClass}>IVA</span>
+              <DecimalInput name="iva" value={iva} onChange={setIva} />
+            </label>
+            <label className="flex flex-col gap-1.5">
+              <span className={labelClass}>Total</span>
+              <DecimalInput name="total" value={total} onChange={setTotal} />
+            </label>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={calcularTotalDesdeBase}
+              className="inline-flex h-9 items-center justify-center rounded-md border border-neutral-300 bg-white px-3 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
+            >
+              Calcular total
+            </button>
+            <button
+              type="button"
+              onClick={calcularBaseDesdeTotal}
+              className="inline-flex h-9 items-center justify-center rounded-md border border-neutral-300 bg-white px-3 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
+            >
+              Calcular base
+            </button>
+            {isMateriales ? (
+              <button
+                type="button"
+                onClick={usarSumaLineas}
+                className="inline-flex h-9 items-center justify-center rounded-md border border-neutral-300 bg-white px-3 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
+              >
+                Usar suma líneas ({decimalText(importeLineas)})
+              </button>
+            ) : null}
+          </div>
         </div>
 
         <label className="flex flex-col gap-1.5">
@@ -620,9 +762,9 @@ export function GastoForm({
       {isMateriales ? (
         <LineasTable
           initial={lineas}
-          serreriaFormat={serreriaFormat}
           materiales={materiales}
           gastoId={gasto?.id}
+          onImportesChange={setImporteLineas}
         />
       ) : null}
 

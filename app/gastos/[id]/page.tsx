@@ -33,14 +33,6 @@ function formatMoney(value?: { toString(): string } | null) {
   }).format(number);
 }
 
-function isSerreriaAlmeriense(proveedor?: string | null) {
-  return proveedor
-    ?.normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .includes("serreria almeriense") ?? false;
-}
-
 function DetailItem({
   label,
   value,
@@ -103,7 +95,6 @@ export default async function GastoPage({ params }: GastoPageProps) {
   }
 
   const archivoEsImagen = /\.(jpe?g|png|webp)$/i.test(gasto.archivoUrl ?? "");
-  const serreriaFormat = isSerreriaAlmeriense(gasto.proveedor);
   const isMateriales = gasto.tipoGasto === "Materiales";
 
   return (
@@ -147,18 +138,14 @@ export default async function GastoPage({ params }: GastoPageProps) {
             <DetailItem label="Base imponible" value={formatMoney(gasto.baseImponible)} />
             <DetailItem label="IVA" value={formatMoney(gasto.iva)} />
             <DetailItem label="Total" value={formatMoney(gasto.total)} />
-            {isMateriales ? (
-              <>
-                <DetailItem label="Forma de pago" value={gasto.formaPago} />
-                <DetailItem label="Descripción" value={gasto.descripcion} />
-                <DetailItem
-                  label="Cliente vinculado"
-                  value={gasto.cliente ? `${gasto.cliente.nombre} (#${gasto.cliente.id})` : null}
-                />
-                <DetailItem label="Creado" value={formatDateTime(gasto.createdAt)} />
-                <DetailItem label="Última modificación" value={formatDateTime(gasto.updatedAt)} />
-              </>
-            ) : null}
+            <DetailItem label="Forma de pago" value={gasto.formaPago} />
+            <DetailItem label="Descripción" value={gasto.descripcion} />
+            <DetailItem
+              label="Cliente vinculado"
+              value={gasto.cliente ? `${gasto.cliente.nombre} (#${gasto.cliente.id})` : null}
+            />
+            <DetailItem label="Creado" value={formatDateTime(gasto.createdAt)} />
+            <DetailItem label="Última modificación" value={formatDateTime(gasto.updatedAt)} />
           </dl>
           <div className="mt-4 rounded-md border border-neutral-200 bg-neutral-50 px-4 py-3">
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
@@ -194,18 +181,9 @@ export default async function GastoPage({ params }: GastoPageProps) {
                     <th className="px-4 py-3">Código interno</th>
                     <th className="px-4 py-3">Descripción proveedor</th>
                     <th className="px-4 py-3">Material vinculado</th>
-                    {serreriaFormat ? (
-                      <>
-                        <th className="px-4 py-3 text-right">Piezas</th>
-                        <th className="px-4 py-3 text-right">Medida</th>
-                        <th className="px-4 py-3 text-right">Precio/medida</th>
-                      </>
-                    ) : (
-                      <>
-                        <th className="px-4 py-3 text-right">Cantidad</th>
-                        <th className="px-4 py-3 text-right">Precio unitario</th>
-                      </>
-                    )}
+                    <th className="px-4 py-3 text-right">Piezas</th>
+                    <th className="px-4 py-3 text-right">Medida</th>
+                    <th className="px-4 py-3 text-right">Precio/medida</th>
                     <th className="px-4 py-3 text-right">Importe</th>
                     <th className="px-4 py-3 text-right">Acciones</th>
                   </tr>
@@ -234,28 +212,15 @@ export default async function GastoPage({ params }: GastoPageProps) {
                             "-"
                           )}
                         </td>
-                        {serreriaFormat ? (
-                          <>
-                            <td className="px-4 py-4 text-right text-neutral-700">
-                              {linea.piezas?.toString() ?? "-"}
-                            </td>
-                            <td className="px-4 py-4 text-right text-neutral-700">
-                              {linea.medida?.toString() ?? "-"}
-                            </td>
-                            <td className="px-4 py-4 text-right text-neutral-700">
-                              {linea.precioUnidadMedida?.toString() ?? "-"}
-                            </td>
-                          </>
-                        ) : (
-                          <>
-                            <td className="px-4 py-4 text-right text-neutral-700">
-                              {linea.cantidad?.toString() ?? "-"}
-                            </td>
-                            <td className="px-4 py-4 text-right text-neutral-700">
-                              {formatMoney(linea.precioUnitario)}
-                            </td>
-                          </>
-                        )}
+                        <td className="px-4 py-4 text-right text-neutral-700">
+                          {linea.piezas?.toString() ?? "-"}
+                        </td>
+                        <td className="px-4 py-4 text-right text-neutral-700">
+                          {linea.medida?.toString() ?? "-"}
+                        </td>
+                        <td className="px-4 py-4 text-right text-neutral-700">
+                          {linea.precioUnidadMedida?.toString() ?? "-"}
+                        </td>
                         <td className="px-4 py-4 text-right font-semibold text-neutral-950">
                           {formatMoney(linea.importe)}
                         </td>
@@ -273,7 +238,7 @@ export default async function GastoPage({ params }: GastoPageProps) {
                   ) : (
                     <tr>
                       <td
-                        colSpan={serreriaFormat ? 8 : 7}
+                        colSpan={8}
                         className="px-4 py-6 text-center text-neutral-500"
                       >
                         Este gasto todavía no tiene líneas de artículos.
