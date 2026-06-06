@@ -64,21 +64,50 @@ function ChartPanel({
 
 export function GastosCharts({
   porMes,
+  porTipo,
   porProveedor,
   porCategoria,
   evolucionAnual,
+  gastoPorMaterial,
+  gastoPorCategoriaMaterial,
+  evolucionPreciosMaterial,
+  comprasPorProveedorMaterial,
 }: {
   porMes: ChartItem[];
+  porTipo: ChartItem[];
   porProveedor: ChartItem[];
   porCategoria: ChartItem[];
   evolucionAnual: ChartItem[];
+  gastoPorMaterial: ChartItem[];
+  gastoPorCategoriaMaterial: ChartItem[];
+  evolucionPreciosMaterial: ChartItem[];
+  comprasPorProveedorMaterial: ChartItem[];
 }) {
   return (
     <div className="grid gap-6">
+      <ChartPanel title="Gasto por tipo" data={porTipo} />
       <ChartPanel title="Gasto total por mes" data={porMes} type="line" />
       <div className="grid gap-6 xl:grid-cols-2">
         <ChartPanel title="Gasto total por proveedor" data={porProveedor} />
         <ChartPanel title="Gasto total por categoría" data={porCategoria} />
+      </div>
+      <div className="grid gap-6 xl:grid-cols-2">
+        <ChartPanel title="Gasto por material" data={gastoPorMaterial} />
+        <ChartPanel
+          title="Gasto por categoría de material"
+          data={gastoPorCategoriaMaterial}
+        />
+      </div>
+      <div className="grid gap-6 xl:grid-cols-2">
+        <ChartPanel
+          title="Evolución de precios de materiales"
+          data={evolucionPreciosMaterial}
+          type="line"
+        />
+        <ChartPanel
+          title="Compras de materiales por proveedor"
+          data={comprasPorProveedorMaterial}
+        />
       </div>
       <ChartPanel title="Evolución anual" data={evolucionAnual} type="line" />
     </div>

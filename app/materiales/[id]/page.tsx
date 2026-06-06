@@ -62,6 +62,9 @@ export default async function MaterialPage({ params }: MaterialPageProps) {
     where: { id },
     include: {
       lineas: {
+        where: {
+          gasto: { tipoGasto: "Materiales" },
+        },
         orderBy: { createdAt: "desc" },
         include: {
           gasto: {
@@ -159,11 +162,13 @@ export default async function MaterialPage({ params }: MaterialPageProps) {
                 <tr>
                   <th className="px-4 py-3">Fecha</th>
                   <th className="px-4 py-3">Proveedor</th>
+                  <th className="px-4 py-3">Número documento</th>
                   <th className="px-4 py-3">Descripción proveedor</th>
                   <th className="px-4 py-3 text-right">Piezas</th>
                   <th className="px-4 py-3 text-right">Medida</th>
-                  <th className="px-4 py-3 text-right">Precio</th>
+                  <th className="px-4 py-3 text-right">Precio/medida</th>
                   <th className="px-4 py-3 text-right">Importe</th>
+                  <th className="px-4 py-3 text-right">Gasto</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200">
@@ -173,16 +178,11 @@ export default async function MaterialPage({ params }: MaterialPageProps) {
                       <td className="whitespace-nowrap px-4 py-4 text-neutral-700">
                         {formatDate(linea.gasto.fecha)}
                       </td>
-                      <td className="px-4 py-4">
-                        <Link
-                          href={`/gastos/${linea.gasto.id}`}
-                          className="font-semibold text-neutral-950 transition hover:text-emerald-800"
-                        >
-                          {linea.gasto.proveedor || "Sin proveedor"}
-                        </Link>
-                        <p className="mt-1 text-neutral-500">
-                          {linea.gasto.numeroDocumento || "-"}
-                        </p>
+                      <td className="px-4 py-4 text-neutral-700">
+                        {linea.gasto.proveedor || "Sin proveedor"}
+                      </td>
+                      <td className="px-4 py-4 text-neutral-700">
+                        {linea.gasto.numeroDocumento || "-"}
                       </td>
                       <td className="px-4 py-4 text-neutral-700">
                         {linea.descripcion}
@@ -200,11 +200,19 @@ export default async function MaterialPage({ params }: MaterialPageProps) {
                       <td className="px-4 py-4 text-right font-semibold text-neutral-950">
                         {formatMoney(linea.importe)}
                       </td>
+                      <td className="px-4 py-4 text-right">
+                        <Link
+                          href={`/gastos/${linea.gasto.id}`}
+                          className="inline-flex h-9 items-center justify-center rounded-md border border-neutral-300 px-3 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
+                        >
+                          Ver gasto
+                        </Link>
+                      </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={7} className="px-4 py-6 text-center text-neutral-500">
+                    <td colSpan={9} className="px-4 py-6 text-center text-neutral-500">
                       Este material todavía no tiene compras asociadas.
                     </td>
                   </tr>

@@ -9,6 +9,7 @@ import {
   GastoAnalizado,
   GastoLineaAnalizada,
   tiposDocumentoGasto,
+  tiposGasto,
 } from "@/app/gastos/constants";
 import { type GastoFormState } from "@/app/gastos/actions";
 
@@ -120,6 +121,7 @@ function SelectField({
 type GastoEditable = Pick<
   Gasto,
   | "id"
+  | "tipoGasto"
   | "proveedor"
   | "fecha"
   | "tipoDocumento"
@@ -143,6 +145,7 @@ function valuesFromGasto(gasto?: GastoEditable | null): GastoAnalizado {
   }
 
   return {
+    tipoGasto: gasto.tipoGasto ?? "Otros",
     proveedor: gasto.proveedor ?? "",
     fecha: dateValue(gasto.fecha),
     tipoDocumento: gasto.tipoDocumento ?? "",
@@ -478,10 +481,12 @@ export function GastoForm({
   const [state, formAction, pending] = useActionState(action, initialGastoFormState);
   const allowIncompleteRef = useRef<HTMLInputElement>(null);
   const values = data ?? valuesFromGasto(gasto);
+  const [tipoGasto, setTipoGasto] = useState(values.tipoGasto || "Otros");
   const [proveedor, setProveedor] = useState(values.proveedor);
   const fileUrl = archivoUrl ?? gasto?.archivoUrl ?? "";
   const lineas = initialLineas(data, gasto);
   const serreriaFormat = isSerreriaAlmeriense(proveedor);
+  const isMateriales = tipoGasto === "Materiales";
 
   return (
     <form
@@ -526,6 +531,22 @@ export function GastoForm({
           Datos generales
         </h3>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>Tipo de gasto</span>
+            <select
+              className={inputClass}
+              name="tipoGasto"
+              value={tipoGasto}
+              onChange={(event) => setTipoGasto(event.target.value)}
+              required
+            >
+              {tiposGasto.map((tipo) => (
+                <option key={tipo} value={tipo}>
+                  {tipo}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="flex flex-col gap-1.5">
             <span className={labelClass}>Proveedor</span>
             <input
@@ -596,12 +617,14 @@ export function GastoForm({
         </label>
       </section>
 
-      <LineasTable
-        initial={lineas}
-        serreriaFormat={serreriaFormat}
-        materiales={materiales}
-        gastoId={gasto?.id}
-      />
+      {isMateriales ? (
+        <LineasTable
+          initial={lineas}
+          serreriaFormat={serreriaFormat}
+          materiales={materiales}
+          gastoId={gasto?.id}
+        />
+      ) : null}
 
       {state.message ? (
         <p className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-900">

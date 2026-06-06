@@ -13,6 +13,19 @@ export const categoriasGasto = [
   "Otros",
 ] as const;
 
+export const tiposGasto = [
+  "Materiales",
+  "Vehículos",
+  "Personal",
+  "Herramientas",
+  "Maquinaria",
+  "Servicios externos",
+  "Alquileres",
+  "Suministros",
+  "Impuestos",
+  "Otros",
+] as const;
+
 export const tiposDocumentoGasto = [
   "factura",
   "albaran",
@@ -30,6 +43,7 @@ export const formasPagoGasto = [
 ] as const;
 
 export type GastoAnalizado = {
+  tipoGasto: string;
   proveedor: string;
   fecha: string;
   tipoDocumento: string;
@@ -58,6 +72,7 @@ export type GastoLineaAnalizada = {
 };
 
 export const emptyGastoAnalizado: GastoAnalizado = {
+  tipoGasto: "Otros",
   proveedor: "",
   fecha: "",
   tipoDocumento: "",

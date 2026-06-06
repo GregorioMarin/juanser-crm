@@ -27,10 +27,26 @@ function lastTwelveMonths() {
 async function getStats() {
   const gastos = await prisma.gasto.findMany({
     select: {
+      id: true,
+      tipoGasto: true,
       fecha: true,
       total: true,
       proveedor: true,
       categoria: true,
+      lineas: {
+        select: {
+          importe: true,
+          precioUnidadMedida: true,
+          precioUnitario: true,
+          material: {
+            select: {
+              codigo: true,
+              nombre: true,
+              categoria: true,
+            },
+          },
+        },
+      },
     },
   });
 
@@ -38,7 +54,12 @@ async function getStats() {
   const porMesMap = new Map(meses.map((month) => [month.key, month]));
   const porProveedor = new Map<string, number>();
   const porCategoria = new Map<string, number>();
+  const porTipo = new Map<string, number>();
   const porAno = new Map<string, number>();
+  const gastoPorMaterial = new Map<string, number>();
+  const gastoPorCategoriaMaterial = new Map<string, number>();
+  const comprasPorProveedorMaterial = new Map<string, number>();
+  const precioPorMes = new Map<string, { total: number; count: number; name: string }>();
 
   for (const gasto of gastos) {
     const total = toNumber(gasto.total);
@@ -58,12 +79,52 @@ async function getStats() {
     const categoria = gasto.categoria || "Sin categoría";
     porProveedor.set(proveedor, (porProveedor.get(proveedor) ?? 0) + total);
     porCategoria.set(categoria, (porCategoria.get(categoria) ?? 0) + total);
+    porTipo.set(gasto.tipoGasto, (porTipo.get(gasto.tipoGasto) ?? 0) + total);
+
+    if (gasto.tipoGasto === "Materiales") {
+      comprasPorProveedorMaterial.set(
+        proveedor,
+        (comprasPorProveedorMaterial.get(proveedor) ?? 0) + total,
+      );
+
+      for (const linea of gasto.lineas) {
+        const materialName = linea.material
+          ? `${linea.material.codigo} · ${linea.material.nombre}`
+          : "Sin material asignado";
+        const materialCategoria = linea.material?.categoria || "Sin categoría";
+        const importe = toNumber(linea.importe);
+        gastoPorMaterial.set(
+          materialName,
+          (gastoPorMaterial.get(materialName) ?? 0) + importe,
+        );
+        gastoPorCategoriaMaterial.set(
+          materialCategoria,
+          (gastoPorCategoriaMaterial.get(materialCategoria) ?? 0) + importe,
+        );
+
+        const price = toNumber(linea.precioUnidadMedida ?? linea.precioUnitario);
+        if (price > 0 && fecha) {
+          const monthKey = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, "0")}`;
+          const current = precioPorMes.get(monthKey) ?? {
+            total: 0,
+            count: 0,
+            name: monthFormatter.format(fecha),
+          };
+          current.total += price;
+          current.count += 1;
+          precioPorMes.set(monthKey, current);
+        }
+      }
+    }
   }
 
   const sortByTotal = ([, a]: [string, number], [, b]: [string, number]) => b - a;
 
   return {
     porMes: meses,
+    porTipo: [...porTipo.entries()]
+      .sort(sortByTotal)
+      .map(([name, total]) => ({ name, total })),
     porProveedor: [...porProveedor.entries()]
       .sort(sortByTotal)
       .slice(0, 12)
@@ -73,6 +134,23 @@ async function getStats() {
       .map(([name, total]) => ({ name, total })),
     evolucionAnual: [...porAno.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
+      .map(([name, total]) => ({ name, total })),
+    gastoPorMaterial: [...gastoPorMaterial.entries()]
+      .sort(sortByTotal)
+      .slice(0, 15)
+      .map(([name, total]) => ({ name, total })),
+    gastoPorCategoriaMaterial: [...gastoPorCategoriaMaterial.entries()]
+      .sort(sortByTotal)
+      .map(([name, total]) => ({ name, total })),
+    evolucionPreciosMaterial: [...precioPorMes.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([, value]) => ({
+        name: value.name,
+        total: value.count > 0 ? value.total / value.count : 0,
+      })),
+    comprasPorProveedorMaterial: [...comprasPorProveedorMaterial.entries()]
+      .sort(sortByTotal)
+      .slice(0, 12)
       .map(([name, total]) => ({ name, total })),
   };
 }

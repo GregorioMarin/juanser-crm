@@ -13,6 +13,7 @@ import {
   GastoAnalizado,
   GastoLineaAnalizada,
   tiposDocumentoGasto,
+  tiposGasto,
 } from "@/app/gastos/constants";
 import {
   categoriasMaterial,
@@ -147,6 +148,19 @@ function optionalClienteId(formData: FormData) {
   return id;
 }
 
+function tipoGastoValue(formData: FormData) {
+  const value = optionalString(formData, "tipoGasto") ?? "Otros";
+  if (!tiposGasto.includes(value as (typeof tiposGasto)[number])) {
+    throw new Error("Tipo de gasto no valido.");
+  }
+
+  return value;
+}
+
+function isMaterialesTipo(tipoGasto: string | null) {
+  return tipoGasto === "Materiales";
+}
+
 function requiredString(formData: FormData, key: string) {
   const value = optionalString(formData, key);
   if (!value) {
@@ -209,6 +223,7 @@ function gastoData(formData: FormData) {
   }
 
   return {
+    tipoGasto: tipoGastoValue(formData),
     proveedor,
     fecha: optionalDate(formData, "fecha"),
     tipoDocumento: optionValue(
@@ -230,6 +245,10 @@ function gastoData(formData: FormData) {
 }
 
 function lineasData(formData: FormData) {
+  if (!isMaterialesTipo(tipoGastoValue(formData))) {
+    return [];
+  }
+
   const proveedor = optionalString(formData, "proveedor");
   const useSerreriaFormat = isSerreriaAlmeriense(proveedor);
   const indexes = formData
@@ -461,6 +480,9 @@ function normalizeAnalysis(input: Partial<GastoAnalizado>): GastoAnalizado {
   const validCategoria = value("categoria");
 
   return {
+    tipoGasto: tiposGasto.includes(value("tipoGasto") as (typeof tiposGasto)[number])
+      ? value("tipoGasto")
+      : "Otros",
     proveedor: value("proveedor"),
     fecha: value("fecha"),
     tipoDocumento: tiposDocumentoGasto.includes(
@@ -547,10 +569,11 @@ async function analyzeWithOpenAI(file: File, buffer: Buffer) {
           .join("; ")
       : "No hay materiales internos creados todavia.";
   const prompt = `Extrae datos de este documento de compra de Carpinteria Juanser.
-Devuelve solo JSON estricto con estas claves: proveedor, fecha, tipoDocumento, numeroDocumento, categoria, baseImponible, iva, total, formaPago, descripcion, observaciones, lineas.
-Reglas generales: si un dato no se ve claro deja string vacio; no inventes; fecha en YYYY-MM-DD si aparece; importes con punto decimal; tipoDocumento solo factura, albaran, ticket u otro; categoria solo una de: ${categoriasGasto.join(", ")}.
-Reglas de lineas: cada articulo o material comprado debe ser un objeto separado en lineas; no concatenes productos en descripcion; si hay 3 articulos devuelve 3 lineas; extrae cantidad, precioUnitario e importe si aparecen.
-Reglas de materiales internos: no cambies ni resumas la descripcion original del proveedor. Catalogo interno disponible: ${materialCatalog}. Para cada linea, si reconoces un material parecido del catalogo, rellena codigoMaterialDetectado con su codigo exacto. Si no hay coincidencia clara, rellena codigoMaterialDetectado con el prefijo de categoria mas probable; si no puedes deducirlo, string vacio. Prefijos disponibles: ${materialPrefixes}. Ejemplos de codigoMaterialDetectado: TAB-000001 si coincide un material existente; TAB, CAN, HER, BAR, FER, HER-MAQ u OTR si solo detectas categoria. materialId debe ser null.
+Devuelve solo JSON estricto con estas claves: tipoGasto, proveedor, fecha, tipoDocumento, numeroDocumento, categoria, baseImponible, iva, total, formaPago, descripcion, observaciones, lineas.
+Reglas generales: si un dato no se ve claro deja string vacio; no inventes; fecha en YYYY-MM-DD si aparece; importes con punto decimal; tipoDocumento solo factura, albaran, ticket u otro; categoria solo una de: ${categoriasGasto.join(", ")}; tipoGasto solo uno de: ${tiposGasto.join(", ")}.
+Clasificacion tipoGasto: usa Materiales para proveedores de tableros, cantos, herrajes, barnices, ferreteria o compras trazables como articulo interno. Usa Vehículos para combustible, taller o reparación de vehículo. Usa Personal para Seguridad Social, nóminas o personal. Usa Suministros para luz, agua, telefonía o energía. Usa Servicios externos, Alquileres, Impuestos, Herramientas, Maquinaria u Otros cuando corresponda.
+Reglas de lineas: si tipoGasto es Materiales, cada articulo o material comprado debe ser un objeto separado en lineas; no concatenes productos en descripcion; si hay 3 articulos devuelve 3 lineas; extrae cantidad, precioUnitario e importe si aparecen. Si tipoGasto NO es Materiales, devuelve lineas como array vacio.
+Reglas de materiales internos: solo si tipoGasto es Materiales. No cambies ni resumas la descripcion original del proveedor. Catalogo interno disponible: ${materialCatalog}. Para cada linea, si reconoces un material parecido del catalogo, rellena codigoMaterialDetectado con su codigo exacto. Si no hay coincidencia clara, rellena codigoMaterialDetectado con el prefijo de categoria mas probable; si no puedes deducirlo, string vacio. Prefijos disponibles: ${materialPrefixes}. Ejemplos de codigoMaterialDetectado: TAB-000001 si coincide un material existente; TAB, CAN, HER, BAR, FER, HER-MAQ u OTR si solo detectas categoria. materialId debe ser null.
 Reglas especificas para proveedor Serrería Almeriense o Serreria Almeriense: usa siempre el formato especifico de lineas con descripcion, piezas, medida, precioUnidadMedida e importe. Devuelve cantidad=null y precioUnitario=null. "Piezas" es el numero de tableros o unidades fisicas y debe ir en piezas. "Medida" NO es precio; normalmente son m2 totales o medida total de la linea y debe ir en medida. "Neto" normalmente es precio por m2 o por unidad de medida y debe ir en precioUnidadMedida. "Importe" es medida x precioUnidadMedida y debe ir en importe. No interpretes Neto como precio por pieza. No devuelvas cantidad=medida ni precioUnitario=piezas. No calcules precioUnitario por tablero salvo que aparezca expresamente. Si Medida x Neto se aproxima a Importe, confirma esa interpretacion. Ejemplo: piezas=4, medida=23.940, precioUnidadMedida=10.384, importe=248.59. Para otros proveedores usa cantidad y precioUnitario cuando corresponda.`;
 
   const fileContent = isPdf
@@ -588,6 +611,7 @@ Reglas especificas para proveedor Serrería Almeriense o Serreria Almeriense: us
             additionalProperties: false,
             properties: {
               proveedor: { type: "string" },
+              tipoGasto: { type: "string" },
               fecha: { type: "string" },
               tipoDocumento: { type: "string" },
               numeroDocumento: { type: "string" },
@@ -630,6 +654,7 @@ Reglas especificas para proveedor Serrería Almeriense o Serreria Almeriense: us
             },
             required: [
               "proveedor",
+              "tipoGasto",
               "fecha",
               "tipoDocumento",
               "numeroDocumento",
@@ -731,6 +756,7 @@ export async function createGasto(
     revalidatePath("/");
     revalidatePath("/gastos");
     revalidatePath("/materiales");
+    revalidatePath("/materiales/buscar");
   } catch (error) {
     return {
       status: "error",
@@ -750,45 +776,48 @@ export async function updateGasto(
   try {
     const id = requiredGastoId(formData);
     gastoId = id;
+    const gastoInput = gastoData(formData);
     const lineas = lineasData(formData);
     await prisma.$transaction(async (tx) => {
       await tx.gasto.update({
         where: { id },
-        data: gastoData(formData),
+        data: gastoInput,
       });
 
-      const existing = await tx.gastoLinea.findMany({
-        where: { gastoId: id },
-        select: { id: true },
-      });
-      const submittedIds = new Set(
-        lineas
-          .map((linea) => linea.id)
-          .filter((lineaId): lineaId is string => Boolean(lineaId)),
-      );
-      const idsToDelete = existing
-        .map((linea) => linea.id)
-        .filter((lineaId) => !submittedIds.has(lineaId));
-
-      if (idsToDelete.length > 0) {
-        await tx.gastoLinea.deleteMany({
-          where: { id: { in: idsToDelete }, gastoId: id },
+      if (isMaterialesTipo(gastoInput.tipoGasto)) {
+        const existing = await tx.gastoLinea.findMany({
+          where: { gastoId: id },
+          select: { id: true },
         });
-      }
+        const submittedIds = new Set(
+          lineas
+            .map((linea) => linea.id)
+            .filter((lineaId): lineaId is string => Boolean(lineaId)),
+        );
+        const idsToDelete = existing
+          .map((linea) => linea.id)
+          .filter((lineaId) => !submittedIds.has(lineaId));
 
-      for (const linea of lineas) {
-        if (linea.id) {
-          await tx.gastoLinea.updateMany({
-            where: { id: linea.id, gastoId: id },
-            data: linea.data,
+        if (idsToDelete.length > 0) {
+          await tx.gastoLinea.deleteMany({
+            where: { id: { in: idsToDelete }, gastoId: id },
           });
-        } else {
-          await tx.gastoLinea.create({
-            data: {
-              gastoId: id,
-              ...linea.data,
-            },
-          });
+        }
+
+        for (const linea of lineas) {
+          if (linea.id) {
+            await tx.gastoLinea.updateMany({
+              where: { id: linea.id, gastoId: id },
+              data: linea.data,
+            });
+          } else {
+            await tx.gastoLinea.create({
+              data: {
+                gastoId: id,
+                ...linea.data,
+              },
+            });
+          }
         }
       }
     });
@@ -796,6 +825,7 @@ export async function updateGasto(
     revalidatePath("/");
     revalidatePath("/gastos");
     revalidatePath("/materiales");
+    revalidatePath("/materiales/buscar");
     revalidatePath(`/gastos/${id}`);
   } catch (error) {
     return {
@@ -849,6 +879,14 @@ export async function asignarMaterialGastoLinea(
   try {
     const { gastoId, lineaId } = requiredLineaMaterialIds(formData);
     const materialId = requiredString(formData, "materialId");
+    const gasto = await prisma.gasto.findUnique({
+      where: { id: gastoId },
+      select: { tipoGasto: true },
+    });
+    if (!gasto || !isMaterialesTipo(gasto.tipoGasto)) {
+      throw new Error("Solo los gastos de tipo Materiales permiten vincular materiales.");
+    }
+
     const material = await prisma.material.findUnique({
       where: { id: materialId },
       select: { id: true, codigo: true, nombre: true },
@@ -871,6 +909,7 @@ export async function asignarMaterialGastoLinea(
     revalidatePath(`/gastos/${gastoId}`);
     revalidatePath(`/gastos/${gastoId}/editar`);
     revalidatePath("/materiales");
+    revalidatePath("/materiales/buscar");
     revalidatePath(`/materiales/${material.id}`);
 
     return {
@@ -892,6 +931,14 @@ export async function crearYAsignarMaterialGastoLinea(
 ): Promise<MaterialLineaState> {
   try {
     const { gastoId, lineaId } = requiredLineaMaterialIds(formData);
+    const gasto = await prisma.gasto.findUnique({
+      where: { id: gastoId },
+      select: { tipoGasto: true },
+    });
+    if (!gasto || !isMaterialesTipo(gasto.tipoGasto)) {
+      throw new Error("Solo los gastos de tipo Materiales permiten vincular materiales.");
+    }
+
     const categoria = categoriaMaterialValue(formData);
     const codigo = await nextMaterialCode(categoria);
 
@@ -924,6 +971,7 @@ export async function crearYAsignarMaterialGastoLinea(
     revalidatePath(`/gastos/${gastoId}`);
     revalidatePath(`/gastos/${gastoId}/editar`);
     revalidatePath("/materiales");
+    revalidatePath("/materiales/buscar");
     revalidatePath(`/materiales/${material.id}`);
 
     return {

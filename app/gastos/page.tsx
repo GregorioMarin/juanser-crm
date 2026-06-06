@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { connection } from "next/server";
 import { prisma } from "@/app/lib/prisma";
-import { categoriasGasto, tiposDocumentoGasto } from "@/app/gastos/constants";
+import {
+  categoriasGasto,
+  tiposDocumentoGasto,
+  tiposGasto,
+} from "@/app/gastos/constants";
 import { DeleteGastoForm } from "@/app/gastos/delete-gasto-form";
 
 const inputClass =
@@ -52,6 +56,7 @@ async function getGastos(filters: {
   q: string;
   categoria: string;
   tipoDocumento: string;
+  tipoGasto: string;
   desde: string;
   hasta: string;
 }) {
@@ -80,6 +85,7 @@ async function getGastos(filters: {
           : {},
         filters.categoria ? { categoria: filters.categoria } : {},
         filters.tipoDocumento ? { tipoDocumento: filters.tipoDocumento } : {},
+        filters.tipoGasto ? { tipoGasto: filters.tipoGasto } : {},
         desde ? { fecha: { gte: desde } } : {},
         hasta ? { fecha: { lt: hasta } } : {},
       ],
@@ -153,10 +159,17 @@ function SummaryCard({
 function FiltersForm({
   filters,
 }: {
-  filters: { q: string; categoria: string; tipoDocumento: string; desde: string; hasta: string };
+  filters: {
+    q: string;
+    categoria: string;
+    tipoDocumento: string;
+    tipoGasto: string;
+    desde: string;
+    hasta: string;
+  };
 }) {
   return (
-    <form action="/gastos" className="grid gap-3 rounded-md border border-neutral-300 bg-white p-4 shadow-sm lg:grid-cols-[1.4fr_1fr_1fr_1fr_1fr_auto] lg:items-end">
+    <form action="/gastos" className="grid gap-3 rounded-md border border-neutral-300 bg-white p-4 shadow-sm lg:grid-cols-[1.4fr_1fr_1fr_1fr_1fr_1fr_auto] lg:items-end">
       <label className="flex flex-col gap-1.5">
         <span className="text-sm font-medium text-neutral-700">Buscar</span>
         <input
@@ -166,6 +179,17 @@ function FiltersForm({
           defaultValue={filters.q}
           placeholder="Proveedor, número o descripción"
         />
+      </label>
+      <label className="flex flex-col gap-1.5">
+        <span className="text-sm font-medium text-neutral-700">Tipo gasto</span>
+        <select className={inputClass} name="tipoGasto" defaultValue={filters.tipoGasto}>
+          <option value="">Todos</option>
+          {tiposGasto.map((tipo) => (
+            <option key={tipo} value={tipo}>
+              {tipo}
+            </option>
+          ))}
+        </select>
       </label>
       <label className="flex flex-col gap-1.5">
         <span className="text-sm font-medium text-neutral-700">Categoría</span>
@@ -228,6 +252,7 @@ function GastosTable({ gastos }: { gastos: Gasto[] }) {
             <th className="px-4 py-3">Fecha</th>
             <th className="px-4 py-3">Proveedor</th>
             <th className="px-4 py-3">Tipo</th>
+            <th className="px-4 py-3">Tipo gasto</th>
             <th className="px-4 py-3">Número</th>
             <th className="px-4 py-3">Categoría</th>
             <th className="px-4 py-3">Líneas</th>
@@ -256,6 +281,7 @@ function GastosTable({ gastos }: { gastos: Gasto[] }) {
                   ) : null}
                 </td>
                 <td className="px-4 py-4 text-neutral-700">{gasto.tipoDocumento || "-"}</td>
+                <td className="px-4 py-4 text-neutral-700">{gasto.tipoGasto}</td>
                 <td className="px-4 py-4 text-neutral-700">{gasto.numeroDocumento || "-"}</td>
                 <td className="px-4 py-4 text-neutral-700">{gasto.categoria || "-"}</td>
                 <td className="whitespace-nowrap px-4 py-4 text-neutral-700">
@@ -293,7 +319,7 @@ function GastosTable({ gastos }: { gastos: Gasto[] }) {
             ))
           ) : (
             <tr>
-              <td colSpan={10} className="px-4 py-8 text-center text-neutral-500">
+              <td colSpan={11} className="px-4 py-8 text-center text-neutral-500">
                 No hay gastos con esos filtros.
               </td>
             </tr>
@@ -320,6 +346,7 @@ export default async function GastosPage({ searchParams }: GastosPageProps) {
     q: first("q"),
     categoria: first("categoria"),
     tipoDocumento: first("tipoDocumento"),
+    tipoGasto: first("tipoGasto"),
     desde: first("desde"),
     hasta: first("hasta"),
   };

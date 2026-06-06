@@ -14,23 +14,51 @@ function formatMoney(value?: { toString(): string } | number | null) {
   }).format(number);
 }
 
+function searchWords(query: string) {
+  return query
+    .split(/\s+/)
+    .map((word) => word.trim())
+    .filter(Boolean);
+}
+
+function materialSearchWhere(query: string) {
+  const words = searchWords(query);
+  if (words.length === 0) {
+    return undefined;
+  }
+
+  return {
+    AND: words.map((word) => ({
+      OR: [
+        { codigo: { contains: word, mode: "insensitive" as const } },
+        { nombre: { contains: word, mode: "insensitive" as const } },
+        { categoria: { contains: word, mode: "insensitive" as const } },
+        { descripcion: { contains: word, mode: "insensitive" as const } },
+        {
+          lineas: {
+            some: {
+              descripcion: { contains: word, mode: "insensitive" as const },
+              gasto: { tipoGasto: "Materiales" },
+            },
+          },
+        },
+      ],
+    })),
+  };
+}
+
 async function getMateriales(query: string) {
   const [materiales, resumenes] = await Promise.all([
     prisma.material.findMany({
-      where: query
-        ? {
-            OR: [
-              { codigo: { contains: query, mode: "insensitive" } },
-              { nombre: { contains: query, mode: "insensitive" } },
-              { categoria: { contains: query, mode: "insensitive" } },
-            ],
-          }
-        : undefined,
+      where: materialSearchWhere(query),
       orderBy: [{ categoria: "asc" }, { codigo: "asc" }],
     }),
     prisma.gastoLinea.groupBy({
       by: ["materialId"],
-      where: { materialId: { not: null } },
+      where: {
+        materialId: { not: null },
+        gasto: { tipoGasto: "Materiales" },
+      },
       _count: { _all: true },
       _sum: { importe: true },
     }),
@@ -79,6 +107,12 @@ function SearchForm({ query }: { query: string }) {
             Limpiar
           </Link>
         ) : null}
+        <Link
+          href={query ? `/materiales/buscar?q=${encodeURIComponent(query)}` : "/materiales/buscar"}
+          className="inline-flex h-10 items-center justify-center rounded-md border border-neutral-300 px-4 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
+        >
+          Búsqueda avanzada
+        </Link>
       </div>
     </form>
   );

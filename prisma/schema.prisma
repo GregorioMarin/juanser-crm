@@ -252,6 +252,7 @@ model ActividadProveedor {
 
 model Gasto {
   id              String    @id @default(cuid())
+  tipoGasto       String    @default("Otros")
   proveedor       String?
   fecha           DateTime?
   tipoDocumento   String?
@@ -271,6 +272,7 @@ model Gasto {
   updatedAt       DateTime  @updatedAt
 
   @@index([proveedor])
+  @@index([tipoGasto])
   @@index([fecha])
   @@index([tipoDocumento])
   @@index([categoria])
