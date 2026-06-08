@@ -1,6 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
+import {
+  createFacturaVenta,
+  vincularFacturaVenta,
+} from "@/app/facturas-venta/actions";
+import { DeleteFacturaVentaForm } from "@/app/facturas-venta/delete-factura-venta-form";
+import { FacturaVentaForm } from "@/app/facturas-venta/factura-venta-form";
 import { prisma } from "@/app/lib/prisma";
 import { CostesRentabilidadForm } from "@/app/presupuestos/costes-rentabilidad-form";
 
@@ -21,6 +27,16 @@ function formatCurrency(value: unknown) {
 
 function decimalInputValue(value: unknown) {
   return Number(value ?? 0).toFixed(2);
+}
+
+function facturaEstadoCobroClass(estado: string) {
+  const styles: Record<string, string> = {
+    PENDIENTE: "bg-amber-100 text-amber-900 ring-amber-200",
+    PARCIAL: "bg-sky-100 text-sky-900 ring-sky-200",
+    COBRADA: "bg-emerald-100 text-emerald-900 ring-emerald-200",
+  };
+
+  return styles[estado] ?? "bg-neutral-100 text-neutral-800 ring-neutral-200";
 }
 
 function latestPriceFromLinea(linea: {
@@ -70,6 +86,9 @@ export default async function PresupuestoPage({ params }: PresupuestoPageProps) 
             nombre: true,
           },
         },
+        facturasVenta: {
+          orderBy: [{ fechaFactura: "desc" }, { createdAt: "desc" }],
+        },
         lineas: {
           orderBy: { id: "asc" },
         },
@@ -111,6 +130,23 @@ export default async function PresupuestoPage({ params }: PresupuestoPageProps) 
   if (!presupuesto) {
     notFound();
   }
+
+  const facturasDisponibles = await prisma.facturaVenta.findMany({
+    where: {
+      clienteId: presupuesto.cliente.id,
+      OR: [{ presupuestoId: null }, { presupuestoId: presupuesto.id }],
+    },
+    orderBy: [{ fechaFactura: "desc" }, { createdAt: "desc" }],
+    select: {
+      id: true,
+      numeroFactura: true,
+      fechaFactura: true,
+      total: true,
+      presupuestoId: true,
+    },
+  });
+  const isFacturable =
+    presupuesto.estado === "ACEPTADO" || presupuesto.estado === "INSTALADO";
 
   const precioPorMaterial = new Map<string, string>();
   for (const linea of ultimasCompras) {
@@ -232,6 +268,153 @@ export default async function PresupuestoPage({ params }: PresupuestoPageProps) 
             </table>
           </div>
         </section>
+
+        {isFacturable ? (
+          <section className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
+            <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h2 className="text-xl font-semibold text-neutral-950">
+                  Facturas de venta
+                </h2>
+                <p className="mt-1 text-sm text-neutral-500">
+                  Estado:{" "}
+                  <span className="font-semibold text-neutral-800">
+                    {presupuesto.facturasVenta.length > 0 ? "Facturado" : "Sin factura"}
+                  </span>
+                </p>
+              </div>
+              <Link
+                href="/facturas-venta"
+                className="inline-flex h-10 items-center justify-center rounded-md border border-neutral-300 px-4 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
+              >
+                Ver facturas
+              </Link>
+            </div>
+
+            <div className="overflow-x-auto rounded-md border border-neutral-200">
+              <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+                <thead className="bg-neutral-100 text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
+                  <tr>
+                    <th className="px-4 py-3">Nº factura</th>
+                    <th className="px-4 py-3">Fecha</th>
+                    <th className="px-4 py-3 text-right">Total</th>
+                    <th className="px-4 py-3">Estado cobro</th>
+                    <th className="px-4 py-3">PDF</th>
+                    <th className="px-4 py-3 text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-200">
+                  {presupuesto.facturasVenta.length > 0 ? (
+                    presupuesto.facturasVenta.map((factura) => (
+                      <tr key={factura.id}>
+                        <td className="px-4 py-4 font-semibold text-neutral-950">
+                          {factura.numeroFactura}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-4 text-neutral-700">
+                          {formatDate(factura.fechaFactura)}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-4 text-right font-semibold">
+                          {formatCurrency(factura.total)}
+                        </td>
+                        <td className="px-4 py-4">
+                          <span
+                            className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${facturaEstadoCobroClass(
+                              factura.estadoCobro,
+                            )}`}
+                          >
+                            {factura.estadoCobro}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4">
+                          <a
+                            href={factura.archivoUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="font-semibold text-neutral-800 underline underline-offset-2"
+                          >
+                            Ver PDF
+                          </a>
+                        </td>
+                        <td className="px-4 py-4">
+                          <div className="flex flex-col items-end gap-2">
+                            <Link
+                              href={`/facturas-venta/${factura.id}/editar?returnTo=${encodeURIComponent(
+                                `/presupuestos/${presupuesto.id}`,
+                              )}`}
+                              className="inline-flex h-9 items-center justify-center rounded-md border border-neutral-300 px-3 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
+                            >
+                              Editar
+                            </Link>
+                            <DeleteFacturaVentaForm
+                              facturaId={factura.id}
+                              returnTo={`/presupuestos/${presupuesto.id}`}
+                            />
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-6 text-center text-neutral-500">
+                        No hay facturas vinculadas a este presupuesto.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-5 grid gap-5 lg:grid-cols-2">
+              <form
+                action={vincularFacturaVenta}
+                className="grid gap-3 rounded-md border border-neutral-200 bg-neutral-50 p-4"
+              >
+                <input type="hidden" name="presupuestoId" value={presupuesto.id} />
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-sm font-medium text-neutral-700">
+                    Vincular factura existente
+                  </span>
+                  <select
+                    className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-950 outline-none transition focus:border-emerald-700 focus:ring-2 focus:ring-emerald-100"
+                    name="facturaId"
+                    required
+                  >
+                    <option value="">Selecciona una factura</option>
+                    {facturasDisponibles.map((factura) => (
+                      <option key={factura.id} value={factura.id}>
+                        {factura.numeroFactura} · {formatDate(factura.fechaFactura)} ·{" "}
+                        {formatCurrency(factura.total)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="submit"
+                  className="inline-flex h-10 w-fit items-center justify-center rounded-md bg-neutral-950 px-4 text-sm font-semibold text-white transition hover:bg-neutral-800"
+                >
+                  Vincular factura
+                </button>
+              </form>
+
+              <FacturaVentaForm
+                action={createFacturaVenta}
+                cliente={{
+                  id: presupuesto.cliente.id,
+                  nombre: presupuesto.cliente.nombre,
+                }}
+                presupuestos={[
+                  {
+                    id: presupuesto.id,
+                    numero: presupuesto.numero,
+                    titulo: presupuesto.titulo,
+                  },
+                ]}
+                returnTo={`/presupuestos/${presupuesto.id}`}
+                submitLabel="Crear factura vinculada"
+              />
+            </div>
+          </section>
+        ) : null}
 
         <section className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
           <div className="mb-4">

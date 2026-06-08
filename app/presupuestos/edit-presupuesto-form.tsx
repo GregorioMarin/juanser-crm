@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { updatePresupuesto } from "./actions";
 
-const estados = ["PENDIENTE", "ACEPTADO", "RECHAZADO"] as const;
+const estados = ["PENDIENTE", "ACEPTADO", "RECHAZADO", "INSTALADO"] as const;
 const inputClass =
   "w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-950 outline-none transition placeholder:text-neutral-400 focus:border-emerald-700 focus:ring-2 focus:ring-emerald-100";
 const labelClass = "text-sm font-medium text-neutral-700";

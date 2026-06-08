@@ -22,6 +22,9 @@ import {
   MultimediaUploadForm,
   type MultimediaUploadState,
 } from "@/app/clientes/multimedia-upload-form";
+import { createFacturaVenta } from "@/app/facturas-venta/actions";
+import { DeleteFacturaVentaForm } from "@/app/facturas-venta/delete-factura-venta-form";
+import { FacturaVentaForm } from "@/app/facturas-venta/factura-venta-form";
 import { registrarActividadCliente } from "@/app/lib/actividad";
 import { prisma } from "@/app/lib/prisma";
 import { Prisma } from "@/app/generated/prisma/client";
@@ -85,7 +88,7 @@ const allowedVideoTypes = ["video/mp4", "video/quicktime", "video/webm"];
 const allowedImageExtensions = ["jpg", "jpeg", "png", "webp"];
 const allowedVideoExtensions = ["mp4", "mov", "webm"];
 const fotoTipos = ["CLIENTE", "JUANSER"] as const;
-const presupuestoEstados = ["PENDIENTE", "ACEPTADO", "RECHAZADO"] as const;
+const presupuestoEstados = ["PENDIENTE", "ACEPTADO", "RECHAZADO", "INSTALADO"] as const;
 const metodosPago = ["Transferencia", "Efectivo", "Tarjeta", "Bizum", "Otro"] as const;
 const estadosTrabajoTerminadoDestacado = [
   "Aceptado",
@@ -1053,6 +1056,23 @@ async function getCliente(id: number) {
           pagosCuenta: {
             orderBy: { fechaPago: "desc" },
           },
+          facturasVenta: {
+            select: {
+              id: true,
+            },
+          },
+        },
+      },
+      facturasVenta: {
+        orderBy: [{ fechaFactura: "desc" }, { createdAt: "desc" }],
+        include: {
+          presupuesto: {
+            select: {
+              id: true,
+              numero: true,
+              titulo: true,
+            },
+          },
         },
       },
       pagosCuenta: {
@@ -1149,12 +1169,23 @@ function presupuestoEstadoClass(estado: string) {
     PENDIENTE: "bg-amber-100 text-amber-900 ring-amber-200",
     ACEPTADO: "bg-emerald-100 text-emerald-900 ring-emerald-200",
     RECHAZADO: "bg-rose-100 text-rose-900 ring-rose-200",
+    INSTALADO: "bg-teal-100 text-teal-900 ring-teal-200",
   };
 
   return (
     styles[estado as PresupuestoEstado] ??
     "bg-neutral-100 text-neutral-800 ring-neutral-200"
   );
+}
+
+function facturaEstadoCobroClass(estado: string) {
+  const styles: Record<string, string> = {
+    PENDIENTE: "bg-amber-100 text-amber-900 ring-amber-200",
+    PARCIAL: "bg-sky-100 text-sky-900 ring-sky-200",
+    COBRADA: "bg-emerald-100 text-emerald-900 ring-emerald-200",
+  };
+
+  return styles[estado] ?? "bg-neutral-100 text-neutral-800 ring-neutral-200";
 }
 
 function toDateInputValue(date?: Date | null) {
@@ -1732,6 +1763,134 @@ function PagosCuentaSection({ cliente }: { cliente: ClienteDetalle }) {
   );
 }
 
+function FacturasVentaSection({ cliente }: { cliente: ClienteDetalle }) {
+  const presupuestosFacturables = cliente.presupuestos
+    .filter((presupuesto) => presupuesto.estado === "ACEPTADO" || presupuesto.estado === "INSTALADO")
+    .map((presupuesto) => ({
+      id: presupuesto.id,
+      numero: presupuesto.numero,
+      titulo: presupuesto.titulo,
+    }));
+
+  return (
+    <section
+      id="facturas-venta"
+      className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm"
+    >
+      <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-neutral-950">
+            FACTURAS DE VENTA
+          </h2>
+          <p className="mt-1 text-sm text-neutral-500">
+            PDFs emitidos por la gestoría y asociados a este cliente.
+          </p>
+        </div>
+        <span className="text-sm font-semibold text-neutral-700">
+          {cliente.facturasVenta.length} facturas
+        </span>
+      </div>
+
+      <FacturaVentaForm
+        action={createFacturaVenta}
+        cliente={{ id: cliente.id, nombre: cliente.nombre }}
+        presupuestos={presupuestosFacturables}
+        returnTo={`/clientes/${cliente.id}`}
+        submitLabel="Subir factura"
+      />
+
+      <div className="mt-5 overflow-x-auto rounded-md border border-neutral-200">
+        <table className="w-full min-w-[820px] border-collapse text-left text-sm">
+          <thead className="bg-neutral-100 text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
+            <tr>
+              <th className="px-4 py-3">Nº Factura</th>
+              <th className="px-4 py-3">Fecha</th>
+              <th className="px-4 py-3 text-right">Total</th>
+              <th className="px-4 py-3">Estado Cobro</th>
+              <th className="px-4 py-3">PDF</th>
+              <th className="px-4 py-3 text-right">Acciones</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-neutral-200">
+            {cliente.facturasVenta.length > 0 ? (
+              cliente.facturasVenta.map((factura) => (
+                <tr key={factura.id} className="align-top">
+                  <td className="px-4 py-4">
+                    <p className="font-semibold text-neutral-950">
+                      {factura.numeroFactura}
+                    </p>
+                    {factura.presupuesto ? (
+                      <p className="mt-1 text-xs text-neutral-500">
+                        Presupuesto {factura.presupuesto.numero}
+                      </p>
+                    ) : null}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-4 text-neutral-700">
+                    {formatDate(factura.fechaFactura)}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-4 text-right font-semibold text-neutral-950">
+                    {formatCurrency(factura.total)}
+                  </td>
+                  <td className="px-4 py-4">
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${facturaEstadoCobroClass(
+                        factura.estadoCobro,
+                      )}`}
+                    >
+                      {factura.estadoCobro}
+                    </span>
+                  </td>
+                  <td className="px-4 py-4">
+                    <div className="flex flex-col gap-2">
+                      <a
+                        href={factura.archivoUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-semibold text-neutral-800 underline underline-offset-2"
+                      >
+                        Ver PDF
+                      </a>
+                      <a
+                        href={factura.archivoUrl}
+                        download
+                        className="font-semibold text-neutral-800 underline underline-offset-2"
+                      >
+                        Descargar PDF
+                      </a>
+                    </div>
+                  </td>
+                  <td className="px-4 py-4">
+                    <div className="flex flex-col items-end gap-2">
+                      <Link
+                        href={`/facturas-venta/${factura.id}/editar?returnTo=${encodeURIComponent(
+                          `/clientes/${cliente.id}`,
+                        )}`}
+                        className="inline-flex h-9 items-center justify-center rounded-md border border-neutral-300 px-3 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
+                      >
+                        Editar
+                      </Link>
+                      <DeleteFacturaVentaForm
+                        facturaId={factura.id}
+                        returnTo={`/clientes/${cliente.id}`}
+                      />
+                    </div>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={6} className="px-4 py-6 text-center text-neutral-500">
+                  Todavia no hay facturas de venta asociadas a este cliente.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 function PresupuestosSection({ cliente }: { cliente: ClienteDetalle }) {
   return (
     <section className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
@@ -1876,6 +2035,7 @@ function PresupuestosSection({ cliente }: { cliente: ClienteDetalle }) {
               <th className="px-4 py-3">Titulo</th>
               <th className="px-4 py-3">Importe</th>
               <th className="px-4 py-3">Pagos</th>
+              <th className="px-4 py-3">Factura</th>
               <th className="px-4 py-3">Estado</th>
               <th className="px-4 py-3">Fecha</th>
               <th className="px-4 py-3 text-right">PDF</th>
@@ -1887,6 +2047,10 @@ function PresupuestosSection({ cliente }: { cliente: ClienteDetalle }) {
                 const totalPresupuesto = presupuestoTotal(presupuesto);
                 const pagado = totalPagadoPresupuesto(presupuesto);
                 const pendiente = totalPresupuesto - pagado;
+                const isFacturable =
+                  presupuesto.estado === "ACEPTADO" ||
+                  presupuesto.estado === "INSTALADO";
+                const isFacturado = presupuesto.facturasVenta.length > 0;
 
                 return (
                   <tr key={presupuesto.id} className="align-top">
@@ -1956,6 +2120,31 @@ function PresupuestosSection({ cliente }: { cliente: ClienteDetalle }) {
                       </p>
                     </td>
                     <td className="px-4 py-4">
+                      {isFacturable ? (
+                        <div className="grid gap-2">
+                          <span
+                            className={`inline-flex w-fit rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${
+                              isFacturado
+                                ? "bg-emerald-100 text-emerald-900 ring-emerald-200"
+                                : "bg-amber-100 text-amber-900 ring-amber-200"
+                            }`}
+                          >
+                            {isFacturado ? "Facturado" : "Sin factura"}
+                          </span>
+                          {!isFacturado ? (
+                            <a
+                              href="#facturas-venta"
+                              className="text-xs font-semibold text-emerald-700 transition hover:text-emerald-900"
+                            >
+                              Crear factura
+                            </a>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <span className="text-sm text-neutral-500">No aplica</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-4">
                       <span
                         className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${presupuestoEstadoClass(
                           presupuesto.estado,
@@ -2017,7 +2206,7 @@ function PresupuestosSection({ cliente }: { cliente: ClienteDetalle }) {
               })
             ) : (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-neutral-500">
+                <td colSpan={8} className="px-4 py-6 text-center text-neutral-500">
                   Todavia no hay presupuestos para este cliente.
                 </td>
               </tr>
@@ -2334,6 +2523,8 @@ function ClienteFicha({ cliente }: { cliente: ClienteDetalle }) {
       />
 
       <PagosCuentaSection cliente={cliente} />
+
+      <FacturasVentaSection cliente={cliente} />
 
       <PresupuestosSection cliente={cliente} />
 

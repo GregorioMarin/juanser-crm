@@ -16,6 +16,7 @@ const clienteExtensions = new Set([
 const documentExtensions = new Set(["pdf", "xlsx", "docx"]);
 const trabajoExtensions = clienteExtensions;
 const gastoExtensions = new Set(["jpg", "jpeg", "png", "webp", "pdf"]);
+const facturaVentaExtensions = new Set(["pdf"]);
 const contentTypes: Record<string, string> = {
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
@@ -69,6 +70,10 @@ function resolveUploadPath(segments: string[]) {
     if (segments.length !== 3 || !isSafeSegment(recordId)) {
       return null;
     }
+  } else if (scope === "facturas-venta") {
+    if (segments.length !== 3 || !isSafeSegment(recordId)) {
+      return null;
+    }
   } else {
     return null;
   }
@@ -82,7 +87,9 @@ function resolveUploadPath(segments: string[]) {
         ? trabajoExtensions
         : scope === "gastos"
           ? gastoExtensions
-          : documentExtensions;
+          : scope === "facturas-venta"
+            ? facturaVentaExtensions
+            : documentExtensions;
   if (!extension || !allowedExtensions.has(extension)) {
     return null;
   }

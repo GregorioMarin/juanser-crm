@@ -13,6 +13,15 @@ function currentMonthRange() {
   };
 }
 
+function currentYearRange() {
+  const now = new Date();
+
+  return {
+    from: new Date(now.getFullYear(), 0, 1),
+    to: new Date(now.getFullYear() + 1, 0, 1),
+  };
+}
+
 function recentRange(days: number) {
   const to = new Date();
   const from = new Date(to);
@@ -23,6 +32,7 @@ function recentRange(days: number) {
 
 async function getHomeMetrics() {
   const month = currentMonthRange();
+  const year = currentYearRange();
   const recent = recentRange(30);
   const [
     gastosMes,
@@ -30,6 +40,10 @@ async function getHomeMetrics() {
     clientesNuevosMes,
     clientesActivos,
     trabajosRecientes,
+    facturasTotal,
+    facturacionTotal,
+    facturacionAno,
+    facturasPendientesCobro,
   ] = await Promise.all([
     prisma.gasto.aggregate({
       where: { fecha: { gte: month.from, lt: month.to } },
@@ -47,6 +61,17 @@ async function getHomeMetrics() {
     prisma.trabajoTerminado.count({
       where: { fechaTrabajo: { gte: recent.from, lte: recent.to } },
     }),
+    prisma.facturaVenta.count(),
+    prisma.facturaVenta.aggregate({
+      _sum: { total: true },
+    }),
+    prisma.facturaVenta.aggregate({
+      where: { fechaFactura: { gte: year.from, lt: year.to } },
+      _sum: { total: true },
+    }),
+    prisma.facturaVenta.count({
+      where: { estadoCobro: { in: ["PENDIENTE", "PARCIAL"] } },
+    }),
   ]);
 
   return {
@@ -55,6 +80,10 @@ async function getHomeMetrics() {
     clientesNuevosMes,
     trabajosActivosORecientes: clientesActivos + trabajosRecientes,
     trabajosDetalle: `${clientesActivos} activos · ${trabajosRecientes} recientes`,
+    facturasTotal,
+    facturacionTotal: facturacionTotal._sum.total,
+    facturacionAno: facturacionAno._sum.total,
+    facturasPendientesCobro,
   };
 }
 
@@ -146,6 +175,12 @@ export default async function Home() {
               Gastos y Compras
             </Link>
             <Link
+              href="/facturas-venta"
+              className="inline-flex h-11 items-center justify-center rounded-md border border-neutral-300 bg-white px-5 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
+            >
+              Facturas de venta
+            </Link>
+            <Link
               href="/actividad"
               className="inline-flex h-11 items-center justify-center rounded-md border border-neutral-300 bg-white px-5 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
             >
@@ -174,7 +209,7 @@ export default async function Home() {
           </div>
         </header>
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <SummaryCard
             label="Gastos del mes"
             value={formatMoney(metrics.gastosMes)}
@@ -191,6 +226,13 @@ export default async function Home() {
             label="Trabajos activos o recientes"
             value={String(metrics.trabajosActivosORecientes)}
             detail={metrics.trabajosDetalle}
+          />
+          <SummaryCard
+            label="Facturas de venta"
+            value={String(metrics.facturasTotal)}
+            detail={`${formatMoney(metrics.facturacionTotal)} total · ${formatMoney(
+              metrics.facturacionAno,
+            )} año · ${metrics.facturasPendientesCobro} pendientes`}
           />
         </section>
 
@@ -210,6 +252,12 @@ export default async function Home() {
                 className="inline-flex h-10 items-center justify-center rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:bg-emerald-800"
               >
                 Ver gastos
+              </Link>
+              <Link
+                href="/facturas-venta"
+                className="inline-flex h-10 items-center justify-center rounded-md border border-neutral-300 px-4 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
+              >
+                Ver facturas
               </Link>
               <Link
                 href="/presupuestos"

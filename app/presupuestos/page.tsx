@@ -4,7 +4,7 @@ import { prisma } from "@/app/lib/prisma";
 import { DeletePresupuestoForm } from "./delete-presupuesto-form";
 import { WhatsAppPresupuestoLink } from "./whatsapp-presupuesto-link";
 
-const estados = ["PENDIENTE", "ACEPTADO", "RECHAZADO"] as const;
+const estados = ["PENDIENTE", "ACEPTADO", "RECHAZADO", "INSTALADO"] as const;
 const inputClass =
   "w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-950 outline-none transition placeholder:text-neutral-400 focus:border-emerald-700 focus:ring-2 focus:ring-emerald-100";
 
@@ -77,6 +77,11 @@ async function getPresupuestos(query: string, estado: PresupuestoEstado | null) 
           importe: true,
         },
       },
+      facturasVenta: {
+        select: {
+          id: true,
+        },
+      },
     },
     orderBy: { fecha: "desc" },
   });
@@ -146,6 +151,7 @@ function estadoClass(estado: string) {
     PENDIENTE: "bg-amber-100 text-amber-900 ring-amber-200",
     ACEPTADO: "bg-emerald-100 text-emerald-900 ring-emerald-200",
     RECHAZADO: "bg-rose-100 text-rose-900 ring-rose-200",
+    INSTALADO: "bg-teal-100 text-teal-900 ring-teal-200",
   };
 
   return (
@@ -225,6 +231,7 @@ function Filtros({
         <option value="PENDIENTE">Pendiente</option>
         <option value="ACEPTADO">Aceptado</option>
         <option value="RECHAZADO">Rechazado</option>
+        <option value="INSTALADO">Instalado</option>
       </select>
       <div className="flex gap-2">
         <button
@@ -274,6 +281,7 @@ function PresupuestosTable({
             <th className="px-4 py-3">Pendiente</th>
             <th className="px-4 py-3">Estado pago</th>
             <th className="px-4 py-3">Estado</th>
+            <th className="px-4 py-3">Factura</th>
             <th className="px-4 py-3">Fecha</th>
             <th className="px-4 py-3 text-right">Acciones</th>
           </tr>
@@ -284,6 +292,10 @@ function PresupuestosTable({
               const pagado = totalPagadoPresupuesto(presupuesto);
               const pendiente = Number(presupuesto.totalConIva) - pagado;
               const pago = estadoPago(pagado, pendiente);
+              const isFacturable =
+                presupuesto.estado === "ACEPTADO" ||
+                presupuesto.estado === "INSTALADO";
+              const isFacturado = presupuesto.facturasVenta.length > 0;
 
               return (
                 <tr key={presupuesto.id} className="align-top">
@@ -330,6 +342,21 @@ function PresupuestosTable({
                     >
                       {presupuesto.estado}
                     </span>
+                  </td>
+                  <td className="px-4 py-4">
+                    {isFacturable ? (
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${
+                          isFacturado
+                            ? "bg-emerald-100 text-emerald-900 ring-emerald-200"
+                            : "bg-amber-100 text-amber-900 ring-amber-200"
+                        }`}
+                      >
+                        {isFacturado ? "Facturado" : "Sin factura"}
+                      </span>
+                    ) : (
+                      <span className="text-neutral-500">No aplica</span>
+                    )}
                   </td>
                   <td className="whitespace-nowrap px-4 py-4 text-neutral-700">
                     {formatDate(presupuesto.fecha)}
@@ -390,7 +417,7 @@ function PresupuestosTable({
             })
           ) : (
             <tr>
-              <td colSpan={10} className="px-4 py-8 text-center text-neutral-500">
+              <td colSpan={11} className="px-4 py-8 text-center text-neutral-500">
                 No hay presupuestos con esos filtros.
               </td>
             </tr>

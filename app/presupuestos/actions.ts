@@ -80,11 +80,11 @@ function optionalInteger(formData: FormData, key: string, fallback: number) {
 
 function presupuestoEstado(formData: FormData) {
   const value = optionalString(formData, "estado") ?? "PENDIENTE";
-  if (!["PENDIENTE", "ACEPTADO", "RECHAZADO"].includes(value)) {
+  if (!["PENDIENTE", "ACEPTADO", "RECHAZADO", "INSTALADO"].includes(value)) {
     throw new Error("Estado de presupuesto no valido.");
   }
 
-  return value as "PENDIENTE" | "ACEPTADO" | "RECHAZADO";
+  return value as "PENDIENTE" | "ACEPTADO" | "RECHAZADO" | "INSTALADO";
 }
 
 function roundCurrency(value: number) {
