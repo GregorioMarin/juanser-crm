@@ -57,6 +57,25 @@ function isSerreriaAlmeriense(proveedor: string | null) {
     .includes("serreria almeriense") ?? false;
 }
 
+function normalizedText(value: string | null) {
+  return value
+    ?.normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase() ?? "";
+}
+
+function proveedorTipo(proveedor: string | null) {
+  const normalized = normalizedText(proveedor);
+  if (normalized.includes("serreria almeriense")) {
+    return "SERRERIA_ALMERIENSE";
+  }
+  if (normalized.includes("verdu")) {
+    return "VERDU";
+  }
+
+  return "GENERICO";
+}
+
 function optionalString(formData: FormData, key: string) {
   const value = formData.get(key);
   if (typeof value !== "string") {
@@ -122,6 +141,11 @@ function optionalDecimalFromValue(raw: string | null, fieldLabel: string, scale 
   return Number(normalized).toFixed(scale);
 }
 
+function optionalBoolean(formData: FormData, key: string) {
+  const value = formData.get(key);
+  return value === "on" || value === "true" || value === "1";
+}
+
 function requiredOrCalculatedTotal(formData: FormData) {
   const total = optionalDecimal(formData, "total");
   if (total) {
@@ -138,6 +162,10 @@ function requiredOrCalculatedTotal(formData: FormData) {
     .getAll("lineaIndex")
     .filter((value): value is string => typeof value === "string")
     .reduce((sum, index) => {
+      if (optionalBoolean(formData, `linea-${index}-esPendienteServir`)) {
+        return sum;
+      }
+
       const importe = optionalDecimalFromValue(
         optionalString(formData, `linea-${index}-importe`),
         "Importe de linea",
@@ -335,6 +363,10 @@ function lineasData(formData: FormData) {
       );
       const descripcion =
         optionalString(formData, `linea-${index}-descripcion`) ?? "Linea pendiente";
+      const unidadMedidaProveedor = optionalString(
+        formData,
+        `linea-${index}-unidadMedidaProveedor`,
+      )?.toUpperCase() ?? null;
       const cantidad = useSerreriaFormat
         ? null
         : optionalDecimalFromValue(
@@ -359,21 +391,31 @@ function lineasData(formData: FormData) {
       const precioUnidadMedida = optionalDecimalFromValue(
         optionalString(formData, `linea-${index}-precioUnidadMedida`),
         "Precio por unidad de medida de linea",
-        3,
+        5,
       );
       const importe = optionalDecimalFromValue(
         optionalString(formData, `linea-${index}-importe`),
         "Importe de linea",
       );
+      const esPorte =
+        optionalBoolean(formData, `linea-${index}-esPorte`) ||
+        normalizedText(descripcion).includes("portes");
+      const esPendienteServir = optionalBoolean(
+        formData,
+        `linea-${index}-esPendienteServir`,
+      );
+      const pedidoProveedor = optionalString(formData, `linea-${index}-pedidoProveedor`);
 
       if (
         descripcion === "Linea pendiente" &&
         !cantidad &&
         !precioUnitario &&
+        !unidadMedidaProveedor &&
         !piezas &&
         !medida &&
         !precioUnidadMedida &&
-        !importe
+        !importe &&
+        !pedidoProveedor
       ) {
         return null;
       }
@@ -391,10 +433,14 @@ function lineasData(formData: FormData) {
           descripcion,
           cantidad,
           precioUnitario,
+          unidadMedidaProveedor,
           piezas,
           medida,
           precioUnidadMedida,
           importe,
+          esPorte,
+          esPendienteServir,
+          pedidoProveedor,
         },
       };
     })
@@ -501,38 +547,55 @@ function normalizeLineas(input: unknown): GastoLineaAnalizada[] {
           : null;
       const textValue = (key: keyof GastoLineaAnalizada) =>
         typeof record[key] === "string" ? record[key].trim() : "";
+      const boolValue = (key: keyof GastoLineaAnalizada) =>
+        typeof record[key] === "boolean" ? record[key] : false;
 
       const descripcion = textValue("descripcion");
-      const materialId = value("materialId");
-      const codigoMaterialDetectado = textValue("codigoMaterialDetectado");
+      const codigoInterno = textValue("codigoInterno");
       const cantidad = value("cantidad");
       const precioUnitario = value("precioUnitario");
+      const unidadMedidaProveedor = textValue("unidadMedidaProveedor") || null;
       const piezas = value("piezas");
       const medida = value("medida");
       const precioUnidadMedida = value("precioUnidadMedida");
       const importe = value("importe");
+      const esPorte =
+        boolValue("esPorte") || normalizedText(descripcion).includes("portes");
+      const esPendienteServir = boolValue("esPendienteServir");
+      const pedidoProveedor = textValue("pedidoProveedor") || null;
+      const materialId = esPorte ? null : value("materialId");
+      const codigoMaterialDetectado = esPorte
+        ? ""
+        : textValue("codigoMaterialDetectado") || codigoInterno;
       if (
         !descripcion &&
         !cantidad &&
         !precioUnitario &&
+        !unidadMedidaProveedor &&
         !piezas &&
         !medida &&
         !precioUnidadMedida &&
-        !importe
+        !importe &&
+        !pedidoProveedor
       ) {
         return null;
       }
 
       return {
+        codigoInterno,
         descripcion,
         materialId,
         codigoMaterialDetectado,
         cantidad,
         precioUnitario,
+        unidadMedidaProveedor,
         piezas,
         medida,
         precioUnidadMedida,
         importe,
+        esPorte,
+        esPendienteServir,
+        pedidoProveedor,
       };
     });
 
@@ -549,6 +612,11 @@ function normalizeAnalysis(input: Partial<GastoAnalizado>): GastoAnalizado {
     tipoGasto: tiposGasto.includes(value("tipoGasto") as (typeof tiposGasto)[number])
       ? value("tipoGasto")
       : "Otros",
+    proveedorTipo: ["SERRERIA_ALMERIENSE", "VERDU", "GENERICO"].includes(
+      value("proveedorTipo"),
+    )
+      ? value("proveedorTipo")
+      : proveedorTipo(value("proveedor")),
     proveedor: value("proveedor"),
     fecha: value("fecha"),
     tipoDocumento: tiposDocumentoGasto.includes(
@@ -635,12 +703,14 @@ async function analyzeWithOpenAI(file: File, buffer: Buffer) {
           .join("; ")
       : "No hay materiales internos creados todavia.";
   const prompt = `Extrae datos de este documento de compra de Carpinteria Juanser.
-Devuelve solo JSON estricto con estas claves: tipoGasto, proveedor, fecha, tipoDocumento, numeroDocumento, categoria, baseImponible, iva, total, formaPago, descripcion, observaciones, lineas.
-Reglas generales: si un dato no se ve claro deja string vacio; no inventes; fecha en YYYY-MM-DD si aparece; importes con punto decimal; tipoDocumento solo factura, albaran, ticket u otro; categoria solo una de: ${categoriasGasto.join(", ")}; tipoGasto solo uno de: ${tiposGasto.join(", ")}.
+Devuelve solo JSON estricto con estas claves: tipoGasto, proveedorTipo, proveedor, fecha, tipoDocumento, numeroDocumento, categoria, baseImponible, iva, total, formaPago, descripcion, observaciones, lineas.
+Reglas generales: no inventes datos ni completes por intuicion; si un dato no se puede leer con claridad devuelve null en ese campo; fecha en YYYY-MM-DD si aparece; importes con punto decimal; tipoDocumento solo factura, albaran, ticket u otro; categoria solo una de: ${categoriasGasto.join(", ")}; tipoGasto solo uno de: ${tiposGasto.join(", ")}; proveedorTipo solo SERRERIA_ALMERIENSE, VERDU o GENERICO.
 Clasificacion tipoGasto: usa Materiales para proveedores de tableros, cantos, herrajes, barnices, ferreteria o compras trazables como articulo interno. Usa Vehículos para combustible, taller o reparación de vehículo. Usa Personal para Seguridad Social, nóminas o personal. Usa Suministros para luz, agua, telefonía o energía. Usa Servicios externos, Alquileres, Impuestos, Herramientas, Maquinaria u Otros cuando corresponda.
-Reglas de lineas: si tipoGasto es Materiales, cada articulo o material comprado debe ser un objeto separado en lineas; no concatenes productos en descripcion; si hay 3 articulos devuelve 3 lineas; extrae cantidad, precioUnitario e importe si aparecen. Si tipoGasto NO es Materiales, devuelve lineas como array vacio.
-Reglas de materiales internos: solo si tipoGasto es Materiales. No cambies ni resumas la descripcion original del proveedor. Catalogo interno disponible: ${materialCatalog}. Para cada linea, si reconoces un material parecido del catalogo, rellena codigoMaterialDetectado con su codigo exacto. Si no hay coincidencia clara, rellena codigoMaterialDetectado con el prefijo de categoria mas probable; si no puedes deducirlo, string vacio. Prefijos disponibles: ${materialPrefixes}. Ejemplos de codigoMaterialDetectado: TAB-000001 si coincide un material existente; TAB, CAN, HER, BAR, FER, HER-MAQ u OTR si solo detectas categoria. materialId debe ser null.
-Reglas especificas para proveedor Serrería Almeriense o Serreria Almeriense: usa siempre el formato especifico de lineas con descripcion, piezas, medida, precioUnidadMedida e importe. Devuelve cantidad=null y precioUnitario=null. "Piezas" es el numero de tableros o unidades fisicas y debe ir en piezas. "Medida" NO es precio; normalmente son m2 totales o medida total de la linea y debe ir en medida. "Neto" normalmente es precio por m2 o por unidad de medida y debe ir en precioUnidadMedida. "Importe" es medida x precioUnidadMedida y debe ir en importe. No interpretes Neto como precio por pieza. No devuelvas cantidad=medida ni precioUnitario=piezas. No calcules precioUnitario por tablero salvo que aparezca expresamente. Si Medida x Neto se aproxima a Importe, confirma esa interpretacion. Ejemplo: piezas=4, medida=23.940, precioUnidadMedida=10.384, importe=248.59. Para otros proveedores usa cantidad y precioUnitario cuando corresponda.`;
+Reglas de lineas: si tipoGasto es Materiales, cada articulo o material comprado debe ser un objeto separado en lineas; no concatenes productos en descripcion; si hay 3 articulos devuelve 3 lineas; devuelve en cada linea exactamente estos campos: codigoInterno, codigoMaterialDetectado, materialId, descripcion, cantidad, unidadMedidaProveedor, piezas, medida, precioUnidadMedida, precioUnitario, importe, esPorte, esPendienteServir, pedidoProveedor. Si tipoGasto NO es Materiales, devuelve lineas como array vacio.
+Reglas de materiales internos: solo si tipoGasto es Materiales y la linea no es porte. No cambies, recortes ni resumas la descripcion original del proveedor. Catalogo interno disponible: ${materialCatalog}. Para cada linea, si reconoces un material parecido del catalogo, rellena codigoInterno y codigoMaterialDetectado con su codigo exacto. Si no hay coincidencia clara, rellena codigoInterno y codigoMaterialDetectado con el prefijo de categoria mas probable; si no puedes deducirlo, devuelve null. Prefijos disponibles: ${materialPrefixes}. Ejemplos: TAB-000001 si coincide un material existente; TAB, CAN, HER, BAR, FER, HER-MAQ u OTR si solo detectas categoria. materialId debe ser null.
+Reglas especificas para proveedor Serrería Almeriense o Serreria Almeriense: proveedorTipo=SERRERIA_ALMERIENSE. Mantiene la logica especial: piezas = numero de tableros o unidades fisicas; medida = m2; precioUnidadMedida = precio por m2; importe = medida x precioUnidadMedida. Devuelve cantidad=null, precioUnitario=null y unidadMedidaProveedor=null salvo que aparezca una UM literal. No interpretes Neto como precio por pieza. No devuelvas cantidad=medida ni precioUnitario=piezas. No calcules precioUnitario por tablero salvo que aparezca expresamente. Si Medida x Neto se aproxima a Importe, confirma esa interpretacion. Ejemplo: piezas=4, medida=23.940, precioUnidadMedida=10.384, importe=248.59.
+Reglas especificas para proveedor Verdú o Verdu: proveedorTipo=VERDU. Lee la tabla respetando columnas CÓDIGO, DENOMINACIÓN, CANTIDAD, UM, BULTOS, PRECIO, DTO, IMPORTE. La DENOMINACIÓN completa debe ir en descripcion, sin truncar. El CÓDIGO del proveedor no es codigoInterno; incluyelo solo si sirve para descripcion u observaciones, no como codigoInterno. Si UM=CIEN: unidadMedidaProveedor="CIEN", cantidad=valor original, piezas=cantidad*100, precioUnidadMedida=PRECIO, importe=IMPORTE. Si UM=UNID: unidadMedidaProveedor="UNID", cantidad=valor original, piezas=cantidad, precioUnidadMedida=PRECIO, importe=IMPORTE. Para Verdú devuelve precioUnitario=null salvo que el documento tenga una columna claramente de precio unitario distinta de PRECIO. Si descripcion contiene PORTES, esPorte=true, materialId=null, codigoInterno=null y codigoMaterialDetectado=null. Cuando aparezca una linea tipo "** ARTÍCULOS PENDIENTES DE SERVIR..." marca todas las lineas posteriores como esPendienteServir=true hasta que el documento indique otro bloque recibido. Cuando aparezca "N/PEDIDO: XXXXXXX", guarda ese numero en pedidoProveedor para las lineas siguientes hasta el proximo pedido. importeNeto/baseImponible debe coincidir con la suma de importes de lineas no pendientes; guarda baseImponible, iva y total desde el pie del documento si existen. Ejemplo Verdú: 423.33 | TUERCA EMBOLO 2T DOSTE D10-13 M6 ZN | 1,00 | CIEN | 4,77708 | 4,78 debe salir con cantidad=1.00, unidadMedidaProveedor=CIEN, piezas=100.00, precioUnidadMedida=4.77708, importe=4.78.
+Reglas para proveedores GENERICO: no fuerces columnas de m2. Usa cantidad, unidadMedidaProveedor, precioUnidadMedida e importe si aparecen; deja piezas y medida en null salvo que sean campos evidentes del documento.`;
 
   const fileContent = isPdf
     ? {
@@ -676,18 +746,19 @@ Reglas especificas para proveedor Serrería Almeriense o Serreria Almeriense: us
             type: "object",
             additionalProperties: false,
             properties: {
-              proveedor: { type: "string" },
-              tipoGasto: { type: "string" },
-              fecha: { type: "string" },
-              tipoDocumento: { type: "string" },
-              numeroDocumento: { type: "string" },
-              categoria: { type: "string" },
-              baseImponible: { type: "string" },
-              iva: { type: "string" },
-              total: { type: "string" },
-              formaPago: { type: "string" },
-              descripcion: { type: "string" },
-              observaciones: { type: "string" },
+              proveedor: { type: ["string", "null"] },
+              proveedorTipo: { type: ["string", "null"] },
+              tipoGasto: { type: ["string", "null"] },
+              fecha: { type: ["string", "null"] },
+              tipoDocumento: { type: ["string", "null"] },
+              numeroDocumento: { type: ["string", "null"] },
+              categoria: { type: ["string", "null"] },
+              baseImponible: { type: ["string", "null"] },
+              iva: { type: ["string", "null"] },
+              total: { type: ["string", "null"] },
+              formaPago: { type: ["string", "null"] },
+              descripcion: { type: ["string", "null"] },
+              observaciones: { type: ["string", "null"] },
               lineas: {
                 type: "array",
                 items: {
@@ -695,31 +766,42 @@ Reglas especificas para proveedor Serrería Almeriense o Serreria Almeriense: us
                   additionalProperties: false,
                   properties: {
                     materialId: { type: ["string", "null"] },
-                    codigoMaterialDetectado: { type: "string" },
-                    descripcion: { type: "string" },
+                    codigoInterno: { type: ["string", "null"] },
+                    codigoMaterialDetectado: { type: ["string", "null"] },
+                    descripcion: { type: ["string", "null"] },
                     cantidad: { type: ["string", "null"] },
                     precioUnitario: { type: ["string", "null"] },
+                    unidadMedidaProveedor: { type: ["string", "null"] },
                     piezas: { type: ["string", "null"] },
                     medida: { type: ["string", "null"] },
                     precioUnidadMedida: { type: ["string", "null"] },
                     importe: { type: ["string", "null"] },
+                    esPorte: { type: "boolean" },
+                    esPendienteServir: { type: "boolean" },
+                    pedidoProveedor: { type: ["string", "null"] },
                   },
                   required: [
                     "materialId",
+                    "codigoInterno",
                     "codigoMaterialDetectado",
                     "descripcion",
                     "cantidad",
                     "precioUnitario",
+                    "unidadMedidaProveedor",
                     "piezas",
                     "medida",
                     "precioUnidadMedida",
                     "importe",
+                    "esPorte",
+                    "esPendienteServir",
+                    "pedidoProveedor",
                   ],
                 },
               },
             },
             required: [
               "proveedor",
+              "proveedorTipo",
               "tipoGasto",
               "fecha",
               "tipoDocumento",

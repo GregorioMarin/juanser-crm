@@ -322,10 +322,14 @@ model GastoLinea {
   descripcion    String
   cantidad       Decimal? @db.Decimal(10, 2)
   precioUnitario Decimal? @db.Decimal(10, 2)
+  unidadMedidaProveedor String?
   piezas         Decimal? @db.Decimal(10, 2)
   medida         Decimal? @db.Decimal(10, 3)
-  precioUnidadMedida Decimal? @db.Decimal(10, 3)
+  precioUnidadMedida Decimal? @db.Decimal(12, 5)
   importe        Decimal? @db.Decimal(10, 2)
+  esPorte        Boolean  @default(false)
+  esPendienteServir Boolean @default(false)
+  pedidoProveedor String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   gasto          Gasto    @relation(fields: [gastoId], references: [id], onDelete: Cascade)
@@ -335,6 +339,7 @@ model GastoLinea {
   @@index([materialId])
   @@index([codigoMaterialDetectado])
   @@index([descripcion])
+  @@index([pedidoProveedor])
 }
 
 model Material {

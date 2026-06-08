@@ -175,16 +175,21 @@ export default async function GastoPage({ params }: GastoPageProps) {
               </span>
             </div>
             <div className="overflow-x-auto rounded-md border border-neutral-200">
-              <table className="w-full min-w-[1180px] border-collapse text-left text-sm">
+              <table className="w-full min-w-[1420px] border-collapse text-left text-sm">
                 <thead className="bg-neutral-100 text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
                   <tr>
-                    <th className="px-4 py-3">Código interno</th>
+                    <th className="px-4 py-3">Código</th>
                     <th className="px-4 py-3">Descripción proveedor</th>
+                    <th className="px-4 py-3 text-right">Cantidad</th>
+                    <th className="px-4 py-3">UM</th>
                     <th className="px-4 py-3">Material vinculado</th>
                     <th className="px-4 py-3 text-right">Piezas</th>
                     <th className="px-4 py-3 text-right">Medida</th>
-                    <th className="px-4 py-3 text-right">Precio/medida</th>
+                    <th className="px-4 py-3 text-right">Precio</th>
                     <th className="px-4 py-3 text-right">Importe</th>
+                    <th className="px-4 py-3 text-center">Pendiente</th>
+                    <th className="px-4 py-3 text-center">Porte</th>
+                    <th className="px-4 py-3">Pedido</th>
                     <th className="px-4 py-3 text-right">Acciones</th>
                   </tr>
                 </thead>
@@ -199,6 +204,12 @@ export default async function GastoPage({ params }: GastoPageProps) {
                         </td>
                         <td className="px-4 py-4 font-medium text-neutral-950">
                           {linea.descripcion}
+                        </td>
+                        <td className="px-4 py-4 text-right text-neutral-700">
+                          {linea.cantidad?.toString() ?? "-"}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-4 text-neutral-700">
+                          {linea.unidadMedidaProveedor ?? "-"}
                         </td>
                         <td className="px-4 py-4 text-neutral-700">
                           {linea.material ? (
@@ -224,6 +235,15 @@ export default async function GastoPage({ params }: GastoPageProps) {
                         <td className="px-4 py-4 text-right font-semibold text-neutral-950">
                           {formatMoney(linea.importe)}
                         </td>
+                        <td className="px-4 py-4 text-center text-neutral-700">
+                          {linea.esPendienteServir ? "Sí" : "No"}
+                        </td>
+                        <td className="px-4 py-4 text-center text-neutral-700">
+                          {linea.esPorte ? "Sí" : "No"}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-4 text-neutral-700">
+                          {linea.pedidoProveedor ?? "-"}
+                        </td>
                         <td className="px-4 py-4 text-right">
                           <MaterialLineaAction
                             gastoId={gasto.id}
@@ -238,7 +258,7 @@ export default async function GastoPage({ params }: GastoPageProps) {
                   ) : (
                     <tr>
                       <td
-                        colSpan={8}
+                        colSpan={13}
                         className="px-4 py-6 text-center text-neutral-500"
                       >
                         Este gasto todavía no tiene líneas de artículos.

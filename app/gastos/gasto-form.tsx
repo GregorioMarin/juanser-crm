@@ -34,10 +34,14 @@ type FormLinea = {
   descripcion: string;
   cantidad: string;
   precioUnitario: string;
+  unidadMedidaProveedor: string;
   piezas: string;
   medida: string;
   precioUnidadMedida: string;
   importe: string;
+  esPorte: boolean;
+  esPendienteServir: boolean;
+  pedidoProveedor: string;
   newMaterialOpen: boolean;
   newMaterialNombre: string;
   newMaterialCategoria: string;
@@ -59,6 +63,14 @@ function moneyValue(value?: { toString(): string } | string | null) {
 
 function textValue(value?: string | null) {
   return value ?? "";
+}
+
+function isSerreriaAlmeriense(proveedor: string | null) {
+  return proveedor
+    ?.normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .includes("serreria almeriense") ?? false;
 }
 
 function Field({
@@ -145,6 +157,7 @@ function valuesFromGasto(gasto?: GastoEditable | null): GastoAnalizado {
 
   return {
     tipoGasto: gasto.tipoGasto ?? "Otros",
+    proveedorTipo: "GENERICO",
     proveedor: gasto.proveedor ?? "",
     fecha: dateValue(gasto.fecha),
     tipoDocumento: gasto.tipoDocumento ?? "",
@@ -164,10 +177,14 @@ function valuesFromGasto(gasto?: GastoEditable | null): GastoAnalizado {
         descripcion: linea.descripcion,
         cantidad: moneyValue(linea.cantidad) || null,
         precioUnitario: moneyValue(linea.precioUnitario) || null,
+        unidadMedidaProveedor: linea.unidadMedidaProveedor,
         piezas: moneyValue(linea.piezas) || null,
         medida: moneyValue(linea.medida) || null,
         precioUnidadMedida: moneyValue(linea.precioUnidadMedida) || null,
         importe: moneyValue(linea.importe) || null,
+        esPorte: linea.esPorte,
+        esPendienteServir: linea.esPendienteServir,
+        pedidoProveedor: linea.pedidoProveedor,
       })) ?? [],
   };
 }
@@ -183,10 +200,14 @@ function initialLineas(data?: GastoAnalizado, gasto?: GastoEditable | null) {
     descripcion: linea.descripcion,
     cantidad: textValue(linea.cantidad),
     precioUnitario: textValue(linea.precioUnitario),
+    unidadMedidaProveedor: textValue(linea.unidadMedidaProveedor),
     piezas: textValue(linea.piezas),
     medida: textValue(linea.medida),
     precioUnidadMedida: textValue(linea.precioUnidadMedida),
     importe: textValue(linea.importe),
+    esPorte: linea.esPorte,
+    esPendienteServir: linea.esPendienteServir,
+    pedidoProveedor: textValue(linea.pedidoProveedor),
     newMaterialOpen: false,
     newMaterialNombre: "",
     newMaterialCategoria: "Otros",
@@ -230,6 +251,10 @@ function decimalText(value: number) {
 
 function initialImporteLineas(lineas: FormLinea[]) {
   return lineas.reduce((sum, linea) => {
+    if (linea.esPendienteServir) {
+      return sum;
+    }
+
     const number = decimalNumber(linea.importe);
     return number === null ? sum : sum + number;
   }, 0);
@@ -239,11 +264,13 @@ function LineasTable({
   initial,
   materiales,
   gastoId,
+  showMedida,
   onImportesChange,
 }: {
   initial: FormLinea[];
   materiales: MaterialOption[];
   gastoId?: string;
+  showMedida: boolean;
   onImportesChange: (total: number) => void;
 }) {
   const [lineas, setLineas] = useState<FormLinea[]>(initial);
@@ -251,6 +278,10 @@ function LineasTable({
   function emitImportes(next: FormLinea[]) {
     onImportesChange(
       next.reduce((sum, linea) => {
+        if (linea.esPendienteServir) {
+          return sum;
+        }
+
         const number = Number(linea.importe.replace(",", "."));
         return Number.isFinite(number) ? sum + number : sum;
       }, 0),
@@ -326,10 +357,14 @@ function LineasTable({
                 codigoMaterialDetectado: "",
                 cantidad: "",
                 precioUnitario: "",
+                unidadMedidaProveedor: "",
                 piezas: "",
                 medida: "",
                 precioUnidadMedida: "",
                 importe: "",
+                esPorte: false,
+                esPendienteServir: false,
+                pedidoProveedor: "",
                 newMaterialOpen: false,
                 newMaterialNombre: "",
                 newMaterialCategoria: "Otros",
@@ -344,16 +379,21 @@ function LineasTable({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1180px] border-collapse text-left text-sm">
+        <table className="w-full min-w-[1420px] border-collapse text-left text-sm">
           <thead className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
             <tr>
-              <th className="px-2 py-2">Código interno</th>
+              <th className="px-2 py-2">Código</th>
               <th className="px-2 py-2">Descripción</th>
-              <th className="px-2 py-2">Material vinculado</th>
+              <th className="px-2 py-2">Cantidad</th>
+              <th className="px-2 py-2">UM</th>
               <th className="px-2 py-2">Piezas</th>
-              <th className="px-2 py-2">Medida</th>
-              <th className="px-2 py-2">Precio/medida</th>
+              {showMedida ? <th className="px-2 py-2">Medida</th> : null}
+              <th className="px-2 py-2">Precio</th>
               <th className="px-2 py-2">Importe</th>
+              <th className="px-2 py-2">Pendiente</th>
+              <th className="px-2 py-2">Porte</th>
+              <th className="px-2 py-2">Material vinculado</th>
+              <th className="px-2 py-2">Pedido</th>
               <th className="px-2 py-2 text-right">Acciones</th>
             </tr>
           </thead>
@@ -371,11 +411,6 @@ function LineasTable({
                   ) : null}
                   <input
                     type="hidden"
-                    name={`linea-${linea.key}-cantidad`}
-                    value={linea.cantidad}
-                  />
-                  <input
-                    type="hidden"
                     name={`linea-${linea.key}-precioUnitario`}
                     value={linea.precioUnitario}
                   />
@@ -389,7 +424,7 @@ function LineasTable({
                     placeholder="TAB, TAB-000001..."
                   />
                 </td>
-                <td className="px-2 py-2">
+                <td className="min-w-80 px-2 py-2">
                   <input
                     className={inputClass}
                     name={`linea-${linea.key}-descripcion`}
@@ -398,6 +433,88 @@ function LineasTable({
                       updateLinea(index, "descripcion", event.target.value)
                     }
                     placeholder="Producto o material"
+                  />
+                </td>
+                <td className="px-2 py-2">
+                  <DecimalInput
+                    name={`linea-${linea.key}-cantidad`}
+                    value={linea.cantidad}
+                    onChange={(value) => updateLinea(index, "cantidad", value)}
+                  />
+                </td>
+                <td className="px-2 py-2">
+                  <input
+                    className={inputClass}
+                    name={`linea-${linea.key}-unidadMedidaProveedor`}
+                    value={linea.unidadMedidaProveedor}
+                    onChange={(event) =>
+                      updateLinea(
+                        index,
+                        "unidadMedidaProveedor",
+                        event.target.value.toUpperCase(),
+                      )
+                    }
+                    placeholder="CIEN, UNID..."
+                  />
+                </td>
+                <td className="px-2 py-2">
+                  <DecimalInput
+                    name={`linea-${linea.key}-piezas`}
+                    value={linea.piezas}
+                    onChange={(value) => updateLinea(index, "piezas", value)}
+                  />
+                </td>
+                {showMedida ? (
+                  <td className="px-2 py-2">
+                    <DecimalInput
+                      name={`linea-${linea.key}-medida`}
+                      value={linea.medida}
+                      onChange={(value) => updateLinea(index, "medida", value)}
+                    />
+                  </td>
+                ) : (
+                  <input
+                    type="hidden"
+                    name={`linea-${linea.key}-medida`}
+                    value={linea.medida}
+                  />
+                )}
+                <td className="px-2 py-2">
+                  <DecimalInput
+                    name={`linea-${linea.key}-precioUnidadMedida`}
+                    value={linea.precioUnidadMedida}
+                    onChange={(value) =>
+                      updateLinea(index, "precioUnidadMedida", value)
+                    }
+                  />
+                </td>
+                <td className="px-2 py-2">
+                  <DecimalInput
+                    name={`linea-${linea.key}-importe`}
+                    value={linea.importe}
+                    onChange={(value) => updateLinea(index, "importe", value)}
+                  />
+                </td>
+                <td className="px-2 py-2 text-center">
+                  <input
+                    className="h-4 w-4 rounded border-neutral-300 text-emerald-700 focus:ring-emerald-600"
+                    type="checkbox"
+                    name={`linea-${linea.key}-esPendienteServir`}
+                    checked={linea.esPendienteServir}
+                    onChange={(event) =>
+                      updateLinea(index, "esPendienteServir", event.target.checked)
+                    }
+                  />
+                </td>
+                <td className="px-2 py-2 text-center">
+                  <input
+                    className="h-4 w-4 rounded border-neutral-300 text-emerald-700 focus:ring-emerald-600"
+                    type="checkbox"
+                    name={`linea-${linea.key}-esPorte`}
+                    checked={linea.esPorte}
+                    onChange={(event) =>
+                      updateLinea(index, "esPorte", event.target.checked)
+                    }
                   />
                 </td>
                 <td className="px-2 py-2">
@@ -477,33 +594,14 @@ function LineasTable({
                   </div>
                 </td>
                 <td className="px-2 py-2">
-                  <DecimalInput
-                    name={`linea-${linea.key}-piezas`}
-                    value={linea.piezas}
-                    onChange={(value) => updateLinea(index, "piezas", value)}
-                  />
-                </td>
-                <td className="px-2 py-2">
-                  <DecimalInput
-                    name={`linea-${linea.key}-medida`}
-                    value={linea.medida}
-                    onChange={(value) => updateLinea(index, "medida", value)}
-                  />
-                </td>
-                <td className="px-2 py-2">
-                  <DecimalInput
-                    name={`linea-${linea.key}-precioUnidadMedida`}
-                    value={linea.precioUnidadMedida}
-                    onChange={(value) =>
-                      updateLinea(index, "precioUnidadMedida", value)
+                  <input
+                    className={inputClass}
+                    name={`linea-${linea.key}-pedidoProveedor`}
+                    value={linea.pedidoProveedor}
+                    onChange={(event) =>
+                      updateLinea(index, "pedidoProveedor", event.target.value)
                     }
-                  />
-                </td>
-                <td className="px-2 py-2">
-                  <DecimalInput
-                    name={`linea-${linea.key}-importe`}
-                    value={linea.importe}
-                    onChange={(value) => updateLinea(index, "importe", value)}
+                    placeholder="N/PEDIDO"
                   />
                 </td>
                 <td className="px-2 py-2 text-right">
@@ -564,6 +662,7 @@ export function GastoForm({
   const lineas = useMemo(() => initialLineas(data, gasto), [data, gasto]);
   const [importeLineas, setImporteLineas] = useState(initialImporteLineas(lineas));
   const isMateriales = tipoGasto === "Materiales";
+  const showMedidaLineas = isSerreriaAlmeriense(proveedor);
 
   function calcularTotalDesdeBase() {
     const base = decimalNumber(baseImponible);
@@ -764,6 +863,7 @@ export function GastoForm({
           initial={lineas}
           materiales={materiales}
           gastoId={gasto?.id}
+          showMedida={showMedidaLineas}
           onImportesChange={setImporteLineas}
         />
       ) : null}
