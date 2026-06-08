@@ -561,10 +561,15 @@ function drawLineas(ctx: PdfContext, presupuesto: PresupuestoPdf) {
   drawTableHeader(ctx);
 
   presupuesto.lineas.forEach((linea, index) => {
+    const conceptoLines = wrapText(linea.concepto, ctx.fonts.bold, 9, 250);
+    const descripcionLines = linea.descripcion
+      ? wrapText(linea.descripcion, ctx.fonts.regular, 8, 250)
+      : [];
+    const conceptoHeight = Math.max(1, conceptoLines.length) * 11;
     const descriptionHeight = linea.descripcion
-      ? wrapText(linea.descripcion, ctx.fonts.regular, 8, 250).length * 11
+      ? descripcionLines.length * 11
       : 0;
-    const rowHeight = Math.max(34, 24 + descriptionHeight);
+    const rowHeight = Math.max(34, 16 + conceptoHeight + descriptionHeight);
 
     if (ensureSpace(ctx, rowHeight + 30)) {
       drawTableHeader(ctx);
@@ -580,29 +585,27 @@ function drawLineas(ctx: PdfContext, presupuesto: PresupuestoPdf) {
       });
     }
 
-    drawWrappedText(
-      ctx.page,
-      linea.concepto,
-      margin + 10,
-      ctx.y + 4,
-      250,
-      ctx.fonts.bold,
-      9,
-      11,
-    );
-
-    if (linea.descripcion) {
-      drawWrappedText(
+    conceptoLines.forEach((line, lineIndex) => {
+      drawText(
         ctx.page,
-        linea.descripcion,
+        line,
         margin + 10,
-        ctx.y + 18,
-        250,
+        ctx.y + 4 + lineIndex * 11,
+        ctx.fonts.bold,
+        9,
+      );
+    });
+
+    if (descripcionLines.length > 0) {
+      descripcionLines.forEach((line, lineIndex) => drawText(
+        ctx.page,
+        line,
+        margin + 10,
+        ctx.y + 6 + conceptoHeight + lineIndex * 11,
         ctx.fonts.regular,
         8,
-        11,
         colors.muted,
-      );
+      ));
     }
 
     drawRightText(

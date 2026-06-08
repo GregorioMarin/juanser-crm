@@ -441,12 +441,20 @@ export default async function PresupuestosPage({
               {presupuestos.length} presupuestos visibles ordenados por fecha
             </p>
           </div>
-          <Link
-            href="/clientes"
-            className="inline-flex h-10 items-center justify-center rounded-md border border-neutral-300 bg-white px-4 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
-          >
-            Ver clientes
-          </Link>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Link
+              href="/presupuestos/diagnostico-numeracion"
+              className="inline-flex h-10 items-center justify-center rounded-md border border-amber-300 bg-amber-50 px-4 text-sm font-semibold text-amber-950 transition hover:bg-amber-100"
+            >
+              Diagnóstico numeración
+            </Link>
+            <Link
+              href="/clientes"
+              className="inline-flex h-10 items-center justify-center rounded-md border border-neutral-300 bg-white px-4 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
+            >
+              Ver clientes
+            </Link>
+          </div>
         </header>
 
         {successFromParam(params.presupuestoEliminado) ? <SuccessMessage /> : null}

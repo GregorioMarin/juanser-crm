@@ -24,6 +24,7 @@ import {
 } from "@/app/clientes/multimedia-upload-form";
 import { registrarActividadCliente } from "@/app/lib/actividad";
 import { prisma } from "@/app/lib/prisma";
+import { Prisma } from "@/app/generated/prisma/client";
 import {
   defaultPresupuestoObservaciones,
   defaultPresupuestoValidezDias,
@@ -308,29 +309,40 @@ function roundCurrency(value: number) {
   return Math.round(value * 100) / 100;
 }
 
-async function generatePresupuestoNumero(fecha: Date) {
-  const year = fecha.getFullYear();
-  const prefix = `PJ-${year}-`;
-  const presupuestos = await prisma.presupuesto.findMany({
-    where: {
-      numero: {
-        startsWith: prefix,
-      },
-    },
+const presupuestoNumeroPrefix = "PJ";
+const presupuestoNumeroPadding = 4;
+const presupuestoNumeroLockKey = 2026060801;
+
+function incrementPresupuestoNumero(numero: string | null, fecha: Date) {
+  const prefix = `${presupuestoNumeroPrefix}-${fecha.getFullYear()}-`;
+  if (!numero) {
+    return `${prefix}${"1".padStart(presupuestoNumeroPadding, "0")}`;
+  }
+
+  const match = numero.match(/(\d+)$/);
+  if (!match) {
+    return `${prefix}${"1".padStart(presupuestoNumeroPadding, "0")}`;
+  }
+
+  const [suffix] = match;
+  const nextNumber = Number(suffix) + 1;
+  const padding = Math.max(presupuestoNumeroPadding, suffix.length);
+
+  return `${prefix}${String(nextNumber).padStart(padding, "0")}`;
+}
+
+async function generatePresupuestoNumero(
+  fecha: Date,
+  tx: Pick<typeof prisma, "presupuesto"> = prisma,
+) {
+  const lastPresupuesto = await tx.presupuesto.findFirst({
+    orderBy: { id: "desc" },
     select: {
       numero: true,
     },
   });
-  const maxNumber = presupuestos.reduce((max, presupuesto) => {
-    const suffix = presupuesto.numero.slice(prefix.length);
-    if (!/^\d+$/.test(suffix)) {
-      return max;
-    }
 
-    return Math.max(max, Number(suffix));
-  }, 0);
-
-  return `${prefix}${String(maxNumber + 1).padStart(4, "0")}`;
+  return incrementPresupuestoNumero(lastPresupuesto?.numero ?? null, fecha);
 }
 
 type PresupuestoLineaData = {
@@ -561,34 +573,49 @@ async function createPresupuesto(formData: FormData) {
   const totalIva = roundCurrency((totalSinIva * ivaPorcentaje) / 100);
   const totalConIva = roundCurrency(totalSinIva + totalIva);
   const fecha = optionalDate(formData, "fecha") ?? new Date();
-  const numero =
-    optionalString(formData, "numero") ??
-    (await generatePresupuestoNumero(fecha));
+  let presupuesto;
+  try {
+    presupuesto = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${presupuestoNumeroLockKey})`;
+      const numero = await generatePresupuestoNumero(fecha, tx);
 
-  const presupuesto = await prisma.presupuesto.create({
-    data: {
-      clienteId,
-      numero,
-      titulo: requiredString(formData, "titulo"),
-      descripcion: requiredString(formData, "descripcion"),
-      importe: totalConIva.toFixed(2),
-      estado: presupuestoEstado,
-      fecha,
-      validezDias: optionalInteger(
-        formData,
-        "validezDias",
-        defaultPresupuestoValidezDias,
-      ),
-      observaciones: optionalString(formData, "observaciones"),
-      ivaPorcentaje: ivaPorcentaje.toFixed(2),
-      totalSinIva: totalSinIva.toFixed(2),
-      totalIva: totalIva.toFixed(2),
-      totalConIva: totalConIva.toFixed(2),
-      lineas: {
-        create: lineas,
-      },
-    },
-  });
+      return tx.presupuesto.create({
+        data: {
+          clienteId,
+          numero,
+          titulo: requiredString(formData, "titulo"),
+          descripcion: requiredString(formData, "descripcion"),
+          importe: totalConIva.toFixed(2),
+          estado: presupuestoEstado,
+          fecha,
+          validezDias: optionalInteger(
+            formData,
+            "validezDias",
+            defaultPresupuestoValidezDias,
+          ),
+          observaciones: optionalString(formData, "observaciones"),
+          ivaPorcentaje: ivaPorcentaje.toFixed(2),
+          totalSinIva: totalSinIva.toFixed(2),
+          totalIva: totalIva.toFixed(2),
+          totalConIva: totalConIva.toFixed(2),
+          lineas: {
+            create: lineas,
+          },
+        },
+      });
+    });
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      throw new Error(
+        "No se pudo crear el presupuesto porque el número generado ya existe. Inténtalo de nuevo.",
+      );
+    }
+
+    throw error;
+  }
   await registrarActividadCliente({
     clienteId,
     tipo: "PRESUPUESTO_CREADO",
@@ -1726,14 +1753,12 @@ function PresupuestosSection({ cliente }: { cliente: ClienteDetalle }) {
       >
         <input type="hidden" name="clienteId" value={cliente.id} />
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <label className="flex flex-col gap-1.5">
+          <div className="rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-700">
             <span className={labelClass}>Numero</span>
-            <input
-              className={inputClass}
-              name="numero"
-              placeholder="Se generará automáticamente"
-            />
-          </label>
+            <p className="mt-1 font-medium text-neutral-950">
+              Se generara automaticamente
+            </p>
+          </div>
           <label className="flex flex-col gap-1.5">
             <span className={labelClass}>Titulo</span>
             <input className={inputClass} name="titulo" required />

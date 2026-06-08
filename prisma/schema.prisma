@@ -128,7 +128,7 @@ model FotoCliente {
 model Presupuesto {
   id                   Int                @id @default(autoincrement())
   clienteId            Int
-  numero               String
+  numero               String             @unique
   titulo               String
   descripcion          String
   importe              Decimal            @db.Decimal(12, 2)
