@@ -2,6 +2,10 @@ import Link from "next/link";
 import Image from "next/image";
 import { connection } from "next/server";
 import { logout } from "@/app/auth/actions";
+import {
+  estadoComercialLabel,
+  estadoProduccionLabel,
+} from "@/app/clientes/estados";
 import { prisma } from "@/app/lib/prisma";
 
 function currentMonthRange() {
@@ -39,6 +43,15 @@ async function getHomeMetrics() {
     presupuestosPendientes,
     clientesNuevosMes,
     clientesActivos,
+    pendienteDarPrecio,
+    pendienteRespuesta,
+    aceptados,
+    pendientePago50,
+    pendientePedirMateriales,
+    pendienteFabricar,
+    enFabricacion,
+    pendienteInstalacion,
+    finalizados,
     trabajosRecientes,
     facturasTotal,
     facturacionTotal,
@@ -56,8 +69,26 @@ async function getHomeMetrics() {
       where: { fechaAlta: { gte: month.from, lt: month.to } },
     }),
     prisma.cliente.count({
-      where: { estado: { in: ["Aceptado", "En fabricación"] } },
+      where: {
+        OR: [
+          { estado: "ACEPTADO" },
+          { estadoProduccion: { in: ["EN_FABRICACION", "PENDIENTE_INSTALACION"] } },
+        ],
+      },
     }),
+    prisma.cliente.count({ where: { estado: "PENDIENTE_DAR_PRECIO" } }),
+    prisma.cliente.count({ where: { estado: "PENDIENTE_RESPUESTA" } }),
+    prisma.cliente.count({ where: { estado: "ACEPTADO" } }),
+    prisma.cliente.count({ where: { estadoProduccion: "PENDIENTE_PAGO_50" } }),
+    prisma.cliente.count({
+      where: { estadoProduccion: "PENDIENTE_PEDIR_MATERIALES" },
+    }),
+    prisma.cliente.count({ where: { estadoProduccion: "PENDIENTE_FABRICAR" } }),
+    prisma.cliente.count({ where: { estadoProduccion: "EN_FABRICACION" } }),
+    prisma.cliente.count({
+      where: { estadoProduccion: "PENDIENTE_INSTALACION" },
+    }),
+    prisma.cliente.count({ where: { estadoProduccion: "FINALIZADO" } }),
     prisma.trabajoTerminado.count({
       where: { fechaTrabajo: { gte: recent.from, lte: recent.to } },
     }),
@@ -80,6 +111,17 @@ async function getHomeMetrics() {
     clientesNuevosMes,
     trabajosActivosORecientes: clientesActivos + trabajosRecientes,
     trabajosDetalle: `${clientesActivos} activos · ${trabajosRecientes} recientes`,
+    pendientesHoy: {
+      pendienteDarPrecio,
+      pendienteRespuesta,
+      aceptados,
+      pendientePago50,
+      pendientePedirMateriales,
+      pendienteFabricar,
+      enFabricacion,
+      pendienteInstalacion,
+      finalizados,
+    },
     facturasTotal,
     facturacionTotal: facturacionTotal._sum.total,
     facturacionAno: facturacionAno._sum.total,
@@ -115,10 +157,111 @@ function SummaryCard({
   );
 }
 
+function PendingCard({
+  href,
+  count,
+  title,
+  description,
+  accent,
+}: {
+  href: string;
+  count: number;
+  title: string;
+  description: string;
+  accent: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="group flex min-h-36 flex-col justify-between rounded-md border border-neutral-300 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-neutral-400 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-emerald-200"
+    >
+      <div className="flex items-start justify-between gap-4">
+        <span className={`h-3 w-3 rounded-full ${accent}`} />
+        <span className="text-4xl font-semibold tabular-nums text-neutral-950">
+          {count}
+        </span>
+      </div>
+      <div>
+        <h3 className="text-base font-semibold text-neutral-950 transition group-hover:text-emerald-800">
+          {title}
+        </h3>
+        <p className="mt-1 text-sm leading-5 text-neutral-600">{description}</p>
+      </div>
+    </Link>
+  );
+}
+
 export default async function Home() {
   await connection();
 
   const metrics = await getHomeMetrics();
+  const comercialPendientes = [
+    {
+      href: "/clientes?estadoComercial=PENDIENTE_DAR_PRECIO",
+      count: metrics.pendientesHoy.pendienteDarPrecio,
+      title: estadoComercialLabel("PENDIENTE_DAR_PRECIO"),
+      description: "Clientes pendientes de valorar.",
+      accent: "bg-orange-500",
+    },
+    {
+      href: "/clientes?estadoComercial=PENDIENTE_RESPUESTA",
+      count: metrics.pendientesHoy.pendienteRespuesta,
+      title: estadoComercialLabel("PENDIENTE_RESPUESTA"),
+      description: "Presupuestos enviados esperando respuesta.",
+      accent: "bg-sky-500",
+    },
+    {
+      href: "/clientes?estadoComercial=ACEPTADO",
+      count: metrics.pendientesHoy.aceptados,
+      title: "Aceptados",
+      description: "Presupuestos aceptados.",
+      accent: "bg-emerald-500",
+    },
+  ] as const;
+  const produccionPendientes = [
+    {
+      href: "/clientes?estadoProduccion=PENDIENTE_PAGO_50",
+      count: metrics.pendientesHoy.pendientePago50,
+      title: estadoProduccionLabel("PENDIENTE_PAGO_50"),
+      description: "Trabajos pendientes de anticipo.",
+      accent: "bg-yellow-500",
+    },
+    {
+      href: "/clientes?estadoProduccion=PENDIENTE_PEDIR_MATERIALES",
+      count: metrics.pendientesHoy.pendientePedirMateriales,
+      title: estadoProduccionLabel("PENDIENTE_PEDIR_MATERIALES"),
+      description: "Materiales por revisar y pedir.",
+      accent: "bg-blue-500",
+    },
+    {
+      href: "/clientes?estadoProduccion=PENDIENTE_FABRICAR",
+      count: metrics.pendientesHoy.pendienteFabricar,
+      title: estadoProduccionLabel("PENDIENTE_FABRICAR"),
+      description: "Trabajos listos para entrar a taller.",
+      accent: "bg-stone-500",
+    },
+    {
+      href: "/clientes?estadoProduccion=EN_FABRICACION",
+      count: metrics.pendientesHoy.enFabricacion,
+      title: estadoProduccionLabel("EN_FABRICACION"),
+      description: "Trabajos actualmente en fabricación.",
+      accent: "bg-violet-500",
+    },
+    {
+      href: "/clientes?estadoProduccion=PENDIENTE_INSTALACION",
+      count: metrics.pendientesHoy.pendienteInstalacion,
+      title: estadoProduccionLabel("PENDIENTE_INSTALACION"),
+      description: "Trabajos pendientes de instalar.",
+      accent: "bg-indigo-500",
+    },
+    {
+      href: "/clientes?estadoProduccion=FINALIZADO",
+      count: metrics.pendientesHoy.finalizados,
+      title: "Finalizados",
+      description: "Trabajos completados.",
+      accent: "bg-teal-500",
+    },
+  ] as const;
 
   return (
     <main className="min-h-screen bg-neutral-100 px-5 py-6 text-neutral-950 sm:px-8">
@@ -149,12 +292,6 @@ export default async function Home() {
               className="inline-flex h-11 items-center justify-center rounded-md border border-neutral-300 bg-white px-5 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
             >
               Ver presupuestos
-            </Link>
-            <Link
-              href="/kanban"
-              className="inline-flex h-11 items-center justify-center rounded-md border border-neutral-300 bg-white px-5 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
-            >
-              Kanban
             </Link>
             <Link
               href="/citas"
@@ -236,41 +373,32 @@ export default async function Home() {
           />
         </section>
 
-        <section className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <section className="grid gap-4">
+          <div>
+            <h2 className="text-xl font-semibold text-neutral-950">
+              Pendientes de hoy
+            </h2>
+          </div>
+          <div className="grid gap-3">
             <div>
-              <h2 className="text-lg font-semibold text-neutral-950">
-                Accesos rápidos
-              </h2>
-              <p className="mt-1 text-sm text-neutral-500">
-                Atajos principales para revisar la actividad comercial y compras.
-              </p>
+              <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-neutral-500">
+                Estado comercial
+              </h3>
+              <div className="mt-3 grid gap-4 md:grid-cols-3">
+                {comercialPendientes.map((item) => (
+                  <PendingCard key={item.href} {...item} />
+                ))}
+              </div>
             </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-              <Link
-                href="/gastos"
-                className="inline-flex h-10 items-center justify-center rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:bg-emerald-800"
-              >
-                Ver gastos
-              </Link>
-              <Link
-                href="/facturas-venta"
-                className="inline-flex h-10 items-center justify-center rounded-md border border-neutral-300 px-4 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
-              >
-                Ver facturas
-              </Link>
-              <Link
-                href="/presupuestos"
-                className="inline-flex h-10 items-center justify-center rounded-md border border-neutral-300 px-4 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
-              >
-                Ver presupuestos
-              </Link>
-              <Link
-                href="/clientes"
-                className="inline-flex h-10 items-center justify-center rounded-md border border-neutral-300 px-4 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
-              >
-                Ver clientes
-              </Link>
+            <div>
+              <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-neutral-500">
+                Estado de producción
+              </h3>
+              <div className="mt-3 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {produccionPendientes.map((item) => (
+                  <PendingCard key={item.href} {...item} />
+                ))}
+              </div>
             </div>
           </div>
         </section>

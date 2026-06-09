@@ -4,6 +4,18 @@ import { connection } from "next/server";
 import { PhoneContactActions } from "@/app/contact-actions";
 import { ClienteEstadoFields } from "@/app/clientes/cliente-estado-fields";
 import { DeleteClienteForm } from "@/app/clientes/delete-cliente-form";
+import {
+  estadoComercialLabel,
+  estadoComercialStyles,
+  estadoProduccionLabel,
+  estadoProduccionStyles,
+  estadosComerciales,
+  estadosProduccion,
+  isEstadoComercial,
+  isEstadoProduccion,
+  type EstadoComercial,
+  type EstadoProduccion,
+} from "@/app/clientes/estados";
 import { LocalidadField } from "@/app/clientes/localidad-field";
 import { localidades } from "@/app/clientes/localidades";
 import {
@@ -12,28 +24,6 @@ import {
 } from "@/app/clientes/motivos-rechazo";
 import { registrarActividadCliente } from "@/app/lib/actividad";
 import { prisma } from "@/app/lib/prisma";
-
-const estados = [
-  "Nuevo lead",
-  "Visitado",
-  "Presupuesto enviado",
-  "Pendiente respuesta",
-  "Aceptado",
-  "En fabricación",
-  "Instalado",
-  "Perdido",
-] as const;
-
-const estadoStyles: Record<(typeof estados)[number], string> = {
-  "Nuevo lead": "bg-sky-100 text-sky-900 ring-sky-200",
-  Visitado: "bg-indigo-100 text-indigo-900 ring-indigo-200",
-  "Presupuesto enviado": "bg-amber-100 text-amber-950 ring-amber-200",
-  "Pendiente respuesta": "bg-orange-100 text-orange-950 ring-orange-200",
-  Aceptado: "bg-emerald-100 text-emerald-900 ring-emerald-200",
-  "En fabricación": "bg-violet-100 text-violet-900 ring-violet-200",
-  Instalado: "bg-teal-100 text-teal-900 ring-teal-200",
-  Perdido: "bg-rose-100 text-rose-900 ring-rose-200",
-};
 
 const origenesContacto = [
   "WhatsApp",
@@ -76,17 +66,22 @@ function requiredString(formData: FormData, key: string) {
   return value;
 }
 
-function estadoValue(formData: FormData) {
-  const value = optionalString(formData, "estado") ?? "Nuevo lead";
-  const estado = estados.find((estadoOption) => {
-    return estadoOption.toLocaleLowerCase() === value.toLocaleLowerCase();
-  });
-
-  if (!estado) {
-    throw new Error("Estado no valido.");
+function estadoComercialValue(formData: FormData) {
+  const value = optionalString(formData, "estadoComercial") ?? estadosComerciales[0];
+  if (!isEstadoComercial(value)) {
+    throw new Error("Estado comercial no valido.");
   }
 
-  return estado;
+  return value;
+}
+
+function estadoProduccionValue(formData: FormData) {
+  const value = optionalString(formData, "estadoProduccion") ?? estadosProduccion[0];
+  if (!isEstadoProduccion(value)) {
+    throw new Error("Estado de produccion no valido.");
+  }
+
+  return value;
 }
 
 function origenContactoValue(formData: FormData) {
@@ -107,8 +102,8 @@ function tipoClienteValue(formData: FormData) {
   return value;
 }
 
-function motivoRechazoValue(formData: FormData, estado: string) {
-  if (estado !== "Perdido") {
+function motivoRechazoValue(formData: FormData, estadoComercial: string) {
+  if (estadoComercial !== "PERDIDO") {
     return null;
   }
 
@@ -163,7 +158,7 @@ function presupuestoValue(formData: FormData, key = "presupuesto") {
 }
 
 function clienteData(formData: FormData) {
-  const estado = estadoValue(formData);
+  const estado = estadoComercialValue(formData);
 
   return {
     nombre: requiredString(formData, "nombre"),
@@ -174,6 +169,7 @@ function clienteData(formData: FormData) {
     origenContacto: origenContactoValue(formData),
     tipoCliente: tipoClienteValue(formData),
     motivoRechazo: motivoRechazoValue(formData, estado),
+    estadoProduccion: estadoProduccionValue(formData),
     fechaMedicion: optionalDate(formData, "fechaMedicion"),
     fechaInstalacion: optionalDate(formData, "fechaInstalacion"),
     importeAceptado: presupuestoValue(formData, "importeAceptado"),
@@ -199,19 +195,26 @@ async function createCliente(formData: FormData) {
 
   revalidatePath("/clientes");
   revalidatePath("/clientes/perdidos");
-  revalidatePath("/kanban");
 }
 
-async function getClientes(query: string) {
+async function getClientes(
+  query: string,
+  estadoComercial: EstadoComercial | null,
+  estadoProduccion: EstadoProduccion | null,
+) {
   return prisma.cliente.findMany({
-    where: query
-      ? {
-          OR: [
-            { nombre: { contains: query, mode: "insensitive" } },
-            { telefono: { contains: query, mode: "insensitive" } },
-          ],
-        }
-      : undefined,
+    where: {
+      ...(query
+        ? {
+            OR: [
+              { nombre: { contains: query, mode: "insensitive" } },
+              { telefono: { contains: query, mode: "insensitive" } },
+            ],
+          }
+        : {}),
+      ...(estadoComercial ? { estado: estadoComercial } : {}),
+      ...(estadoProduccion ? { estadoProduccion } : {}),
+    },
     orderBy: { fechaAlta: "desc" },
   });
 }
@@ -235,7 +238,7 @@ async function getSeguimientosPendientes() {
         lte: endOfToday(),
       },
       estado: {
-        notIn: ["Instalado", "Perdido"],
+        not: "PERDIDO",
       },
     },
     orderBy: { fechaSeguimiento: "asc" },
@@ -256,7 +259,7 @@ async function getSeguimientosFuturos() {
         gt: endOfToday(),
       },
       estado: {
-        notIn: ["Instalado", "Perdido"],
+        not: "PERDIDO",
       },
     },
     orderBy: { fechaSeguimiento: "asc" },
@@ -272,21 +275,35 @@ async function getSeguimientosFuturos() {
 
 async function getResumen() {
   const [
-    leads,
-    presupuestosEnviados,
+    pendienteDarPrecio,
+    pendienteRespuesta,
     aceptados,
+    perdidos,
+    pendientePago50,
+    pendientePedirMateriales,
+    pendienteFabricar,
     enFabricacion,
-    instalados,
+    pendienteInstalacion,
+    finalizados,
     clientesParaTotales,
     importeAceptadoTotal,
     perdidosPorMotivo,
     clientesPerdidosPorMotivo,
   ] = await Promise.all([
-    prisma.cliente.count(),
-    prisma.cliente.count({ where: { estado: "Presupuesto enviado" } }),
-    prisma.cliente.count({ where: { estado: "Aceptado" } }),
-    prisma.cliente.count({ where: { estado: "En fabricación" } }),
-    prisma.cliente.count({ where: { estado: "Instalado" } }),
+    prisma.cliente.count({ where: { estado: "PENDIENTE_DAR_PRECIO" } }),
+    prisma.cliente.count({ where: { estado: "PENDIENTE_RESPUESTA" } }),
+    prisma.cliente.count({ where: { estado: "ACEPTADO" } }),
+    prisma.cliente.count({ where: { estado: "PERDIDO" } }),
+    prisma.cliente.count({ where: { estadoProduccion: "PENDIENTE_PAGO_50" } }),
+    prisma.cliente.count({
+      where: { estadoProduccion: "PENDIENTE_PEDIR_MATERIALES" },
+    }),
+    prisma.cliente.count({ where: { estadoProduccion: "PENDIENTE_FABRICAR" } }),
+    prisma.cliente.count({ where: { estadoProduccion: "EN_FABRICACION" } }),
+    prisma.cliente.count({
+      where: { estadoProduccion: "PENDIENTE_INSTALACION" },
+    }),
+    prisma.cliente.count({ where: { estadoProduccion: "FINALIZADO" } }),
     prisma.cliente.findMany({
       select: {
         presupuestos: {
@@ -300,7 +317,7 @@ async function getResumen() {
     prisma.cliente.groupBy({
       by: ["motivoRechazo"],
       where: {
-        estado: "Perdido",
+        estado: "PERDIDO",
         motivoRechazo: {
           not: null,
         },
@@ -310,7 +327,7 @@ async function getResumen() {
     }),
     prisma.cliente.findMany({
       where: {
-        estado: "Perdido",
+        estado: "PERDIDO",
         motivoRechazo: {
           not: null,
         },
@@ -346,11 +363,16 @@ async function getResumen() {
   });
 
   return {
-    leads,
-    presupuestosEnviados,
+    pendienteDarPrecio,
+    pendienteRespuesta,
     aceptados,
+    perdidos,
+    pendientePago50,
+    pendientePedirMateriales,
+    pendienteFabricar,
     enFabricacion,
-    instalados,
+    pendienteInstalacion,
+    finalizados,
     totalPresupuestado,
     importeAceptadoTotal: importeAceptadoTotal._sum.importeAceptado,
     perdidosPorMotivo: perdidosPorMotivoConDestino,
@@ -373,6 +395,7 @@ type ClienteFormDefaults = {
   fechaMedicion?: Date | null;
   fechaInstalacion?: Date | null;
   estado?: string | null;
+  estadoProduccion?: string | null;
   motivoRechazo?: string | null;
   observaciones?: string | null;
 };
@@ -413,23 +436,28 @@ function Field({
 }
 
 function EstadoSelect({
-  defaultValue,
+  defaultEstadoComercial,
+  defaultEstadoProduccion,
   defaultMotivoRechazo,
 }: {
-  defaultValue?: string | null;
+  defaultEstadoComercial?: string | null;
+  defaultEstadoProduccion?: string | null;
   defaultMotivoRechazo?: string | null;
 }) {
-  const current: (typeof estados)[number] = estados.includes(
-    defaultValue as (typeof estados)[number],
-  )
-    ? (defaultValue as (typeof estados)[number])
-    : "Nuevo lead";
+  const currentComercial = isEstadoComercial(defaultEstadoComercial)
+    ? defaultEstadoComercial
+    : estadosComerciales[0];
+  const currentProduccion = isEstadoProduccion(defaultEstadoProduccion)
+    ? defaultEstadoProduccion
+    : estadosProduccion[0];
 
   return (
     <ClienteEstadoFields
-      estados={estados}
+      estadosComerciales={estadosComerciales}
+      estadosProduccion={estadosProduccion}
       motivosRechazo={motivosRechazo}
-      defaultEstado={current}
+      defaultEstadoComercial={currentComercial}
+      defaultEstadoProduccion={currentProduccion}
       defaultMotivoRechazo={defaultMotivoRechazo}
     />
   );
@@ -563,7 +591,8 @@ function ClienteForm({
           defaultValue={toDateInputValue(values?.fechaInstalacion)}
         />
         <EstadoSelect
-          defaultValue={values?.estado}
+          defaultEstadoComercial={values?.estado}
+          defaultEstadoProduccion={values?.estadoProduccion}
           defaultMotivoRechazo={values?.motivoRechazo}
         />
       </div>
@@ -618,10 +647,42 @@ function displayTipoCliente(cliente: Pick<Cliente, "tipoCliente" | "tipoTrabajo"
   return cliente.tipoCliente || cliente.tipoTrabajo || "-";
 }
 
-function estadoClass(estado: string) {
+function estadoComercialClass(estado: string) {
   return (
-    estadoStyles[estado as (typeof estados)[number]] ??
+    estadoComercialStyles[estado as EstadoComercial] ??
     "bg-neutral-100 text-neutral-800 ring-neutral-200"
+  );
+}
+
+function estadoProduccionClass(estado: string) {
+  return (
+    estadoProduccionStyles[estado as EstadoProduccion] ??
+    "bg-neutral-100 text-neutral-800 ring-neutral-200"
+  );
+}
+
+function EstadoBadge({
+  estado,
+  tipo,
+}: {
+  estado: string;
+  tipo: "comercial" | "produccion";
+}) {
+  const className =
+    tipo === "comercial"
+      ? estadoComercialClass(estado)
+      : estadoProduccionClass(estado);
+  const label =
+    tipo === "comercial"
+      ? estadoComercialLabel(estado)
+      : estadoProduccionLabel(estado);
+
+  return (
+    <span
+      className={`inline-flex min-w-28 max-w-40 items-center justify-center whitespace-normal break-words rounded-full px-2.5 py-1 text-center text-xs font-semibold leading-tight ring-1 ${className}`}
+    >
+      {label}
+    </span>
   );
 }
 
@@ -629,15 +690,15 @@ function isVencido(date?: Date | null) {
   return Boolean(date && date < startOfToday());
 }
 
-function EmptyState({ hasSearch }: { hasSearch: boolean }) {
+function EmptyState({ hasFilters }: { hasFilters: boolean }) {
   return (
     <div className="rounded-md border border-dashed border-neutral-300 bg-white p-8 text-center">
       <p className="text-base font-semibold text-neutral-950">
-        {hasSearch ? "No hay clientes con esa busqueda" : "Todavia no hay clientes"}
+        {hasFilters ? "No hay clientes con esos filtros" : "Todavia no hay clientes"}
       </p>
       <p className="mt-2 text-sm text-neutral-500">
-        {hasSearch
-          ? "Prueba con otro nombre o telefono."
+        {hasFilters
+          ? "Prueba con otra busqueda o cambia los estados seleccionados."
           : "Crea el primer registro desde el formulario superior."}
       </p>
     </div>
@@ -698,13 +759,7 @@ function SeguimientosPendientes({
                       <PhoneContactActions telefono={cliente.telefono} />
                     </td>
                     <td className="px-4 py-4">
-                      <span
-                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${estadoClass(
-                          cliente.estado,
-                        )}`}
-                      >
-                        {cliente.estado}
-                      </span>
+                      <EstadoBadge estado={cliente.estado} tipo="comercial" />
                     </td>
                     <td className="whitespace-nowrap px-4 py-4">
                       <span
@@ -785,13 +840,7 @@ function SeguimientosFuturos({ clientes }: { clientes: SeguimientoFuturo[] }) {
                     <PhoneContactActions telefono={cliente.telefono} />
                   </td>
                   <td className="px-4 py-4">
-                    <span
-                      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${estadoClass(
-                        cliente.estado,
-                      )}`}
-                    >
-                      {cliente.estado}
-                    </span>
+                    <EstadoBadge estado={cliente.estado} tipo="comercial" />
                   </td>
                   <td className="whitespace-nowrap px-4 py-4 text-neutral-700">
                     {formatDate(cliente.fechaSeguimiento)}
@@ -819,20 +868,55 @@ function SeguimientosFuturos({ clientes }: { clientes: SeguimientoFuturo[] }) {
 }
 
 function ResumenComercial({ resumen }: { resumen: Resumen }) {
-  const items = [
-    ["Leads", resumen.leads],
-    ["Presupuestos enviados", resumen.presupuestosEnviados],
+  const comerciales = [
+    ["Pendiente dar precio", resumen.pendienteDarPrecio],
+    ["Pendiente respuesta", resumen.pendienteRespuesta],
     ["Aceptados", resumen.aceptados],
+    ["Perdidos", resumen.perdidos],
+  ] as const;
+  const produccion = [
+    ["Pago 50%", resumen.pendientePago50],
+    ["Pedir materiales", resumen.pendientePedirMateriales],
+    ["Empezar a fabricar", resumen.pendienteFabricar],
     ["En fabricacion", resumen.enFabricacion],
-    ["Instalados", resumen.instalados],
+    ["Instalacion", resumen.pendienteInstalacion],
+    ["Finalizados", resumen.finalizados],
+  ] as const;
+  const negocio = [
     ["Total presupuestado", formatCurrency(resumen.totalPresupuestado)],
     ["Importe aceptado", formatCurrency(resumen.importeAceptadoTotal)],
   ] as const;
 
   return (
     <section className="grid gap-3">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-        {items.map(([label, value]) => (
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {comerciales.map(([label, value]) => (
+          <div
+            key={label}
+            className="rounded-md border border-neutral-300 bg-white px-4 py-3 shadow-sm"
+          >
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
+              {label}
+            </p>
+            <p className="mt-2 text-2xl font-semibold text-neutral-950">{value}</p>
+          </div>
+        ))}
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        {produccion.map(([label, value]) => (
+          <div
+            key={label}
+            className="rounded-md border border-neutral-300 bg-white px-4 py-3 shadow-sm"
+          >
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
+              {label}
+            </p>
+            <p className="mt-2 text-2xl font-semibold text-neutral-950">{value}</p>
+          </div>
+        ))}
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {negocio.map(([label, value]) => (
           <div
             key={label}
             className="rounded-md border border-neutral-300 bg-white px-4 py-3 shadow-sm"
@@ -893,9 +977,17 @@ function ResumenComercial({ resumen }: { resumen: Resumen }) {
   );
 }
 
-function SearchForm({ query }: { query: string }) {
+function SearchForm({
+  query,
+  estadoComercial,
+  estadoProduccion,
+}: {
+  query: string;
+  estadoComercial: EstadoComercial | null;
+  estadoProduccion: EstadoProduccion | null;
+}) {
   return (
-    <form action="/clientes" className="flex flex-col gap-3 sm:flex-row">
+    <form action="/clientes" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[1fr_220px_240px_auto]">
       <input
         className={inputClass}
         name="q"
@@ -903,14 +995,38 @@ function SearchForm({ query }: { query: string }) {
         defaultValue={query}
         placeholder="Buscar por nombre o telefono"
       />
-      <div className="flex gap-2">
+      <select
+        className={inputClass}
+        name="estadoComercial"
+        defaultValue={estadoComercial ?? ""}
+      >
+        <option value="">Estado comercial</option>
+        {estadosComerciales.map((estado) => (
+          <option key={estado} value={estado}>
+            {estadoComercialLabel(estado)}
+          </option>
+        ))}
+      </select>
+      <select
+        className={inputClass}
+        name="estadoProduccion"
+        defaultValue={estadoProduccion ?? ""}
+      >
+        <option value="">Estado producción</option>
+        {estadosProduccion.map((estado) => (
+          <option key={estado} value={estado}>
+            {estadoProduccionLabel(estado)}
+          </option>
+        ))}
+      </select>
+      <div className="flex gap-2 sm:col-span-2 xl:col-span-1">
         <button
           type="submit"
           className="inline-flex h-10 items-center justify-center rounded-md bg-neutral-950 px-4 text-sm font-semibold text-white transition hover:bg-neutral-800"
         >
           Buscar
         </button>
-        {query ? (
+        {query || estadoComercial || estadoProduccion ? (
           <Link
             href="/clientes"
             className="inline-flex h-10 items-center justify-center rounded-md border border-neutral-300 px-4 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
@@ -981,7 +1097,15 @@ function ClienteDetails({ cliente }: { cliente: Cliente }) {
         <dt className="font-medium text-neutral-500">Localidad</dt>
         <dd>{cliente.localidad || "-"}</dd>
       </div>
-      {cliente.estado === "Perdido" ? (
+      <div>
+        <dt className="font-medium text-neutral-500">Estado comercial</dt>
+        <dd>{estadoComercialLabel(cliente.estado)}</dd>
+      </div>
+      <div>
+        <dt className="font-medium text-neutral-500">Estado producción</dt>
+        <dd>{estadoProduccionLabel(cliente.estadoProduccion)}</dd>
+      </div>
+      {cliente.estado === "PERDIDO" ? (
         <div className="sm:col-span-2">
           <dt className="font-medium text-neutral-500">Motivo rechazo</dt>
           <dd>{cliente.motivoRechazo || "-"}</dd>
@@ -1008,7 +1132,8 @@ function ClientesTable({ clientes }: { clientes: Cliente[] }) {
             <th className="px-4 py-3">Seguimiento</th>
             <th className="px-4 py-3">Medición</th>
             <th className="px-4 py-3">Instalación</th>
-            <th className="min-w-36 px-4 py-3 text-center">Estado</th>
+            <th className="min-w-36 px-4 py-3 text-center">Comercial</th>
+            <th className="min-w-40 px-4 py-3 text-center">Producción</th>
             <th className="px-4 py-3 text-right">Acciones</th>
           </tr>
         </thead>
@@ -1054,18 +1179,18 @@ function ClientesTable({ clientes }: { clientes: Cliente[] }) {
                 {formatDate(cliente.fechaInstalacion)}
               </td>
               <td className="min-w-36 px-4 py-4 text-center">
-                <span
-                  className={`inline-flex min-w-28 max-w-36 items-center justify-center whitespace-normal break-words rounded-full px-2.5 py-1 text-center text-xs font-semibold leading-tight ring-1 ${estadoClass(
-                    cliente.estado,
-                  )}`}
-                >
-                  {cliente.estado}
-                </span>
-                {cliente.estado === "Perdido" && cliente.motivoRechazo ? (
+                <EstadoBadge estado={cliente.estado} tipo="comercial" />
+                {cliente.estado === "PERDIDO" && cliente.motivoRechazo ? (
                   <p className="mt-2 text-xs font-medium text-rose-700">
                     {cliente.motivoRechazo}
                   </p>
                 ) : null}
+              </td>
+              <td className="min-w-40 px-4 py-4 text-center">
+                <EstadoBadge
+                  estado={cliente.estadoProduccion}
+                  tipo="produccion"
+                />
               </td>
               <td className="px-4 py-4 text-right">
                 <div className="flex flex-col items-end gap-2">
@@ -1106,13 +1231,13 @@ function ClientesCards({ clientes }: { clientes: Cliente[] }) {
                 Alta: {formatDate(cliente.fechaAlta)}
               </p>
             </div>
-            <span
-              className={`inline-flex w-fit rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${estadoClass(
-                cliente.estado,
-              )}`}
-            >
-              {cliente.estado}
-            </span>
+            <div className="flex flex-col items-start gap-2 sm:items-end">
+              <EstadoBadge estado={cliente.estado} tipo="comercial" />
+              <EstadoBadge
+                estado={cliente.estadoProduccion}
+                tipo="produccion"
+              />
+            </div>
           </div>
           <div className="mt-4">
             <ClienteDetails cliente={cliente} />
@@ -1146,6 +1271,8 @@ type ClientesPageProps = {
     email?: string | string[];
     origenContacto?: string | string[];
     observaciones?: string | string[];
+    estadoComercial?: string | string[];
+    estadoProduccion?: string | string[];
   }>;
 };
 
@@ -1181,10 +1308,18 @@ export default async function ClientesPage({ searchParams }: ClientesPageProps) 
   const params = await searchParams;
   const queryParam = searchParamString(params.q);
   const query = queryParam?.trim() ?? "";
+  const estadoComercialParam = searchParamString(params.estadoComercial)?.trim();
+  const estadoProduccionParam = searchParamString(params.estadoProduccion)?.trim();
+  const estadoComercial = isEstadoComercial(estadoComercialParam)
+    ? estadoComercialParam
+    : null;
+  const estadoProduccion = isEstadoProduccion(estadoProduccionParam)
+    ? estadoProduccionParam
+    : null;
   const clienteDefaults = clienteDefaultsFromParams(params);
   const [clientes, seguimientosPendientes, seguimientosFuturos, resumen] =
     await Promise.all([
-      getClientes(query),
+      getClientes(query, estadoComercial, estadoProduccion),
       getSeguimientosPendientes(),
       getSeguimientosFuturos(),
       getResumen(),
@@ -1244,10 +1379,14 @@ export default async function ClientesPage({ searchParams }: ClientesPageProps) 
             <div>
               <h2 className="text-lg font-semibold text-neutral-950">Listado</h2>
               <p className="mt-1 text-sm text-neutral-500">
-                Tabla comercial por fecha, estado y seguimiento.
+                Tabla por fecha, estado comercial, producción y seguimiento.
               </p>
             </div>
-            <SearchForm query={query} />
+            <SearchForm
+              query={query}
+              estadoComercial={estadoComercial}
+              estadoProduccion={estadoProduccion}
+            />
           </div>
           {clientes.length > 0 ? (
             <>
@@ -1255,7 +1394,9 @@ export default async function ClientesPage({ searchParams }: ClientesPageProps) 
               <ClientesCards clientes={clientes} />
             </>
           ) : (
-            <EmptyState hasSearch={Boolean(query)} />
+            <EmptyState
+              hasFilters={Boolean(query || estadoComercial || estadoProduccion)}
+            />
           )}
         </section>
       </div>

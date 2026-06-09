@@ -1,6 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import {
+  estadoComercialLabel,
+  estadoProduccionLabel,
+} from "@/app/clientes/estados";
 
 const inputClass =
   "w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-950 outline-none transition placeholder:text-neutral-400 focus:border-emerald-700 focus:ring-2 focus:ring-emerald-100";
@@ -8,32 +12,51 @@ const inputClass =
 const labelClass = "text-sm font-medium text-neutral-700";
 
 export function ClienteEstadoFields({
-  estados,
+  estadosComerciales,
+  estadosProduccion,
   motivosRechazo,
-  defaultEstado,
+  defaultEstadoComercial,
+  defaultEstadoProduccion,
   defaultMotivoRechazo,
 }: {
-  estados: readonly string[];
+  estadosComerciales: readonly string[];
+  estadosProduccion: readonly string[];
   motivosRechazo: readonly string[];
-  defaultEstado: string;
+  defaultEstadoComercial: string;
+  defaultEstadoProduccion: string;
   defaultMotivoRechazo?: string | null;
 }) {
-  const [estado, setEstado] = useState(defaultEstado);
-  const isPerdido = estado.toLocaleLowerCase() === "perdido";
+  const [estadoComercial, setEstadoComercial] = useState(defaultEstadoComercial);
+  const isPerdido = estadoComercial === "PERDIDO";
 
   return (
     <>
       <label className="flex flex-col gap-1.5">
-        <span className={labelClass}>Estado</span>
+        <span className={labelClass}>Estado comercial</span>
         <select
           className={inputClass}
-          name="estado"
-          value={estado}
-          onChange={(event) => setEstado(event.target.value)}
+          name="estadoComercial"
+          value={estadoComercial}
+          onChange={(event) => setEstadoComercial(event.target.value)}
         >
-          {estados.map((estadoOption) => (
+          {estadosComerciales.map((estadoOption) => (
             <option key={estadoOption} value={estadoOption}>
-              {estadoOption}
+              {estadoComercialLabel(estadoOption)}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="flex flex-col gap-1.5">
+        <span className={labelClass}>Estado producción</span>
+        <select
+          className={inputClass}
+          name="estadoProduccion"
+          defaultValue={defaultEstadoProduccion}
+        >
+          {estadosProduccion.map((estadoOption) => (
+            <option key={estadoOption} value={estadoOption}>
+              {estadoProduccionLabel(estadoOption)}
             </option>
           ))}
         </select>

@@ -87,7 +87,6 @@ export async function deleteCliente(formData: FormData) {
   revalidatePath("/clientes");
   revalidatePath("/clientes/perdidos");
   revalidatePath("/");
-  revalidatePath("/kanban");
   revalidatePath(`/clientes/${clienteId}`);
   revalidatePath("/presupuestos");
 

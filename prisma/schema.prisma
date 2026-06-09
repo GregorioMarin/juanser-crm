@@ -93,7 +93,8 @@ model Cliente {
   fechaAlta        DateTime           @default(now())
   fechaSeguimiento DateTime?
   observaciones    String?
-  estado           String             @default("Nuevo lead")
+  estado           String             @default("PENDIENTE_DAR_PRECIO")
+  estadoProduccion String             @default("PENDIENTE_PAGO_50")
   seguimientos     Seguimiento[]
   fotos            FotoCliente[]
   presupuestos     Presupuesto[]
@@ -103,6 +104,9 @@ model Cliente {
   facturasVenta    FacturaVenta[]
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
+
+  @@index([estado])
+  @@index([estadoProduccion])
 }
 
 model Seguimiento {

@@ -94,5 +94,4 @@ export async function convertirCitaEnCliente(formData: FormData) {
 
   revalidatePath("/citas");
   revalidatePath("/clientes");
-  revalidatePath("/kanban");
 }

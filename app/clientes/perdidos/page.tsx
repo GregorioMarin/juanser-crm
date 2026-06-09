@@ -55,7 +55,7 @@ async function getClientesPerdidos(motivo: string | null, query: string) {
 
   return prisma.cliente.findMany({
     where: {
-      estado: "Perdido",
+      estado: "PERDIDO",
       motivoRechazo: motivo,
       ...(query
         ? {

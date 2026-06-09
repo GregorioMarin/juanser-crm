@@ -14,6 +14,18 @@ import {
   ClienteEstadoFields,
 } from "@/app/clientes/cliente-estado-fields";
 import { DeleteClienteForm } from "@/app/clientes/delete-cliente-form";
+import {
+  estadoComercialLabel,
+  estadoComercialStyles,
+  estadoProduccionLabel,
+  estadoProduccionStyles,
+  estadosComerciales,
+  estadosProduccion,
+  isEstadoComercial,
+  isEstadoProduccion,
+  type EstadoComercial,
+  type EstadoProduccion,
+} from "@/app/clientes/estados";
 import { LocalidadField } from "@/app/clientes/localidad-field";
 import { localidades } from "@/app/clientes/localidades";
 import { motivosRechazo } from "@/app/clientes/motivos-rechazo";
@@ -37,28 +49,7 @@ import { WhatsAppPresupuestoLink } from "@/app/presupuestos/whatsapp-presupuesto
 
 export const runtime = "nodejs";
 
-const estadoStyles: Record<string, string> = {
-  "Nuevo lead": "bg-sky-100 text-sky-900 ring-sky-200",
-  Visitado: "bg-indigo-100 text-indigo-900 ring-indigo-200",
-  "Presupuesto enviado": "bg-amber-100 text-amber-950 ring-amber-200",
-  "Pendiente respuesta": "bg-orange-100 text-orange-950 ring-orange-200",
-  Aceptado: "bg-emerald-100 text-emerald-900 ring-emerald-200",
-  "En fabricación": "bg-violet-100 text-violet-900 ring-violet-200",
-  Instalado: "bg-teal-100 text-teal-900 ring-teal-200",
-  Perdido: "bg-rose-100 text-rose-900 ring-rose-200",
-};
-
-const estados = [
-  "Nuevo lead",
-  "Visitado",
-  "Presupuesto enviado",
-  "Pendiente respuesta",
-  "Aceptado",
-  "En fabricación",
-  "Instalado",
-  "Perdido",
-] as const;
-const estadoPerdido = "Perdido";
+const estadoPerdido = "PERDIDO";
 
 const origenesContacto = [
   "WhatsApp",
@@ -90,11 +81,7 @@ const allowedVideoExtensions = ["mp4", "mov", "webm"];
 const fotoTipos = ["CLIENTE", "JUANSER"] as const;
 const presupuestoEstados = ["PENDIENTE", "ACEPTADO", "RECHAZADO", "INSTALADO"] as const;
 const metodosPago = ["Transferencia", "Efectivo", "Tarjeta", "Bizum", "Otro"] as const;
-const estadosTrabajoTerminadoDestacado = [
-  "Aceptado",
-  "En fabricación",
-  "Instalado",
-] as const;
+const estadosProduccionTrabajoDestacado = ["EN_FABRICACION", "FINALIZADO"] as const;
 
 type FotoTipo = (typeof fotoTipos)[number];
 type PresupuestoEstado = (typeof presupuestoEstados)[number];
@@ -169,17 +156,22 @@ function optionalPresupuestoId(formData: FormData) {
   return id;
 }
 
-function estadoValue(formData: FormData) {
-  const value = optionalString(formData, "estado") ?? "Nuevo lead";
-  const estado = estados.find((estadoOption) => {
-    return estadoOption.toLocaleLowerCase() === value.toLocaleLowerCase();
-  });
-
-  if (!estado) {
-    throw new Error("Estado no valido.");
+function estadoComercialValue(formData: FormData) {
+  const value = optionalString(formData, "estadoComercial") ?? estadosComerciales[0];
+  if (!isEstadoComercial(value)) {
+    throw new Error("Estado comercial no valido.");
   }
 
-  return estado;
+  return value;
+}
+
+function estadoProduccionValue(formData: FormData) {
+  const value = optionalString(formData, "estadoProduccion") ?? estadosProduccion[0];
+  if (!isEstadoProduccion(value)) {
+    throw new Error("Estado de produccion no valido.");
+  }
+
+  return value;
 }
 
 function origenContactoValue(formData: FormData) {
@@ -286,7 +278,7 @@ function optionalCurrency(formData: FormData, key: string) {
 }
 
 function clienteEditableData(formData: FormData) {
-  const estado = estadoValue(formData);
+  const estado = estadoComercialValue(formData);
 
   return {
     nombre: requiredString(formData, "nombre"),
@@ -303,6 +295,7 @@ function clienteEditableData(formData: FormData) {
     fechaMedicion: optionalDate(formData, "fechaMedicion"),
     fechaInstalacion: optionalDate(formData, "fechaInstalacion"),
     estado,
+    estadoProduccion: estadoProduccionValue(formData),
     motivoRechazo: motivoRechazoValue(formData, estado),
     observaciones: optionalString(formData, "observaciones"),
   };
@@ -878,7 +871,7 @@ async function updateClienteFicha(formData: FormData) {
   const data = clienteEditableData(formData);
   const cliente = await prisma.cliente.findUnique({
     where: { id: clienteId },
-    select: { estado: true, motivoRechazo: true },
+    select: { estado: true, estadoProduccion: true, motivoRechazo: true },
   });
   if (!cliente) {
     throw new Error("Cliente no encontrado.");
@@ -890,30 +883,38 @@ async function updateClienteFicha(formData: FormData) {
   });
 
   const estadoCambiado = cliente.estado !== data.estado;
+  const produccionCambiada =
+    cliente.estadoProduccion !== data.estadoProduccion;
   const motivoCambiado = cliente.motivoRechazo !== data.motivoRechazo;
 
-  if (estadoCambiado || motivoCambiado) {
-    const estadoDetalle = estadoCambiado
-      ? data.estado === estadoPerdido
-        ? `Estado cambiado a ${data.estado}. Estado anterior: ${cliente.estado}.`
-        : `Estado cambiado de ${cliente.estado} a ${data.estado}.`
-      : "Motivo de rechazo actualizado.";
-    const motivoDetalle =
-      data.estado === estadoPerdido
-        ? ` Motivo de rechazo: ${data.motivoRechazo}.`
-        : "";
+  if (estadoCambiado || produccionCambiada || motivoCambiado) {
+    const detalles = [
+      estadoCambiado
+        ? data.estado === estadoPerdido
+          ? `Estado comercial cambiado a ${estadoComercialLabel(data.estado)}. Estado anterior: ${estadoComercialLabel(cliente.estado)}.`
+          : `Estado comercial cambiado de ${estadoComercialLabel(cliente.estado)} a ${estadoComercialLabel(data.estado)}.`
+        : null,
+      produccionCambiada
+        ? `Estado de producción cambiado de ${estadoProduccionLabel(cliente.estadoProduccion)} a ${estadoProduccionLabel(data.estadoProduccion)}.`
+        : null,
+      motivoCambiado && data.estado === estadoPerdido
+        ? `Motivo de rechazo: ${data.motivoRechazo}.`
+        : null,
+      motivoCambiado && data.estado !== estadoPerdido
+        ? "Motivo de rechazo limpiado."
+        : null,
+    ].filter(Boolean);
 
     await registrarActividadCliente({
       clienteId,
       tipo: "ESTADO_CAMBIADO",
-      descripcion: `${estadoDetalle}${motivoDetalle}`,
+      descripcion: detalles.join(" "),
     });
   }
 
   revalidatePath("/");
   revalidatePath("/clientes");
   revalidatePath("/clientes/perdidos");
-  revalidatePath("/kanban");
   revalidatePath(`/clientes/${clienteId}`);
 }
 
@@ -921,11 +922,12 @@ async function cambiarEstadoCliente(formData: FormData) {
   "use server";
 
   const clienteId = requiredId(formData, "clienteId");
-  const estado = estadoValue(formData);
+  const estado = estadoComercialValue(formData);
+  const estadoProduccion = estadoProduccionValue(formData);
   const motivoRechazo = motivoRechazoValue(formData, estado);
   const cliente = await prisma.cliente.findUnique({
     where: { id: clienteId },
-    select: { estado: true, motivoRechazo: true },
+    select: { estado: true, estadoProduccion: true, motivoRechazo: true },
   });
   if (!cliente) {
     throw new Error("Cliente no encontrado.");
@@ -935,40 +937,50 @@ async function cambiarEstadoCliente(formData: FormData) {
     where: { id: clienteId },
     data: {
       estado,
+      estadoProduccion,
       motivoRechazo,
     },
     select: {
       estado: true,
+      estadoProduccion: true,
       motivoRechazo: true,
     },
   });
 
   const estadoCambiado = cliente.estado !== clienteActualizado.estado;
+  const produccionCambiada =
+    cliente.estadoProduccion !== clienteActualizado.estadoProduccion;
   const motivoCambiado =
     cliente.motivoRechazo !== clienteActualizado.motivoRechazo;
 
-  if (estadoCambiado || motivoCambiado) {
-    const estadoDetalle = estadoCambiado
-      ? clienteActualizado.estado === estadoPerdido
-        ? `Estado cambiado a ${clienteActualizado.estado}. Estado anterior: ${cliente.estado}.`
-        : `Estado cambiado de ${cliente.estado} a ${clienteActualizado.estado}.`
-      : "Motivo de rechazo actualizado.";
-    const motivoDetalle =
-      clienteActualizado.estado === estadoPerdido
-        ? ` Motivo de rechazo: ${clienteActualizado.motivoRechazo}.`
-        : "";
+  if (estadoCambiado || produccionCambiada || motivoCambiado) {
+    const detalles = [
+      estadoCambiado
+        ? clienteActualizado.estado === estadoPerdido
+          ? `Estado comercial cambiado a ${estadoComercialLabel(clienteActualizado.estado)}. Estado anterior: ${estadoComercialLabel(cliente.estado)}.`
+          : `Estado comercial cambiado de ${estadoComercialLabel(cliente.estado)} a ${estadoComercialLabel(clienteActualizado.estado)}.`
+        : null,
+      produccionCambiada
+        ? `Estado de producción cambiado de ${estadoProduccionLabel(cliente.estadoProduccion)} a ${estadoProduccionLabel(clienteActualizado.estadoProduccion)}.`
+        : null,
+      motivoCambiado && clienteActualizado.estado === estadoPerdido
+        ? `Motivo de rechazo: ${clienteActualizado.motivoRechazo}.`
+        : null,
+      motivoCambiado && clienteActualizado.estado !== estadoPerdido
+        ? "Motivo de rechazo limpiado."
+        : null,
+    ].filter(Boolean);
 
     await registrarActividadCliente({
       clienteId,
       tipo: "ESTADO_CAMBIADO",
-      descripcion: `${estadoDetalle}${motivoDetalle}`,
+      descripcion: detalles.join(" "),
     });
   }
 
   revalidatePath("/");
   revalidatePath("/clientes");
   revalidatePath("/clientes/perdidos");
-  revalidatePath("/kanban");
   revalidatePath(`/clientes/${clienteId}`);
 }
 
@@ -1160,8 +1172,43 @@ function startOfToday() {
   return today;
 }
 
-function estadoClass(estado: string) {
-  return estadoStyles[estado] ?? "bg-neutral-100 text-neutral-800 ring-neutral-200";
+function estadoComercialClass(estado: string) {
+  return (
+    estadoComercialStyles[estado as EstadoComercial] ??
+    "bg-neutral-100 text-neutral-800 ring-neutral-200"
+  );
+}
+
+function estadoProduccionClass(estado: string) {
+  return (
+    estadoProduccionStyles[estado as EstadoProduccion] ??
+    "bg-neutral-100 text-neutral-800 ring-neutral-200"
+  );
+}
+
+function EstadoBadge({
+  estado,
+  tipo,
+}: {
+  estado: string;
+  tipo: "comercial" | "produccion";
+}) {
+  const className =
+    tipo === "comercial"
+      ? estadoComercialClass(estado)
+      : estadoProduccionClass(estado);
+  const label =
+    tipo === "comercial"
+      ? estadoComercialLabel(estado)
+      : estadoProduccionLabel(estado);
+
+  return (
+    <span
+      className={`inline-flex w-fit rounded-full px-3 py-1 text-sm font-semibold ring-1 ${className}`}
+    >
+      {label}
+    </span>
+  );
 }
 
 function presupuestoEstadoClass(estado: string) {
@@ -1196,8 +1243,7 @@ function isSeguimientoVencido(cliente: ClienteDetalle) {
   return Boolean(
     cliente.fechaSeguimiento &&
       cliente.fechaSeguimiento < startOfToday() &&
-      cliente.estado !== "Instalado" &&
-      cliente.estado !== "Perdido",
+      cliente.estado !== estadoPerdido,
   );
 }
 
@@ -1305,9 +1351,11 @@ function ConvertirTrabajoTerminadoCard({
 }: {
   cliente: ClienteDetalle;
 }) {
-  const destacado = estadosTrabajoTerminadoDestacado.includes(
-    cliente.estado as (typeof estadosTrabajoTerminadoDestacado)[number],
-  );
+  const destacado =
+    cliente.estado === "ACEPTADO" ||
+    estadosProduccionTrabajoDestacado.includes(
+      cliente.estadoProduccion as (typeof estadosProduccionTrabajoDestacado)[number],
+    );
 
   return (
     <section
@@ -1353,19 +1401,21 @@ function CambiarEstadoForm({ cliente }: { cliente: ClienteDetalle }) {
     >
       <div className="mb-4">
         <h2 className="text-xl font-semibold text-neutral-950">
-          Cambiar estado
+          Cambiar estados
         </h2>
         <p className="mt-1 text-sm text-neutral-500">
-          Actualiza rapidamente la fase comercial del cliente.
+          Actualiza rapidamente las fases comercial y de producción.
         </p>
       </div>
       <form action={cambiarEstadoCliente} className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
         <input type="hidden" name="clienteId" value={cliente.id} />
         <div className="grid gap-4 md:grid-cols-2">
           <ClienteEstadoFields
-            estados={estados}
+            estadosComerciales={estadosComerciales}
+            estadosProduccion={estadosProduccion}
             motivosRechazo={motivosRechazo}
-            defaultEstado={cliente.estado}
+            defaultEstadoComercial={cliente.estado}
+            defaultEstadoProduccion={cliente.estadoProduccion}
             defaultMotivoRechazo={cliente.motivoRechazo}
           />
         </div>
@@ -1373,7 +1423,7 @@ function CambiarEstadoForm({ cliente }: { cliente: ClienteDetalle }) {
           type="submit"
           className="inline-flex h-10 w-fit items-center justify-center rounded-md bg-neutral-950 px-4 text-sm font-semibold text-white transition hover:bg-neutral-800"
         >
-          Guardar estado
+          Guardar estados
         </button>
       </form>
     </section>
@@ -1508,9 +1558,11 @@ function ClienteEditForm({ cliente }: { cliente: ClienteDetalle }) {
             />
           </label>
           <ClienteEstadoFields
-            estados={estados}
+            estadosComerciales={estadosComerciales}
+            estadosProduccion={estadosProduccion}
             motivosRechazo={motivosRechazo}
-            defaultEstado={cliente.estado}
+            defaultEstadoComercial={cliente.estado}
+            defaultEstadoProduccion={cliente.estadoProduccion}
             defaultMotivoRechazo={cliente.motivoRechazo}
           />
         </div>
@@ -2361,13 +2413,13 @@ function ClienteFicha({ cliente }: { cliente: ClienteDetalle }) {
                 Informacion comercial y contacto del cliente.
               </p>
             </div>
-            <span
-              className={`inline-flex w-fit rounded-full px-3 py-1 text-sm font-semibold ring-1 ${estadoClass(
-                cliente.estado,
-              )}`}
-            >
-              {cliente.estado}
-            </span>
+            <div className="flex flex-col items-start gap-2 sm:items-end">
+              <EstadoBadge estado={cliente.estado} tipo="comercial" />
+              <EstadoBadge
+                estado={cliente.estadoProduccion}
+                tipo="produccion"
+              />
+            </div>
           </div>
 
           <dl className="mt-5 grid gap-3 sm:grid-cols-2">
@@ -2387,6 +2439,14 @@ function ClienteFicha({ cliente }: { cliente: ClienteDetalle }) {
             <DetailItem
               label="Tipo de cliente"
               value={displayTipoCliente(cliente)}
+            />
+            <DetailItem
+              label="Estado comercial"
+              value={estadoComercialLabel(cliente.estado)}
+            />
+            <DetailItem
+              label="Estado producción"
+              value={estadoProduccionLabel(cliente.estadoProduccion)}
             />
             <DetailItem
               label="Presupuesto"
@@ -2409,7 +2469,7 @@ function ClienteFicha({ cliente }: { cliente: ClienteDetalle }) {
               label="Fecha de instalación"
               value={formatDate(cliente.fechaInstalacion)}
             />
-            {cliente.estado === "Perdido" ? (
+            {cliente.estado === estadoPerdido ? (
               <DetailItem
                 label="Motivo de rechazo"
                 value={cliente.motivoRechazo}
