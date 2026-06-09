@@ -92,6 +92,10 @@ function isInternalMaterialCode(value: string | null) {
   );
 }
 
+function normalizeDetectedProviderCode(value: string | null) {
+  return value?.replace(/(\d+)\s*\.\s*(\d+)/g, "$1.$2") ?? null;
+}
+
 function optionalString(formData: FormData, key: string) {
   const value = formData.get(key);
   if (typeof value !== "string") {
@@ -373,9 +377,8 @@ function lineasData(formData: FormData) {
     .map((index) => {
       const id = optionalString(formData, `linea-${index}-id`);
       const materialId = optionalString(formData, `linea-${index}-materialId`);
-      const codigoMaterialDetectado = optionalString(
-        formData,
-        `linea-${index}-codigoMaterialDetectado`,
+      const codigoMaterialDetectado = normalizeDetectedProviderCode(
+        optionalString(formData, `linea-${index}-codigoMaterialDetectado`),
       );
       const descripcion =
         optionalString(formData, `linea-${index}-descripcion`) ?? "Linea pendiente";
@@ -586,7 +589,7 @@ function normalizeLineas(input: unknown, proveedorTipoValue: string): GastoLinea
         ? ""
         : useCodigoProveedor && isInternalMaterialCode(detectedCode)
           ? ""
-          : detectedCode;
+          : normalizeDetectedProviderCode(detectedCode) ?? "";
       if (
         !descripcion &&
         !cantidad &&

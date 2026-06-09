@@ -65,6 +65,10 @@ function textValue(value?: string | null) {
   return value ?? "";
 }
 
+function normalizeDetectedProviderCode(value: string) {
+  return value.replace(/(\d+)\s*\.\s*(\d+)/g, "$1.$2");
+}
+
 function isSerreriaAlmeriense(proveedor: string | null) {
   return proveedor
     ?.normalize("NFD")
@@ -196,7 +200,9 @@ function initialLineas(data?: GastoAnalizado, gasto?: GastoEditable | null) {
     key: linea.id ?? `linea-${index}-${Date.now()}`,
     id: linea.id,
     materialId: textValue(linea.materialId),
-    codigoMaterialDetectado: textValue(linea.codigoMaterialDetectado),
+    codigoMaterialDetectado: normalizeDetectedProviderCode(
+      textValue(linea.codigoMaterialDetectado),
+    ),
     descripcion: linea.descripcion,
     cantidad: textValue(linea.cantidad),
     precioUnitario: textValue(linea.precioUnitario),
@@ -232,6 +238,20 @@ function DecimalInput({
       value={value}
       onChange={(event) => onChange(event.target.value)}
     />
+  );
+}
+
+function PendingBadge({ pending }: { pending: boolean }) {
+  return (
+    <span
+      className={
+        pending
+          ? "inline-flex min-w-20 items-center justify-center rounded-full border border-amber-300 bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900"
+          : "inline-flex min-w-20 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800"
+      }
+    >
+      {pending ? "Pendiente" : "Servido"}
+    </span>
   );
 }
 
@@ -419,7 +439,11 @@ function LineasTable({
                     name={`linea-${linea.key}-codigoMaterialDetectado`}
                     value={linea.codigoMaterialDetectado}
                     onChange={(event) =>
-                      updateLinea(index, "codigoMaterialDetectado", event.target.value)
+                      updateLinea(
+                        index,
+                        "codigoMaterialDetectado",
+                        normalizeDetectedProviderCode(event.target.value),
+                      )
                     }
                     placeholder="Código proveedor o material"
                   />
@@ -495,16 +519,19 @@ function LineasTable({
                     onChange={(value) => updateLinea(index, "importe", value)}
                   />
                 </td>
-                <td className="px-2 py-2 text-center">
-                  <input
-                    className="h-4 w-4 rounded border-neutral-300 text-emerald-700 focus:ring-emerald-600"
-                    type="checkbox"
-                    name={`linea-${linea.key}-esPendienteServir`}
-                    checked={linea.esPendienteServir}
-                    onChange={(event) =>
-                      updateLinea(index, "esPendienteServir", event.target.checked)
-                    }
-                  />
+                <td className="px-2 py-2">
+                  <label className="flex items-center justify-center gap-2">
+                    <input
+                      className="h-4 w-4 rounded border-neutral-300 text-emerald-700 focus:ring-emerald-600"
+                      type="checkbox"
+                      name={`linea-${linea.key}-esPendienteServir`}
+                      checked={linea.esPendienteServir}
+                      onChange={(event) =>
+                        updateLinea(index, "esPendienteServir", event.target.checked)
+                      }
+                    />
+                    <PendingBadge pending={linea.esPendienteServir} />
+                  </label>
                 </td>
                 <td className="px-2 py-2 text-center">
                   <input

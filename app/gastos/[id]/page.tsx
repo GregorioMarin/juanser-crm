@@ -33,6 +33,24 @@ function formatMoney(value?: { toString(): string } | null) {
   }).format(number);
 }
 
+function normalizeDetectedProviderCode(value?: string | null) {
+  return value?.replace(/(\d+)\s*\.\s*(\d+)/g, "$1.$2") ?? null;
+}
+
+function PendingBadge({ pending }: { pending: boolean }) {
+  return (
+    <span
+      className={
+        pending
+          ? "inline-flex min-w-20 items-center justify-center rounded-full border border-amber-300 bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900"
+          : "inline-flex min-w-20 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800"
+      }
+    >
+      {pending ? "Pendiente" : "Servido"}
+    </span>
+  );
+}
+
 function DetailItem({
   label,
   value,
@@ -198,7 +216,7 @@ export default async function GastoPage({ params }: GastoPageProps) {
                     gasto.lineas.map((linea) => (
                       <tr key={linea.id}>
                         <td className="whitespace-nowrap px-4 py-4 font-semibold text-neutral-950">
-                          {linea.codigoMaterialDetectado ??
+                          {normalizeDetectedProviderCode(linea.codigoMaterialDetectado) ??
                             linea.material?.codigo ??
                             "-"}
                         </td>
@@ -235,8 +253,8 @@ export default async function GastoPage({ params }: GastoPageProps) {
                         <td className="px-4 py-4 text-right font-semibold text-neutral-950">
                           {formatMoney(linea.importe)}
                         </td>
-                        <td className="px-4 py-4 text-center text-neutral-700">
-                          {linea.esPendienteServir ? "Sí" : "No"}
+                        <td className="px-4 py-4 text-center">
+                          <PendingBadge pending={linea.esPendienteServir} />
                         </td>
                         <td className="px-4 py-4 text-center text-neutral-700">
                           {linea.esPorte ? "Sí" : "No"}
