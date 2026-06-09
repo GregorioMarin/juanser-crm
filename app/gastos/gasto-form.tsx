@@ -399,21 +399,19 @@ function LineasTable({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1420px] border-collapse text-left text-sm">
+        <table className="w-full min-w-[1220px] border-collapse text-left text-sm">
           <thead className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
             <tr>
               <th className="px-2 py-2">Código</th>
-              <th className="px-2 py-2">Descripción</th>
+              <th className="px-2 py-2">Descripción proveedor</th>
               <th className="px-2 py-2">Cantidad</th>
               <th className="px-2 py-2">UM</th>
               <th className="px-2 py-2">Piezas</th>
               {showMedida ? <th className="px-2 py-2">Medida</th> : null}
               <th className="px-2 py-2">Precio</th>
               <th className="px-2 py-2">Importe</th>
-              <th className="px-2 py-2">Pendiente</th>
-              <th className="px-2 py-2">Porte</th>
+              <th className="px-2 py-2">Estado</th>
               <th className="px-2 py-2">Material vinculado</th>
-              <th className="px-2 py-2">Pedido</th>
               <th className="px-2 py-2 text-right">Acciones</th>
             </tr>
           </thead>
@@ -433,6 +431,21 @@ function LineasTable({
                     type="hidden"
                     name={`linea-${linea.key}-precioUnitario`}
                     value={linea.precioUnitario}
+                  />
+                  <input
+                    type="hidden"
+                    name={`linea-${linea.key}-esPendienteServir`}
+                    value={linea.esPendienteServir ? "true" : "false"}
+                  />
+                  <input
+                    type="hidden"
+                    name={`linea-${linea.key}-esPorte`}
+                    value={linea.esPorte ? "true" : "false"}
+                  />
+                  <input
+                    type="hidden"
+                    name={`linea-${linea.key}-pedidoProveedor`}
+                    value={linea.pedidoProveedor}
                   />
                   <input
                     className={inputClass}
@@ -519,30 +532,8 @@ function LineasTable({
                     onChange={(value) => updateLinea(index, "importe", value)}
                   />
                 </td>
-                <td className="px-2 py-2">
-                  <label className="flex items-center justify-center gap-2">
-                    <input
-                      className="h-4 w-4 rounded border-neutral-300 text-emerald-700 focus:ring-emerald-600"
-                      type="checkbox"
-                      name={`linea-${linea.key}-esPendienteServir`}
-                      checked={linea.esPendienteServir}
-                      onChange={(event) =>
-                        updateLinea(index, "esPendienteServir", event.target.checked)
-                      }
-                    />
-                    <PendingBadge pending={linea.esPendienteServir} />
-                  </label>
-                </td>
                 <td className="px-2 py-2 text-center">
-                  <input
-                    className="h-4 w-4 rounded border-neutral-300 text-emerald-700 focus:ring-emerald-600"
-                    type="checkbox"
-                    name={`linea-${linea.key}-esPorte`}
-                    checked={linea.esPorte}
-                    onChange={(event) =>
-                      updateLinea(index, "esPorte", event.target.checked)
-                    }
-                  />
+                  <PendingBadge pending={linea.esPendienteServir} />
                 </td>
                 <td className="px-2 py-2">
                   <div className="grid gap-2">
@@ -619,17 +610,6 @@ function LineasTable({
                       </div>
                     ) : null}
                   </div>
-                </td>
-                <td className="px-2 py-2">
-                  <input
-                    className={inputClass}
-                    name={`linea-${linea.key}-pedidoProveedor`}
-                    value={linea.pedidoProveedor}
-                    onChange={(event) =>
-                      updateLinea(index, "pedidoProveedor", event.target.value)
-                    }
-                    placeholder="N/PEDIDO"
-                  />
                 </td>
                 <td className="px-2 py-2 text-right">
                   <button
