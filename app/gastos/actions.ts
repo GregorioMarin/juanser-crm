@@ -76,6 +76,22 @@ function proveedorTipo(proveedor: string | null) {
   return "GENERICO";
 }
 
+function isInternalMaterialCode(value: string | null) {
+  if (!value) {
+    return false;
+  }
+
+  const normalized = value.trim().toUpperCase();
+  const prefixes = categoriasMaterial.map((categoria) =>
+    prefijoCategoriaMaterial(categoria).toUpperCase(),
+  );
+
+  return prefixes.some(
+    (prefix) =>
+      normalized === prefix || normalized.startsWith(`${prefix}-`),
+  );
+}
+
 function optionalString(formData: FormData, key: string) {
   const value = formData.get(key);
   if (typeof value !== "string") {
@@ -302,7 +318,7 @@ async function lineasCreateData(
       data.push({
         ...linea.data,
         materialId: material.id,
-        codigoMaterialDetectado: material.codigo,
+        codigoMaterialDetectado: linea.data.codigoMaterialDetectado || material.codigo,
       });
     } else {
       data.push(linea.data);
@@ -530,11 +546,12 @@ function uploadFilePathFromUrl(url: string) {
   return filePath;
 }
 
-function normalizeLineas(input: unknown): GastoLineaAnalizada[] {
+function normalizeLineas(input: unknown, proveedorTipoValue: string): GastoLineaAnalizada[] {
   if (!Array.isArray(input)) {
     return [];
   }
 
+  const useCodigoProveedor = proveedorTipoValue === "VERDU";
   const lineas = input.map((linea): GastoLineaAnalizada | null => {
       if (!linea || typeof linea !== "object") {
         return null;
@@ -564,9 +581,12 @@ function normalizeLineas(input: unknown): GastoLineaAnalizada[] {
       const esPendienteServir = boolValue("esPendienteServir");
       const pedidoProveedor = textValue("pedidoProveedor") || null;
       const materialId = esPorte ? null : value("materialId");
+      const detectedCode = textValue("codigoMaterialDetectado") || codigoInterno;
       const codigoMaterialDetectado = esPorte
         ? ""
-        : textValue("codigoMaterialDetectado") || codigoInterno;
+        : useCodigoProveedor && isInternalMaterialCode(detectedCode)
+          ? ""
+          : detectedCode;
       if (
         !descripcion &&
         !cantidad &&
@@ -607,16 +627,17 @@ function normalizeAnalysis(input: Partial<GastoAnalizado>): GastoAnalizado {
     typeof input[key] === "string" ? input[key]?.trim() ?? "" : "";
   const validTipo = value("tipoDocumento");
   const validCategoria = value("categoria");
+  const validProveedorTipo = ["SERRERIA_ALMERIENSE", "VERDU", "GENERICO"].includes(
+    value("proveedorTipo"),
+  )
+    ? value("proveedorTipo")
+    : proveedorTipo(value("proveedor"));
 
   return {
     tipoGasto: tiposGasto.includes(value("tipoGasto") as (typeof tiposGasto)[number])
       ? value("tipoGasto")
       : "Otros",
-    proveedorTipo: ["SERRERIA_ALMERIENSE", "VERDU", "GENERICO"].includes(
-      value("proveedorTipo"),
-    )
-      ? value("proveedorTipo")
-      : proveedorTipo(value("proveedor")),
+    proveedorTipo: validProveedorTipo,
     proveedor: value("proveedor"),
     fecha: value("fecha"),
     tipoDocumento: tiposDocumentoGasto.includes(
@@ -636,7 +657,7 @@ function normalizeAnalysis(input: Partial<GastoAnalizado>): GastoAnalizado {
     formaPago: value("formaPago"),
     descripcion: value("descripcion"),
     observaciones: value("observaciones"),
-    lineas: normalizeLineas(input.lineas),
+    lineas: normalizeLineas(input.lineas, validProveedorTipo),
   };
 }
 
@@ -707,9 +728,9 @@ Devuelve solo JSON estricto con estas claves: tipoGasto, proveedorTipo, proveedo
 Reglas generales: no inventes datos ni completes por intuicion; si un dato no se puede leer con claridad devuelve null en ese campo; fecha en YYYY-MM-DD si aparece; importes con punto decimal; tipoDocumento solo factura, albaran, ticket u otro; categoria solo una de: ${categoriasGasto.join(", ")}; tipoGasto solo uno de: ${tiposGasto.join(", ")}; proveedorTipo solo SERRERIA_ALMERIENSE, VERDU o GENERICO.
 Clasificacion tipoGasto: usa Materiales para proveedores de tableros, cantos, herrajes, barnices, ferreteria o compras trazables como articulo interno. Usa Vehículos para combustible, taller o reparación de vehículo. Usa Personal para Seguridad Social, nóminas o personal. Usa Suministros para luz, agua, telefonía o energía. Usa Servicios externos, Alquileres, Impuestos, Herramientas, Maquinaria u Otros cuando corresponda.
 Reglas de lineas: si tipoGasto es Materiales, cada articulo o material comprado debe ser un objeto separado en lineas; no concatenes productos en descripcion; si hay 3 articulos devuelve 3 lineas; devuelve en cada linea exactamente estos campos: codigoInterno, codigoMaterialDetectado, materialId, descripcion, cantidad, unidadMedidaProveedor, piezas, medida, precioUnidadMedida, precioUnitario, importe, esPorte, esPendienteServir, pedidoProveedor. Si tipoGasto NO es Materiales, devuelve lineas como array vacio.
-Reglas de materiales internos: solo si tipoGasto es Materiales y la linea no es porte. No cambies, recortes ni resumas la descripcion original del proveedor. Catalogo interno disponible: ${materialCatalog}. Para cada linea, si reconoces un material parecido del catalogo, rellena codigoInterno y codigoMaterialDetectado con su codigo exacto. Si no hay coincidencia clara, rellena codigoInterno y codigoMaterialDetectado con el prefijo de categoria mas probable; si no puedes deducirlo, devuelve null. Prefijos disponibles: ${materialPrefixes}. Ejemplos: TAB-000001 si coincide un material existente; TAB, CAN, HER, BAR, FER, HER-MAQ u OTR si solo detectas categoria. materialId debe ser null.
+Reglas de materiales internos: solo si tipoGasto es Materiales y la linea no es porte. No cambies, recortes ni resumas la descripcion original del proveedor. Catalogo interno disponible: ${materialCatalog}. Para cada linea, si reconoces un material parecido del catalogo, rellena codigoInterno con su codigo exacto. Si no hay coincidencia clara, rellena codigoInterno con el prefijo de categoria mas probable; si no puedes deducirlo, devuelve null. Prefijos disponibles: ${materialPrefixes}. Ejemplos: TAB-000001 si coincide un material existente; TAB, CAN, HER, BAR, FER, HER-MAQ u OTR si solo detectas categoria. materialId debe ser null. codigoMaterialDetectado debe conservar el codigo del proveedor cuando el documento tenga una columna o codigo propio; no lo sustituyas por prefijos internos.
 Reglas especificas para proveedor Serrería Almeriense o Serreria Almeriense: proveedorTipo=SERRERIA_ALMERIENSE. Mantiene la logica especial: piezas = numero de tableros o unidades fisicas; medida = m2; precioUnidadMedida = precio por m2; importe = medida x precioUnidadMedida. Devuelve cantidad=null, precioUnitario=null y unidadMedidaProveedor=null salvo que aparezca una UM literal. No interpretes Neto como precio por pieza. No devuelvas cantidad=medida ni precioUnitario=piezas. No calcules precioUnitario por tablero salvo que aparezca expresamente. Si Medida x Neto se aproxima a Importe, confirma esa interpretacion. Ejemplo: piezas=4, medida=23.940, precioUnidadMedida=10.384, importe=248.59.
-Reglas especificas para proveedor Verdú o Verdu: proveedorTipo=VERDU. Lee la tabla respetando columnas CÓDIGO, DENOMINACIÓN, CANTIDAD, UM, BULTOS, PRECIO, DTO, IMPORTE. La DENOMINACIÓN completa debe ir en descripcion, sin truncar. El CÓDIGO del proveedor no es codigoInterno; incluyelo solo si sirve para descripcion u observaciones, no como codigoInterno. Si UM=CIEN: unidadMedidaProveedor="CIEN", cantidad=valor original, piezas=cantidad*100, precioUnidadMedida=PRECIO, importe=IMPORTE. Si UM=UNID: unidadMedidaProveedor="UNID", cantidad=valor original, piezas=cantidad, precioUnidadMedida=PRECIO, importe=IMPORTE. Para Verdú devuelve precioUnitario=null salvo que el documento tenga una columna claramente de precio unitario distinta de PRECIO. Si descripcion contiene PORTES, esPorte=true, materialId=null, codigoInterno=null y codigoMaterialDetectado=null. Cuando aparezca una linea tipo "** ARTÍCULOS PENDIENTES DE SERVIR..." marca todas las lineas posteriores como esPendienteServir=true hasta que el documento indique otro bloque recibido. Cuando aparezca "N/PEDIDO: XXXXXXX", guarda ese numero en pedidoProveedor para las lineas siguientes hasta el proximo pedido. importeNeto/baseImponible debe coincidir con la suma de importes de lineas no pendientes; guarda baseImponible, iva y total desde el pie del documento si existen. Ejemplo Verdú: 423.33 | TUERCA EMBOLO 2T DOSTE D10-13 M6 ZN | 1,00 | CIEN | 4,77708 | 4,78 debe salir con cantidad=1.00, unidadMedidaProveedor=CIEN, piezas=100.00, precioUnidadMedida=4.77708, importe=4.78.
+Reglas especificas para proveedor Verdú o Verdu: proveedorTipo=VERDU. Lee la tabla respetando columnas CÓDIGO, DENOMINACIÓN, CANTIDAD, UM, BULTOS, PRECIO, DTO, IMPORTE. Conserva siempre el CÓDIGO real del proveedor en codigoMaterialDetectado; nunca lo sustituyas por HER, TAB, CAN, FER, OTR, HER-MAQ ni por codigos internos. Para Verdú codigoInterno debe ser null salvo coincidencia interna realmente segura, pero codigoMaterialDetectado debe seguir siendo el codigo del proveedor. La DENOMINACIÓN completa debe ir en descripcion, sin truncar ni resumir. Si la denominacion ocupa varias lineas consecutivas del mismo articulo, unelas en una sola descripcion con espacios manteniendo todo el texto visible. Conserva sufijos finales de descripcion como "6-50 NI", "6-20 NI", "M6-8 ZN" y similares. Prioriza la descripcion completa aunque sea larga. Si UM=CIEN: unidadMedidaProveedor="CIEN", cantidad=valor original, piezas=cantidad*100, precioUnidadMedida=PRECIO, importe=IMPORTE. Si UM=UNID: unidadMedidaProveedor="UNID", cantidad=valor original, piezas=cantidad, precioUnidadMedida=PRECIO, importe=IMPORTE. Para Verdú devuelve precioUnitario=null salvo que el documento tenga una columna claramente de precio unitario distinta de PRECIO. Si descripcion contiene PORTES, esPorte=true, materialId=null, codigoInterno=null y codigoMaterialDetectado=null. Cuando aparezca una linea tipo "** ARTÍCULOS PENDIENTES DE SERVIR..." marca todas las lineas posteriores como esPendienteServir=true hasta que el documento indique otro bloque recibido. Cuando aparezca "N/PEDIDO: XXXXXXX", guarda ese numero en pedidoProveedor para las lineas siguientes hasta el proximo pedido. importeNeto/baseImponible debe coincidir con la suma de importes de lineas no pendientes; guarda baseImponible, iva y total desde el pie del documento si existen. Ejemplo Verdú: 423.33 | TUERCA EMBOLO 2T DOSTE D10-13 M6 ZN | 1,00 | CIEN | 4,77708 | 4,78 debe salir con codigoMaterialDetectado="423.33", descripcion="TUERCA EMBOLO 2T DOSTE D10-13 M6 ZN", cantidad=1.00, unidadMedidaProveedor=CIEN, piezas=100.00, precioUnidadMedida=4.77708, importe=4.78.
 Reglas para proveedores GENERICO: no fuerces columnas de m2. Usa cantidad, unidadMedidaProveedor, precioUnidadMedida e importe si aparecen; deja piezas y medida en null salvo que sean campos evidentes del documento.`;
 
   const fileContent = isPdf

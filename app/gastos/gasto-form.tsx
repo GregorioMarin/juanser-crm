@@ -421,7 +421,7 @@ function LineasTable({
                     onChange={(event) =>
                       updateLinea(index, "codigoMaterialDetectado", event.target.value)
                     }
-                    placeholder="TAB, TAB-000001..."
+                    placeholder="Código proveedor o material"
                   />
                 </td>
                 <td className="min-w-80 px-2 py-2">

@@ -198,8 +198,8 @@ export default async function GastoPage({ params }: GastoPageProps) {
                     gasto.lineas.map((linea) => (
                       <tr key={linea.id}>
                         <td className="whitespace-nowrap px-4 py-4 font-semibold text-neutral-950">
-                          {linea.material?.codigo ??
-                            linea.codigoMaterialDetectado ??
+                          {linea.codigoMaterialDetectado ??
+                            linea.material?.codigo ??
                             "-"}
                         </td>
                         <td className="px-4 py-4 font-medium text-neutral-950">
