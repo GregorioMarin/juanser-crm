@@ -94,7 +94,7 @@ model Cliente {
   fechaSeguimiento DateTime?
   observaciones    String?
   estado           String             @default("PENDIENTE_DAR_PRECIO")
-  estadoProduccion String             @default("PENDIENTE_PAGO_50")
+  estadoProduccion String             @default("NO_APLICA")
   seguimientos     Seguimiento[]
   fotos            FotoCliente[]
   presupuestos     Presupuesto[]

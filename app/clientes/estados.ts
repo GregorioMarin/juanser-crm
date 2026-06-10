@@ -1,11 +1,14 @@
 export const estadosComerciales = [
   "PENDIENTE_DAR_PRECIO",
+  "CITA_PENDIENTE",
   "PENDIENTE_RESPUESTA",
   "ACEPTADO",
   "PERDIDO",
 ] as const;
 
-export const estadosProduccion = [
+export const estadoProduccionNoAplica = "NO_APLICA";
+
+export const estadosProduccionReales = [
   "PENDIENTE_PAGO_50",
   "PENDIENTE_PEDIR_MATERIALES",
   "PENDIENTE_FABRICAR",
@@ -14,17 +17,25 @@ export const estadosProduccion = [
   "FINALIZADO",
 ] as const;
 
+export const estadosProduccion = [
+  estadoProduccionNoAplica,
+  ...estadosProduccionReales,
+] as const;
+
 export type EstadoComercial = (typeof estadosComerciales)[number];
 export type EstadoProduccion = (typeof estadosProduccion)[number];
+export type EstadoProduccionReal = (typeof estadosProduccionReales)[number];
 
 export const estadoComercialLabels: Record<EstadoComercial, string> = {
   PENDIENTE_DAR_PRECIO: "Pendiente dar precio",
+  CITA_PENDIENTE: "Cita pendiente",
   PENDIENTE_RESPUESTA: "Pendiente respuesta",
   ACEPTADO: "Aceptado",
   PERDIDO: "Perdido",
 };
 
 export const estadoProduccionLabels: Record<EstadoProduccion, string> = {
+  NO_APLICA: "No aplica",
   PENDIENTE_PAGO_50: "Pendiente pago 50%",
   PENDIENTE_PEDIR_MATERIALES: "Pendiente pedir materiales",
   PENDIENTE_FABRICAR: "Pendiente empezar a fabricar",
@@ -35,12 +46,14 @@ export const estadoProduccionLabels: Record<EstadoProduccion, string> = {
 
 export const estadoComercialStyles: Record<EstadoComercial, string> = {
   PENDIENTE_DAR_PRECIO: "bg-orange-100 text-orange-950 ring-orange-200",
+  CITA_PENDIENTE: "bg-cyan-100 text-cyan-900 ring-cyan-200",
   PENDIENTE_RESPUESTA: "bg-sky-100 text-sky-900 ring-sky-200",
   ACEPTADO: "bg-emerald-100 text-emerald-900 ring-emerald-200",
   PERDIDO: "bg-rose-100 text-rose-900 ring-rose-200",
 };
 
 export const estadoProduccionStyles: Record<EstadoProduccion, string> = {
+  NO_APLICA: "bg-neutral-100 text-neutral-700 ring-neutral-200",
   PENDIENTE_PAGO_50: "bg-yellow-100 text-yellow-950 ring-yellow-200",
   PENDIENTE_PEDIR_MATERIALES: "bg-blue-100 text-blue-900 ring-blue-200",
   PENDIENTE_FABRICAR: "bg-stone-200 text-stone-950 ring-stone-300",
@@ -73,3 +86,21 @@ export function isEstadoProduccion(
   return estadosProduccion.includes(value as EstadoProduccion);
 }
 
+export function isEstadoProduccionReal(
+  value?: string | null,
+): value is EstadoProduccionReal {
+  return estadosProduccionReales.includes(value as EstadoProduccionReal);
+}
+
+export function estadoProduccionForComercial(
+  estadoComercial: string,
+  estadoProduccion?: string | null,
+) {
+  if (estadoComercial !== "ACEPTADO") {
+    return estadoProduccionNoAplica;
+  }
+
+  return isEstadoProduccionReal(estadoProduccion)
+    ? estadoProduccion
+    : estadosProduccionReales[0];
+}

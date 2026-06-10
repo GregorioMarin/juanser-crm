@@ -5,6 +5,7 @@ import { logout } from "@/app/auth/actions";
 import {
   estadoComercialLabel,
   estadoProduccionLabel,
+  estadoProduccionNoAplica,
 } from "@/app/clientes/estados";
 import { prisma } from "@/app/lib/prisma";
 
@@ -44,8 +45,10 @@ async function getHomeMetrics() {
     clientesNuevosMes,
     clientesActivos,
     pendienteDarPrecio,
+    citaPendiente,
     pendienteRespuesta,
     aceptados,
+    noAplica,
     pendientePago50,
     pendientePedirMateriales,
     pendienteFabricar,
@@ -70,25 +73,42 @@ async function getHomeMetrics() {
     }),
     prisma.cliente.count({
       where: {
-        OR: [
-          { estado: "ACEPTADO" },
-          { estadoProduccion: { in: ["EN_FABRICACION", "PENDIENTE_INSTALACION"] } },
-        ],
+        estado: "ACEPTADO",
       },
     }),
     prisma.cliente.count({ where: { estado: "PENDIENTE_DAR_PRECIO" } }),
+    prisma.cliente.count({ where: { estado: "CITA_PENDIENTE" } }),
     prisma.cliente.count({ where: { estado: "PENDIENTE_RESPUESTA" } }),
     prisma.cliente.count({ where: { estado: "ACEPTADO" } }),
-    prisma.cliente.count({ where: { estadoProduccion: "PENDIENTE_PAGO_50" } }),
     prisma.cliente.count({
-      where: { estadoProduccion: "PENDIENTE_PEDIR_MATERIALES" },
+      where: {
+        OR: [
+          { estadoProduccion: estadoProduccionNoAplica },
+          { estado: { not: "ACEPTADO" } },
+        ],
+      },
     }),
-    prisma.cliente.count({ where: { estadoProduccion: "PENDIENTE_FABRICAR" } }),
-    prisma.cliente.count({ where: { estadoProduccion: "EN_FABRICACION" } }),
     prisma.cliente.count({
-      where: { estadoProduccion: "PENDIENTE_INSTALACION" },
+      where: { estado: "ACEPTADO", estadoProduccion: "PENDIENTE_PAGO_50" },
     }),
-    prisma.cliente.count({ where: { estadoProduccion: "FINALIZADO" } }),
+    prisma.cliente.count({
+      where: {
+        estado: "ACEPTADO",
+        estadoProduccion: "PENDIENTE_PEDIR_MATERIALES",
+      },
+    }),
+    prisma.cliente.count({
+      where: { estado: "ACEPTADO", estadoProduccion: "PENDIENTE_FABRICAR" },
+    }),
+    prisma.cliente.count({
+      where: { estado: "ACEPTADO", estadoProduccion: "EN_FABRICACION" },
+    }),
+    prisma.cliente.count({
+      where: { estado: "ACEPTADO", estadoProduccion: "PENDIENTE_INSTALACION" },
+    }),
+    prisma.cliente.count({
+      where: { estado: "ACEPTADO", estadoProduccion: "FINALIZADO" },
+    }),
     prisma.trabajoTerminado.count({
       where: { fechaTrabajo: { gte: recent.from, lte: recent.to } },
     }),
@@ -113,8 +133,10 @@ async function getHomeMetrics() {
     trabajosDetalle: `${clientesActivos} activos · ${trabajosRecientes} recientes`,
     pendientesHoy: {
       pendienteDarPrecio,
+      citaPendiente,
       pendienteRespuesta,
       aceptados,
+      noAplica,
       pendientePago50,
       pendientePedirMateriales,
       pendienteFabricar,
@@ -204,6 +226,13 @@ export default async function Home() {
       accent: "bg-orange-500",
     },
     {
+      href: "/clientes?estadoComercial=CITA_PENDIENTE",
+      count: metrics.pendientesHoy.citaPendiente,
+      title: estadoComercialLabel("CITA_PENDIENTE"),
+      description: "Clientes con cita comercial por cerrar.",
+      accent: "bg-cyan-500",
+    },
+    {
       href: "/clientes?estadoComercial=PENDIENTE_RESPUESTA",
       count: metrics.pendientesHoy.pendienteRespuesta,
       title: estadoComercialLabel("PENDIENTE_RESPUESTA"),
@@ -219,6 +248,13 @@ export default async function Home() {
     },
   ] as const;
   const produccionPendientes = [
+    {
+      href: "/clientes?estadoProduccion=NO_APLICA",
+      count: metrics.pendientesHoy.noAplica,
+      title: estadoProduccionLabel("NO_APLICA"),
+      description: "Clientes fuera de producción hasta aceptación.",
+      accent: "bg-neutral-500",
+    },
     {
       href: "/clientes?estadoProduccion=PENDIENTE_PAGO_50",
       count: metrics.pendientesHoy.pendientePago50,
@@ -384,7 +420,7 @@ export default async function Home() {
               <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-neutral-500">
                 Estado comercial
               </h3>
-              <div className="mt-3 grid gap-4 md:grid-cols-3">
+              <div className="mt-3 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 {comercialPendientes.map((item) => (
                   <PendingCard key={item.href} {...item} />
                 ))}

@@ -7,12 +7,15 @@ import { DeleteClienteForm } from "@/app/clientes/delete-cliente-form";
 import {
   estadoComercialLabel,
   estadoComercialStyles,
+  estadoProduccionForComercial,
   estadoProduccionLabel,
+  estadoProduccionNoAplica,
   estadoProduccionStyles,
   estadosComerciales,
   estadosProduccion,
   isEstadoComercial,
   isEstadoProduccion,
+  isEstadoProduccionReal,
   type EstadoComercial,
   type EstadoProduccion,
 } from "@/app/clientes/estados";
@@ -24,6 +27,7 @@ import {
 } from "@/app/clientes/motivos-rechazo";
 import { registrarActividadCliente } from "@/app/lib/actividad";
 import { prisma } from "@/app/lib/prisma";
+import { Prisma } from "@/app/generated/prisma/client";
 
 const origenesContacto = [
   "WhatsApp",
@@ -75,9 +79,13 @@ function estadoComercialValue(formData: FormData) {
   return value;
 }
 
-function estadoProduccionValue(formData: FormData) {
-  const value = optionalString(formData, "estadoProduccion") ?? estadosProduccion[0];
-  if (!isEstadoProduccion(value)) {
+function estadoProduccionValue(formData: FormData, estadoComercial: string) {
+  if (estadoComercial !== "ACEPTADO") {
+    return estadoProduccionNoAplica;
+  }
+
+  const value = optionalString(formData, "estadoProduccion");
+  if (!isEstadoProduccionReal(value)) {
     throw new Error("Estado de produccion no valido.");
   }
 
@@ -169,7 +177,7 @@ function clienteData(formData: FormData) {
     origenContacto: origenContactoValue(formData),
     tipoCliente: tipoClienteValue(formData),
     motivoRechazo: motivoRechazoValue(formData, estado),
-    estadoProduccion: estadoProduccionValue(formData),
+    estadoProduccion: estadoProduccionValue(formData, estado),
     fechaMedicion: optionalDate(formData, "fechaMedicion"),
     fechaInstalacion: optionalDate(formData, "fechaInstalacion"),
     importeAceptado: presupuestoValue(formData, "importeAceptado"),
@@ -202,19 +210,37 @@ async function getClientes(
   estadoComercial: EstadoComercial | null,
   estadoProduccion: EstadoProduccion | null,
 ) {
+  const andFilters: Prisma.ClienteWhereInput[] = [];
+
+  if (query) {
+    andFilters.push({
+      OR: [
+        { nombre: { contains: query, mode: "insensitive" } },
+        { telefono: { contains: query, mode: "insensitive" } },
+      ],
+    });
+  }
+
+  if (estadoComercial) {
+    andFilters.push({ estado: estadoComercial });
+  }
+
+  if (estadoProduccion === estadoProduccionNoAplica) {
+    andFilters.push({
+      OR: [
+        { estadoProduccion: estadoProduccionNoAplica },
+        { estado: { not: "ACEPTADO" } },
+      ],
+    });
+  } else if (estadoProduccion) {
+    andFilters.push({
+      estado: "ACEPTADO",
+      estadoProduccion,
+    });
+  }
+
   return prisma.cliente.findMany({
-    where: {
-      ...(query
-        ? {
-            OR: [
-              { nombre: { contains: query, mode: "insensitive" } },
-              { telefono: { contains: query, mode: "insensitive" } },
-            ],
-          }
-        : {}),
-      ...(estadoComercial ? { estado: estadoComercial } : {}),
-      ...(estadoProduccion ? { estadoProduccion } : {}),
-    },
+    where: andFilters.length > 0 ? { AND: andFilters } : {},
     orderBy: { fechaAlta: "desc" },
   });
 }
@@ -276,9 +302,11 @@ async function getSeguimientosFuturos() {
 async function getResumen() {
   const [
     pendienteDarPrecio,
+    citaPendiente,
     pendienteRespuesta,
     aceptados,
     perdidos,
+    noAplica,
     pendientePago50,
     pendientePedirMateriales,
     pendienteFabricar,
@@ -291,19 +319,39 @@ async function getResumen() {
     clientesPerdidosPorMotivo,
   ] = await Promise.all([
     prisma.cliente.count({ where: { estado: "PENDIENTE_DAR_PRECIO" } }),
+    prisma.cliente.count({ where: { estado: "CITA_PENDIENTE" } }),
     prisma.cliente.count({ where: { estado: "PENDIENTE_RESPUESTA" } }),
     prisma.cliente.count({ where: { estado: "ACEPTADO" } }),
     prisma.cliente.count({ where: { estado: "PERDIDO" } }),
-    prisma.cliente.count({ where: { estadoProduccion: "PENDIENTE_PAGO_50" } }),
     prisma.cliente.count({
-      where: { estadoProduccion: "PENDIENTE_PEDIR_MATERIALES" },
+      where: {
+        OR: [
+          { estadoProduccion: estadoProduccionNoAplica },
+          { estado: { not: "ACEPTADO" } },
+        ],
+      },
     }),
-    prisma.cliente.count({ where: { estadoProduccion: "PENDIENTE_FABRICAR" } }),
-    prisma.cliente.count({ where: { estadoProduccion: "EN_FABRICACION" } }),
     prisma.cliente.count({
-      where: { estadoProduccion: "PENDIENTE_INSTALACION" },
+      where: { estado: "ACEPTADO", estadoProduccion: "PENDIENTE_PAGO_50" },
     }),
-    prisma.cliente.count({ where: { estadoProduccion: "FINALIZADO" } }),
+    prisma.cliente.count({
+      where: {
+        estado: "ACEPTADO",
+        estadoProduccion: "PENDIENTE_PEDIR_MATERIALES",
+      },
+    }),
+    prisma.cliente.count({
+      where: { estado: "ACEPTADO", estadoProduccion: "PENDIENTE_FABRICAR" },
+    }),
+    prisma.cliente.count({
+      where: { estado: "ACEPTADO", estadoProduccion: "EN_FABRICACION" },
+    }),
+    prisma.cliente.count({
+      where: { estado: "ACEPTADO", estadoProduccion: "PENDIENTE_INSTALACION" },
+    }),
+    prisma.cliente.count({
+      where: { estado: "ACEPTADO", estadoProduccion: "FINALIZADO" },
+    }),
     prisma.cliente.findMany({
       select: {
         presupuestos: {
@@ -364,9 +412,11 @@ async function getResumen() {
 
   return {
     pendienteDarPrecio,
+    citaPendiente,
     pendienteRespuesta,
     aceptados,
     perdidos,
+    noAplica,
     pendientePago50,
     pendientePedirMateriales,
     pendienteFabricar,
@@ -448,8 +498,8 @@ function EstadoSelect({
     ? defaultEstadoComercial
     : estadosComerciales[0];
   const currentProduccion = isEstadoProduccion(defaultEstadoProduccion)
-    ? defaultEstadoProduccion
-    : estadosProduccion[0];
+    ? estadoProduccionForComercial(currentComercial, defaultEstadoProduccion)
+    : estadoProduccionForComercial(currentComercial);
 
   return (
     <ClienteEstadoFields
@@ -645,6 +695,12 @@ function formatCurrency(value: unknown) {
 
 function displayTipoCliente(cliente: Pick<Cliente, "tipoCliente" | "tipoTrabajo">) {
   return cliente.tipoCliente || cliente.tipoTrabajo || "-";
+}
+
+function displayEstadoProduccion(
+  cliente: Pick<Cliente, "estado" | "estadoProduccion">,
+) {
+  return estadoProduccionForComercial(cliente.estado, cliente.estadoProduccion);
 }
 
 function estadoComercialClass(estado: string) {
@@ -870,11 +926,13 @@ function SeguimientosFuturos({ clientes }: { clientes: SeguimientoFuturo[] }) {
 function ResumenComercial({ resumen }: { resumen: Resumen }) {
   const comerciales = [
     ["Pendiente dar precio", resumen.pendienteDarPrecio],
+    ["Cita pendiente", resumen.citaPendiente],
     ["Pendiente respuesta", resumen.pendienteRespuesta],
     ["Aceptados", resumen.aceptados],
     ["Perdidos", resumen.perdidos],
   ] as const;
   const produccion = [
+    ["No aplica", resumen.noAplica],
     ["Pago 50%", resumen.pendientePago50],
     ["Pedir materiales", resumen.pendientePedirMateriales],
     ["Empezar a fabricar", resumen.pendienteFabricar],
@@ -889,7 +947,7 @@ function ResumenComercial({ resumen }: { resumen: Resumen }) {
 
   return (
     <section className="grid gap-3">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {comerciales.map(([label, value]) => (
           <div
             key={label}
@@ -902,7 +960,7 @@ function ResumenComercial({ resumen }: { resumen: Resumen }) {
           </div>
         ))}
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
         {produccion.map(([label, value]) => (
           <div
             key={label}
@@ -1103,7 +1161,7 @@ function ClienteDetails({ cliente }: { cliente: Cliente }) {
       </div>
       <div>
         <dt className="font-medium text-neutral-500">Estado producción</dt>
-        <dd>{estadoProduccionLabel(cliente.estadoProduccion)}</dd>
+        <dd>{estadoProduccionLabel(displayEstadoProduccion(cliente))}</dd>
       </div>
       {cliente.estado === "PERDIDO" ? (
         <div className="sm:col-span-2">
@@ -1188,7 +1246,7 @@ function ClientesTable({ clientes }: { clientes: Cliente[] }) {
               </td>
               <td className="min-w-40 px-4 py-4 text-center">
                 <EstadoBadge
-                  estado={cliente.estadoProduccion}
+                  estado={displayEstadoProduccion(cliente)}
                   tipo="produccion"
                 />
               </td>
@@ -1234,7 +1292,7 @@ function ClientesCards({ clientes }: { clientes: Cliente[] }) {
             <div className="flex flex-col items-start gap-2 sm:items-end">
               <EstadoBadge estado={cliente.estado} tipo="comercial" />
               <EstadoBadge
-                estado={cliente.estadoProduccion}
+                estado={displayEstadoProduccion(cliente)}
                 tipo="produccion"
               />
             </div>

@@ -3,7 +3,10 @@
 import { useState } from "react";
 import {
   estadoComercialLabel,
+  estadoProduccionForComercial,
   estadoProduccionLabel,
+  estadoProduccionNoAplica,
+  estadosProduccionReales,
 } from "@/app/clientes/estados";
 
 const inputClass =
@@ -27,7 +30,18 @@ export function ClienteEstadoFields({
   defaultMotivoRechazo?: string | null;
 }) {
   const [estadoComercial, setEstadoComercial] = useState(defaultEstadoComercial);
+  const [estadoProduccion, setEstadoProduccion] = useState(
+    estadoProduccionForComercial(defaultEstadoComercial, defaultEstadoProduccion),
+  );
   const isPerdido = estadoComercial === "PERDIDO";
+  const canUseProduccion = estadoComercial === "ACEPTADO";
+
+  function handleEstadoComercialChange(nextEstado: string) {
+    setEstadoComercial(nextEstado);
+    setEstadoProduccion((current) =>
+      estadoProduccionForComercial(nextEstado, current),
+    );
+  }
 
   return (
     <>
@@ -37,7 +51,7 @@ export function ClienteEstadoFields({
           className={inputClass}
           name="estadoComercial"
           value={estadoComercial}
-          onChange={(event) => setEstadoComercial(event.target.value)}
+          onChange={(event) => handleEstadoComercialChange(event.target.value)}
         >
           {estadosComerciales.map((estadoOption) => (
             <option key={estadoOption} value={estadoOption}>
@@ -49,16 +63,31 @@ export function ClienteEstadoFields({
 
       <label className="flex flex-col gap-1.5">
         <span className={labelClass}>Estado producción</span>
+        {!canUseProduccion ? (
+          <input
+            type="hidden"
+            name="estadoProduccion"
+            value={estadoProduccionNoAplica}
+          />
+        ) : null}
         <select
           className={inputClass}
           name="estadoProduccion"
-          defaultValue={defaultEstadoProduccion}
+          value={canUseProduccion ? estadoProduccion : estadoProduccionNoAplica}
+          onChange={(event) => setEstadoProduccion(event.target.value)}
+          disabled={!canUseProduccion}
         >
-          {estadosProduccion.map((estadoOption) => (
-            <option key={estadoOption} value={estadoOption}>
-              {estadoProduccionLabel(estadoOption)}
+          {canUseProduccion ? (
+            estadosProduccionReales.map((estadoOption) => (
+              <option key={estadoOption} value={estadoOption}>
+                {estadoProduccionLabel(estadoOption)}
+              </option>
+            ))
+          ) : (
+            <option value={estadoProduccionNoAplica}>
+              {estadoProduccionLabel(estadoProduccionNoAplica)}
             </option>
-          ))}
+          )}
         </select>
       </label>
 

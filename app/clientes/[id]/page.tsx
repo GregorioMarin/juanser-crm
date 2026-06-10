@@ -17,12 +17,15 @@ import { DeleteClienteForm } from "@/app/clientes/delete-cliente-form";
 import {
   estadoComercialLabel,
   estadoComercialStyles,
+  estadoProduccionForComercial,
   estadoProduccionLabel,
+  estadoProduccionNoAplica,
   estadoProduccionStyles,
   estadosComerciales,
   estadosProduccion,
   isEstadoComercial,
   isEstadoProduccion,
+  isEstadoProduccionReal,
   type EstadoComercial,
   type EstadoProduccion,
 } from "@/app/clientes/estados";
@@ -165,9 +168,13 @@ function estadoComercialValue(formData: FormData) {
   return value;
 }
 
-function estadoProduccionValue(formData: FormData) {
-  const value = optionalString(formData, "estadoProduccion") ?? estadosProduccion[0];
-  if (!isEstadoProduccion(value)) {
+function estadoProduccionValue(formData: FormData, estadoComercial: string) {
+  if (estadoComercial !== "ACEPTADO") {
+    return estadoProduccionNoAplica;
+  }
+
+  const value = optionalString(formData, "estadoProduccion");
+  if (!isEstadoProduccionReal(value)) {
     throw new Error("Estado de produccion no valido.");
   }
 
@@ -295,7 +302,7 @@ function clienteEditableData(formData: FormData) {
     fechaMedicion: optionalDate(formData, "fechaMedicion"),
     fechaInstalacion: optionalDate(formData, "fechaInstalacion"),
     estado,
-    estadoProduccion: estadoProduccionValue(formData),
+    estadoProduccion: estadoProduccionValue(formData, estado),
     motivoRechazo: motivoRechazoValue(formData, estado),
     observaciones: optionalString(formData, "observaciones"),
   };
@@ -923,7 +930,7 @@ async function cambiarEstadoCliente(formData: FormData) {
 
   const clienteId = requiredId(formData, "clienteId");
   const estado = estadoComercialValue(formData);
-  const estadoProduccion = estadoProduccionValue(formData);
+  const estadoProduccion = estadoProduccionValue(formData, estado);
   const motivoRechazo = motivoRechazoValue(formData, estado);
   const cliente = await prisma.cliente.findUnique({
     where: { id: clienteId },
@@ -1166,6 +1173,12 @@ function displayTipoCliente(
   return cliente.tipoCliente || cliente.tipoTrabajo || "-";
 }
 
+function displayEstadoProduccion(
+  cliente: Pick<ClienteDetalle, "estado" | "estadoProduccion">,
+) {
+  return estadoProduccionForComercial(cliente.estado, cliente.estadoProduccion);
+}
+
 function startOfToday() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -1354,7 +1367,9 @@ function ConvertirTrabajoTerminadoCard({
   const destacado =
     cliente.estado === "ACEPTADO" ||
     estadosProduccionTrabajoDestacado.includes(
-      cliente.estadoProduccion as (typeof estadosProduccionTrabajoDestacado)[number],
+      displayEstadoProduccion(
+        cliente,
+      ) as (typeof estadosProduccionTrabajoDestacado)[number],
     );
 
   return (
@@ -2416,7 +2431,7 @@ function ClienteFicha({ cliente }: { cliente: ClienteDetalle }) {
             <div className="flex flex-col items-start gap-2 sm:items-end">
               <EstadoBadge estado={cliente.estado} tipo="comercial" />
               <EstadoBadge
-                estado={cliente.estadoProduccion}
+                estado={displayEstadoProduccion(cliente)}
                 tipo="produccion"
               />
             </div>
@@ -2446,7 +2461,7 @@ function ClienteFicha({ cliente }: { cliente: ClienteDetalle }) {
             />
             <DetailItem
               label="Estado producción"
-              value={estadoProduccionLabel(cliente.estadoProduccion)}
+              value={estadoProduccionLabel(displayEstadoProduccion(cliente))}
             />
             <DetailItem
               label="Presupuesto"
