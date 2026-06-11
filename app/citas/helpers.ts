@@ -7,6 +7,8 @@ export const citaEstados = [
 
 export type CitaEstadoNormalizado = (typeof citaEstados)[number];
 
+export const servicioPrefix = "Servicio:";
+
 const citaEstadoMap: Record<string, CitaEstadoNormalizado> = {
   pending: "PENDIENTE",
   pendiente: "PENDIENTE",
@@ -62,4 +64,44 @@ export function isCitaPendienteOFutura({
 export function isCitasPendientesFilter(value?: string | string[]) {
   const raw = Array.isArray(value) ? value[0] : value;
   return raw === "pendientes" || raw === "1" || raw === "true";
+}
+
+export function citaLines(nota: string | null | undefined) {
+  return nota?.split("\n").map((line) => line.trim()).filter(Boolean) ?? [];
+}
+
+export function citaServicio(nota: string | null | undefined) {
+  const serviceLine = citaLines(nota).find((line) => line.startsWith(servicioPrefix));
+
+  return serviceLine?.slice(servicioPrefix.length).trim() || null;
+}
+
+export function citaNotaVisible(
+  nota: string | null | undefined,
+  hiddenLines: string[] = [],
+) {
+  const visible = citaLines(nota)
+    .filter((line) => !line.startsWith(servicioPrefix))
+    .filter((line) => !hiddenLines.includes(line))
+    .join("\n");
+
+  return visible || null;
+}
+
+export function buildCitaNota({
+  servicio,
+  nota,
+  preservedLines = [],
+}: {
+  servicio: string | null;
+  nota: string | null;
+  preservedLines?: string[];
+}) {
+  return [
+    servicio ? `${servicioPrefix} ${servicio}` : null,
+    nota,
+    ...preservedLines,
+  ]
+    .filter(Boolean)
+    .join("\n") || null;
 }

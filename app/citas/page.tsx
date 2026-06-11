@@ -9,14 +9,16 @@ import { convertirCitaEnCliente } from "./actions";
 import { clienteCreadoMarker } from "./constants";
 import { getCitas } from "./data";
 import { DeleteCitaForm } from "./delete-cita-form";
+import { EditCitaForm } from "./edit-cita-form";
 import {
+  citaLines,
   citaEstados,
+  citaNotaVisible,
+  citaServicio,
   isCitasPendientesFilter,
   type CitaEstadoNormalizado,
 } from "./helpers";
 import { prisma } from "@/app/lib/prisma";
-
-const servicioPrefix = "Servicio:";
 
 const estadoStyles: Record<CitaEstadoNormalizado, string> = {
   PENDIENTE: "bg-amber-100 text-amber-950 ring-amber-200",
@@ -159,6 +161,16 @@ function formatDateTime(date: Date) {
   }).format(date);
 }
 
+function formatDateTimeInput(date: Date) {
+  const pad = (value: number) => String(value).padStart(2, "0");
+
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate()),
+  ].join("-") + `T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 function estadoClass(estado: string) {
   return (
     estadoStyles[estado as CitaEstadoNormalizado] ??
@@ -166,27 +178,21 @@ function estadoClass(estado: string) {
   );
 }
 
-function citaLines(cita: Cita) {
-  return cita.nota?.split("\n").map((line) => line.trim()).filter(Boolean) ?? [];
-}
-
-function citaServicio(cita: Cita) {
-  const serviceLine = citaLines(cita).find((line) => line.startsWith(servicioPrefix));
-
-  return serviceLine?.slice(servicioPrefix.length).trim() || null;
-}
-
 function citaProcesada(cita: Cita) {
-  return citaLines(cita).includes(clienteCreadoMarker);
+  return citaLines(cita.nota).includes(clienteCreadoMarker);
 }
 
-function citaNotaVisible(cita: Cita) {
-  const nota = citaLines(cita)
-    .filter((line) => !line.startsWith(servicioPrefix))
-    .filter((line) => line !== clienteCreadoMarker)
-    .join("\n");
-
-  return nota || null;
+function citaEditData(cita: Cita) {
+  return {
+    id: cita.id,
+    clienteNombre: cita.clienteNombre,
+    telefono: cita.telefono,
+    email: cita.email,
+    fechaHora: formatDateTimeInput(cita.fechaHora),
+    estado: cita.estado as CitaEstadoNormalizado,
+    servicio: citaServicio(cita.nota),
+    nota: citaNotaVisible(cita.nota, [clienteCreadoMarker]),
+  };
 }
 
 function ConvertirCitaForm({ cita, processed }: { cita: Cita; processed: boolean }) {
@@ -242,7 +248,9 @@ function CitasTable({ citas }: { citas: Cita[] }) {
                     </p>
                   ) : null}
                 </td>
-                <td className="px-4 py-4 text-neutral-700">{citaServicio(cita) || "-"}</td>
+                <td className="px-4 py-4 text-neutral-700">
+                  {citaServicio(cita.nota) || "-"}
+                </td>
                 <td className="px-4 py-4 text-neutral-700">
                   <PhoneContactActions telefono={cita.telefono} />
                   <div className="mt-1 text-neutral-500">
@@ -260,10 +268,11 @@ function CitasTable({ citas }: { citas: Cita[] }) {
                   </span>
                 </td>
                 <td className="max-w-sm whitespace-pre-line px-4 py-4 text-neutral-700">
-                  {citaNotaVisible(cita) || "-"}
+                  {citaNotaVisible(cita.nota, [clienteCreadoMarker]) || "-"}
                 </td>
                 <td className="px-4 py-4">
                   <div className="flex justify-end gap-2">
+                    <EditCitaForm cita={citaEditData(cita)} />
                     <ConvertirCitaForm cita={cita} processed={processed} />
                     <DeleteCitaForm citaId={cita.id} />
                   </div>
@@ -318,7 +327,7 @@ function CitasCards({ citas }: { citas: Cita[] }) {
             <dl className="mt-4 grid gap-2 text-sm text-neutral-700 sm:grid-cols-2">
               <div>
                 <dt className="font-medium text-neutral-500">Servicio</dt>
-                <dd>{citaServicio(cita) || "-"}</dd>
+                <dd>{citaServicio(cita.nota) || "-"}</dd>
               </div>
               <div>
                 <dt className="font-medium text-neutral-500">Telefono</dt>
@@ -337,12 +346,13 @@ function CitasCards({ citas }: { citas: Cita[] }) {
                 <dd>{cita.origen}</dd>
               </div>
             </dl>
-            {citaNotaVisible(cita) ? (
+            {citaNotaVisible(cita.nota, [clienteCreadoMarker]) ? (
               <p className="mt-4 whitespace-pre-line border-t border-neutral-200 pt-4 text-sm text-neutral-700">
-                {citaNotaVisible(cita)}
+                {citaNotaVisible(cita.nota, [clienteCreadoMarker])}
               </p>
             ) : null}
             <div className="mt-4 flex flex-wrap gap-2">
+              <EditCitaForm cita={citaEditData(cita)} />
               <ConvertirCitaForm cita={cita} processed={processed} />
               <DeleteCitaForm citaId={cita.id} />
             </div>
