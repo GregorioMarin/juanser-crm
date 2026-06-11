@@ -7,7 +7,7 @@ import {
   estadoProduccionLabel,
   estadoProduccionNoAplica,
 } from "@/app/clientes/estados";
-import { countCitasPendientes } from "@/app/citas/data";
+import { countCitasPendientes } from "./citas/data";
 import { prisma } from "@/app/lib/prisma";
 
 function currentMonthRange() {

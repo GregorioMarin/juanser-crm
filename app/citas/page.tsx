@@ -7,13 +7,18 @@ import {
 } from "@/app/contact-actions";
 import { convertirCitaEnCliente } from "@/app/citas/actions";
 import { clienteCreadoMarker } from "@/app/citas/constants";
+import { getCitas } from "./data";
 import { DeleteCitaForm } from "@/app/citas/delete-cita-form";
+import {
+  citaEstados,
+  isCitasPendientesFilter,
+  type CitaEstadoNormalizado,
+} from "@/app/citas/helpers";
 import { prisma } from "@/app/lib/prisma";
 
-const estados = ["PENDIENTE", "CONFIRMADA", "CANCELADA", "REALIZADA"] as const;
 const servicioPrefix = "Servicio:";
 
-const estadoStyles: Record<(typeof estados)[number], string> = {
+const estadoStyles: Record<CitaEstadoNormalizado, string> = {
   PENDIENTE: "bg-amber-100 text-amber-950 ring-amber-200",
   CONFIRMADA: "bg-emerald-100 text-emerald-900 ring-emerald-200",
   CANCELADA: "bg-rose-100 text-rose-900 ring-rose-200",
@@ -57,11 +62,11 @@ function requiredDateTime(formData: FormData, key: string) {
 
 function estadoValue(formData: FormData) {
   const value = optionalString(formData, "estado") ?? "PENDIENTE";
-  if (!estados.includes(value as (typeof estados)[number])) {
+  if (!citaEstados.includes(value as CitaEstadoNormalizado)) {
     throw new Error("Estado de cita no valido.");
   }
 
-  return value as (typeof estados)[number];
+  return value as CitaEstadoNormalizado;
 }
 
 async function createCitaManual(formData: FormData) {
@@ -80,12 +85,6 @@ async function createCitaManual(formData: FormData) {
   });
 
   revalidatePath("/citas");
-}
-
-async function getCitas() {
-  return prisma.cita.findMany({
-    orderBy: { fechaHora: "asc" },
-  });
 }
 
 type Cita = Awaited<ReturnType<typeof getCitas>>[number];
@@ -114,7 +113,7 @@ function EstadoSelect() {
     <label className="flex flex-col gap-1.5">
       <span className={labelClass}>Estado</span>
       <select className={inputClass} name="estado" defaultValue="PENDIENTE">
-        {estados.map((estado) => (
+        {citaEstados.map((estado) => (
           <option key={estado} value={estado}>
             {estado}
           </option>
@@ -162,7 +161,7 @@ function formatDateTime(date: Date) {
 
 function estadoClass(estado: string) {
   return (
-    estadoStyles[estado as (typeof estados)[number]] ??
+    estadoStyles[estado as CitaEstadoNormalizado] ??
     "bg-neutral-100 text-neutral-800 ring-neutral-200"
   );
 }
@@ -354,23 +353,31 @@ function CitasCards({ citas }: { citas: Cita[] }) {
   );
 }
 
-function EmptyState() {
+function EmptyState({ pendientes }: { pendientes: boolean }) {
   return (
     <div className="rounded-md border border-dashed border-neutral-300 bg-white p-8 text-center">
       <p className="text-base font-semibold text-neutral-950">
-        Todavia no hay citas
+        {pendientes ? "No hay citas pendientes o futuras" : "Todavia no hay citas"}
       </p>
       <p className="mt-2 text-sm text-neutral-500">
-        Añade una cita manual o conecta el webhook de Amelia.
+        {pendientes
+          ? "Las citas pendientes y confirmadas futuras apareceran aqui."
+          : "Añade una cita manual o conecta el webhook de Amelia."}
       </p>
     </div>
   );
 }
 
-export default async function CitasPage() {
+type CitasPageProps = {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default async function CitasPage({ searchParams }: CitasPageProps) {
   await connection();
 
-  const citas = await getCitas();
+  const params = await searchParams;
+  const pendientes = isCitasPendientesFilter(params.filtro ?? params.pendientes);
+  const citas = await getCitas({ pendientes });
 
   return (
     <main className="min-h-screen bg-neutral-100 px-5 py-6 text-neutral-950 sm:px-8">
@@ -378,18 +385,28 @@ export default async function CitasPage() {
         <header className="flex flex-col gap-4 border-b border-neutral-300 pb-5 md:flex-row md:items-end md:justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-normal text-neutral-950">
-              Citas
+              {pendientes ? "Citas pendientes" : "Citas"}
             </h1>
             <p className="mt-2 text-sm text-neutral-600">
-              {citas.length} citas ordenadas por fecha y hora
+              {pendientes
+                ? `${citas.length} citas pendientes o futuras ordenadas por fecha y hora`
+                : `${citas.length} citas ordenadas por fecha y hora`}
             </p>
           </div>
-          <Link
-            href="/clientes"
-            className="inline-flex h-10 items-center justify-center rounded-md border border-neutral-300 bg-white px-4 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
-          >
-            Ver clientes
-          </Link>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Link
+              href={pendientes ? "/citas" : "/citas?filtro=pendientes"}
+              className="inline-flex h-10 items-center justify-center rounded-md border border-neutral-300 bg-white px-4 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
+            >
+              {pendientes ? "Ver todas" : "Citas pendientes"}
+            </Link>
+            <Link
+              href="/clientes"
+              className="inline-flex h-10 items-center justify-center rounded-md border border-neutral-300 bg-white px-4 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
+            >
+              Ver clientes
+            </Link>
+          </div>
         </header>
 
         <section className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
@@ -414,7 +431,7 @@ export default async function CitasPage() {
               <CitasCards citas={citas} />
             </>
           ) : (
-            <EmptyState />
+            <EmptyState pendientes={pendientes} />
           )}
         </section>
       </div>
