@@ -8,6 +8,10 @@ import {
   presupuestoFiltrosComerciales,
   type PresupuestoFiltroComercial,
 } from "./estado-comercial";
+import {
+  pagosSinPresupuesto,
+  totalPagadoPresupuestoConCliente,
+} from "./pagos-cuenta";
 import { WhatsAppPresupuestoLink } from "./whatsapp-presupuesto-link";
 
 const inputClass =
@@ -81,11 +85,24 @@ async function getPresupuestos(
           id: true,
           nombre: true,
           telefono: true,
+          pagosCuenta: {
+            select: {
+              importe: true,
+              presupuestoId: true,
+            },
+          },
+          presupuestos: {
+            select: {
+              id: true,
+              estado: true,
+            },
+          },
         },
       },
       pagosCuenta: {
         select: {
           importe: true,
+          presupuestoId: true,
         },
       },
       facturasVenta: {
@@ -138,15 +155,6 @@ function formatCurrency(value: unknown) {
     style: "currency",
     currency: "EUR",
   }).format(Number(value));
-}
-
-function totalPagadoPresupuesto(
-  presupuesto: Pick<Presupuesto, "pagosCuenta">,
-) {
-  return presupuesto.pagosCuenta.reduce(
-    (sum, pago) => sum + Number(pago.importe),
-    0,
-  );
 }
 
 function formatDate(date: Date) {
@@ -298,9 +306,15 @@ function PresupuestosTable({
         <tbody className="divide-y divide-neutral-200">
           {presupuestos.length > 0 ? (
             presupuestos.map((presupuesto) => {
-              const pagado = totalPagadoPresupuesto(presupuesto);
+              const pagado = totalPagadoPresupuestoConCliente(
+                presupuesto,
+                presupuesto.cliente,
+              );
               const pendiente = Number(presupuesto.totalConIva) - pagado;
               const pago = estadoPago(pagado, pendiente);
+              const pagosClienteSinPresupuesto = pagosSinPresupuesto(
+                presupuesto.cliente,
+              );
               const isFacturable =
                 presupuesto.estado === "ACEPTADO" ||
                 presupuesto.estado === "INSTALADO";
@@ -330,6 +344,11 @@ function PresupuestosTable({
                   </td>
                   <td className="whitespace-nowrap px-4 py-4 font-semibold text-emerald-800">
                     {formatCurrency(pagado)}
+                    {pagosClienteSinPresupuesto.length > 0 ? (
+                      <p className="mt-1 text-xs font-medium text-amber-700">
+                        {pagosClienteSinPresupuesto.length} sin presupuesto asociado
+                      </p>
+                    ) : null}
                   </td>
                   <td className="whitespace-nowrap px-4 py-4 font-semibold text-neutral-950">
                     {formatCurrency(pendiente)}

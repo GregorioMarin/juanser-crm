@@ -48,6 +48,10 @@ import {
   defaultPresupuestoValidezDias,
 } from "@/app/presupuestos/default-observaciones";
 import { DeletePresupuestoForm } from "@/app/presupuestos/delete-presupuesto-form";
+import {
+  pagosSinPresupuesto,
+  totalPagadoPresupuestoConCliente,
+} from "@/app/presupuestos/pagos-cuenta";
 import { WhatsAppPresupuestoLink } from "@/app/presupuestos/whatsapp-presupuesto-link";
 
 export const runtime = "nodejs";
@@ -1293,17 +1297,14 @@ function presupuestoTotal(presupuesto: Pick<ClienteDetalle["presupuestos"][numbe
   return Number(presupuesto.totalConIva) || Number(presupuesto.importe) || 0;
 }
 
-function totalPagadoPresupuesto(
-  presupuesto: Pick<ClienteDetalle["presupuestos"][number], "pagosCuenta">,
-) {
-  return sumCurrency(presupuesto.pagosCuenta, (pago) => pago.importe);
-}
-
 function resumenPagosCliente(cliente: ClienteDetalle) {
-  const totalPresupuestadoAceptado = sumCurrency(
-    cliente.presupuestos.filter((presupuesto) => presupuesto.estado === "ACEPTADO"),
-    presupuestoTotal,
+  const presupuestosAceptados = cliente.presupuestos.filter(
+    (presupuesto) => presupuesto.estado === "ACEPTADO",
   );
+  const totalPresupuestadoAceptado =
+    presupuestosAceptados.length > 0
+      ? sumCurrency(presupuestosAceptados, presupuestoTotal)
+      : Number(cliente.importeAceptado ?? 0);
   const totalPagadoCuenta = sumCurrency(cliente.pagosCuenta, (pago) => pago.importe);
 
   return {
@@ -1642,6 +1643,7 @@ function FotosGaleria({
 
 function PagosCuentaSection({ cliente }: { cliente: ClienteDetalle }) {
   const resumen = resumenPagosCliente(cliente);
+  const pagosSinAsociar = pagosSinPresupuesto(cliente);
 
   return (
     <section className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
@@ -1757,6 +1759,13 @@ function PagosCuentaSection({ cliente }: { cliente: ClienteDetalle }) {
           Registrar pago
         </button>
       </form>
+
+      {pagosSinAsociar.length > 0 ? (
+        <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-950">
+          {pagosSinAsociar.length} pagos a cuenta sin presupuesto asociado. Se
+          computan en el único presupuesto aceptado/activo cuando solo existe uno.
+        </div>
+      ) : null}
 
       <div className="mt-5 overflow-hidden rounded-md border border-neutral-200">
         <table className="w-full border-collapse text-left text-sm">
@@ -2112,7 +2121,10 @@ function PresupuestosSection({ cliente }: { cliente: ClienteDetalle }) {
             {cliente.presupuestos.length > 0 ? (
               cliente.presupuestos.map((presupuesto) => {
                 const totalPresupuesto = presupuestoTotal(presupuesto);
-                const pagado = totalPagadoPresupuesto(presupuesto);
+                const pagado = totalPagadoPresupuestoConCliente(
+                  presupuesto,
+                  cliente,
+                );
                 const pendiente = totalPresupuesto - pagado;
                 const isFacturable =
                   presupuesto.estado === "ACEPTADO" ||
