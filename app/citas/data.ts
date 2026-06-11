@@ -1,12 +1,17 @@
 import { prisma } from "@/app/lib/prisma";
+import { clienteCreadoMarker } from "./constants";
+import { citaEstadosPendientes } from "./helpers";
 
 export function citasPendientesWhere(now = new Date()) {
   return {
+    estado: { in: [...citaEstadosPendientes] },
+    fechaHora: { gte: now },
     OR: [
-      { estado: "PENDIENTE" as const },
+      { nota: null },
       {
-        estado: "CONFIRMADA" as const,
-        fechaHora: { gte: now },
+        NOT: {
+          nota: { contains: clienteCreadoMarker },
+        },
       },
     ],
   };

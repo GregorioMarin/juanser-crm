@@ -91,6 +91,8 @@ export async function deleteCita(formData: FormData) {
   });
 
   revalidatePath("/citas");
+  revalidatePath("/clientes");
+  revalidatePath("/");
 }
 
 export async function updateCita(
@@ -143,6 +145,7 @@ export async function updateCita(
   });
 
   revalidatePath("/citas");
+  revalidatePath("/clientes");
   revalidatePath("/");
 
   return {
@@ -163,6 +166,8 @@ export async function convertirCitaEnCliente(formData: FormData) {
 
   if (hasClienteCreadoMarker(cita.nota)) {
     revalidatePath("/citas");
+    revalidatePath("/clientes");
+    revalidatePath("/");
     return;
   }
 
@@ -205,4 +210,5 @@ export async function convertirCitaEnCliente(formData: FormData) {
 
   revalidatePath("/citas");
   revalidatePath("/clientes");
+  revalidatePath("/");
 }

@@ -7,6 +7,8 @@ export const citaEstados = [
 
 export type CitaEstadoNormalizado = (typeof citaEstados)[number];
 
+export const citaEstadosPendientes = ["PENDIENTE", "CONFIRMADA"] as const;
+
 export const servicioPrefix = "Servicio:";
 
 const citaEstadoMap: Record<string, CitaEstadoNormalizado> = {
@@ -52,13 +54,19 @@ export function normalizeCitaEstado(
 export function isCitaPendienteOFutura({
   estado,
   fechaHora,
+  clienteCreado = false,
   now = new Date(),
 }: {
   estado: CitaEstadoNormalizado;
   fechaHora: Date;
+  clienteCreado?: boolean;
   now?: Date;
 }) {
-  return estado === "PENDIENTE" || (estado === "CONFIRMADA" && fechaHora >= now);
+  return (
+    !clienteCreado &&
+    fechaHora >= now &&
+    citaEstadosPendientes.includes(estado as (typeof citaEstadosPendientes)[number])
+  );
 }
 
 export function isCitasPendientesFilter(value?: string | string[]) {

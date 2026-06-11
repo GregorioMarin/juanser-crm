@@ -87,6 +87,8 @@ async function createCitaManual(formData: FormData) {
   });
 
   revalidatePath("/citas");
+  revalidatePath("/clientes");
+  revalidatePath("/");
 }
 
 type Cita = Awaited<ReturnType<typeof getCitas>>[number];

@@ -21,6 +21,7 @@ import {
 } from "@/app/clientes/estados";
 import { LocalidadField } from "@/app/clientes/localidad-field";
 import { localidades } from "@/app/clientes/localidades";
+import { countCitasPendientes } from "@/app/citas/data";
 import {
   motivoRechazoToParam,
   motivosRechazo,
@@ -319,7 +320,7 @@ async function getResumen() {
     clientesPerdidosPorMotivo,
   ] = await Promise.all([
     prisma.cliente.count({ where: { estado: "PENDIENTE_DAR_PRECIO" } }),
-    prisma.cliente.count({ where: { estado: "CITA_PENDIENTE" } }),
+    countCitasPendientes(),
     prisma.cliente.count({ where: { estado: "PENDIENTE_RESPUESTA" } }),
     prisma.cliente.count({ where: { estado: "ACEPTADO" } }),
     prisma.cliente.count({ where: { estado: "PERDIDO" } }),
@@ -926,7 +927,7 @@ function SeguimientosFuturos({ clientes }: { clientes: SeguimientoFuturo[] }) {
 function ResumenComercial({ resumen }: { resumen: Resumen }) {
   const comerciales = [
     ["Pendiente dar precio", resumen.pendienteDarPrecio],
-    ["Cita pendiente", resumen.citaPendiente],
+    ["Citas pendientes", resumen.citaPendiente],
     ["Pendiente respuesta", resumen.pendienteRespuesta],
     ["Aceptados", resumen.aceptados],
     ["Perdidos", resumen.perdidos],
