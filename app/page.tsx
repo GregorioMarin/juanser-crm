@@ -7,6 +7,7 @@ import {
   estadoProduccionLabel,
   estadoProduccionNoAplica,
 } from "@/app/clientes/estados";
+import { countCitasPendientes } from "@/app/citas/data";
 import { prisma } from "@/app/lib/prisma";
 
 function currentMonthRange() {
@@ -45,7 +46,7 @@ async function getHomeMetrics() {
     clientesNuevosMes,
     clientesActivos,
     pendienteDarPrecio,
-    citaPendiente,
+    citasPendientes,
     pendienteRespuesta,
     aceptados,
     noAplica,
@@ -77,7 +78,7 @@ async function getHomeMetrics() {
       },
     }),
     prisma.cliente.count({ where: { estado: "PENDIENTE_DAR_PRECIO" } }),
-    prisma.cliente.count({ where: { estado: "CITA_PENDIENTE" } }),
+    countCitasPendientes(),
     prisma.cliente.count({ where: { estado: "PENDIENTE_RESPUESTA" } }),
     prisma.cliente.count({ where: { estado: "ACEPTADO" } }),
     prisma.cliente.count({
@@ -133,7 +134,7 @@ async function getHomeMetrics() {
     trabajosDetalle: `${clientesActivos} activos · ${trabajosRecientes} recientes`,
     pendientesHoy: {
       pendienteDarPrecio,
-      citaPendiente,
+      citasPendientes,
       pendienteRespuesta,
       aceptados,
       noAplica,
@@ -160,22 +161,27 @@ function formatMoney(value?: { toString(): string } | null) {
 }
 
 function SummaryCard({
+  href,
   label,
   value,
   detail,
 }: {
+  href: string;
   label: string;
   value: string;
   detail?: string;
 }) {
   return (
-    <article className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
+    <Link
+      href={href}
+      className="block cursor-pointer rounded-md border border-neutral-300 bg-white p-5 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 focus-visible:ring-offset-neutral-100"
+    >
       <p className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
         {label}
       </p>
       <p className="mt-2 text-2xl font-semibold text-neutral-950">{value}</p>
       {detail ? <p className="mt-1 text-sm text-neutral-500">{detail}</p> : null}
-    </article>
+    </Link>
   );
 }
 
@@ -226,10 +232,10 @@ export default async function Home() {
       accent: "bg-orange-500",
     },
     {
-      href: "/clientes?estadoComercial=CITA_PENDIENTE",
-      count: metrics.pendientesHoy.citaPendiente,
-      title: estadoComercialLabel("CITA_PENDIENTE"),
-      description: "Clientes con cita comercial por cerrar.",
+      href: "/citas?filtro=pendientes",
+      count: metrics.pendientesHoy.citasPendientes,
+      title: "Citas pendientes",
+      description: "Citas pendientes o futuras, manuales y de Amelia.",
       accent: "bg-cyan-500",
     },
     {
@@ -384,23 +390,28 @@ export default async function Home() {
 
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <SummaryCard
+            href="/gastos"
             label="Gastos del mes"
             value={formatMoney(metrics.gastosMes)}
           />
           <SummaryCard
+            href="/presupuestos?estado=PENDIENTE"
             label="Presupuestos pendientes"
             value={String(metrics.presupuestosPendientes)}
           />
           <SummaryCard
+            href="/clientes?filtro=nuevos_mes"
             label="Clientes nuevos del mes"
             value={String(metrics.clientesNuevosMes)}
           />
           <SummaryCard
+            href="/clientes?estadoComercial=ACEPTADO"
             label="Trabajos activos o recientes"
             value={String(metrics.trabajosActivosORecientes)}
             detail={metrics.trabajosDetalle}
           />
           <SummaryCard
+            href="/facturas"
             label="Facturas de venta"
             value={String(metrics.facturasTotal)}
             detail={`${formatMoney(metrics.facturacionTotal)} total · ${formatMoney(
