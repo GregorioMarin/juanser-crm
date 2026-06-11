@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { clienteCreadoMarker } from "@/app/citas/constants";
+import { clienteCreadoMarker } from "./constants";
 import { prisma } from "@/app/lib/prisma";
 
 function requiredCitaId(formData: FormData) {

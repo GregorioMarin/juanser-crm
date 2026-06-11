@@ -1,4 +1,5 @@
 import { revalidatePath } from "next/cache";
+import { normalizeCitaEstado } from "../../../citas/helpers";
 import { prisma } from "@/app/lib/prisma";
 
 export const runtime = "nodejs";
@@ -6,20 +7,6 @@ export const runtime = "nodejs";
 type JsonObject = Record<string, unknown>;
 
 const fallbackNota = "Payload Amelia pendiente de mapear";
-
-const estadoMap: Record<string, "PENDIENTE" | "CONFIRMADA" | "CANCELADA" | "REALIZADA"> =
-  {
-    pending: "PENDIENTE",
-    pendiente: "PENDIENTE",
-    approved: "CONFIRMADA",
-    confirmed: "CONFIRMADA",
-    confirmada: "CONFIRMADA",
-    canceled: "CANCELADA",
-    cancelled: "CANCELADA",
-    cancelada: "CANCELADA",
-    completed: "REALIZADA",
-    realizada: "REALIZADA",
-  };
 
 function isObject(value: unknown): value is JsonObject {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -121,11 +108,7 @@ function fechaHora(payload: unknown) {
 function estado(payload: unknown) {
   const rawEstado = findFirstString(payload, ["estado", "status", "bookingStatus"]);
 
-  if (!rawEstado) {
-    return "CONFIRMADA" as const;
-  }
-
-  return estadoMap[rawEstado.toLowerCase()] ?? "CONFIRMADA";
+  return normalizeCitaEstado(rawEstado, "CONFIRMADA");
 }
 
 function nota(payload: unknown) {
@@ -192,6 +175,7 @@ export async function POST(request: Request) {
     : await prisma.cita.create({ data });
 
   revalidatePath("/citas");
+  revalidatePath("/");
 
   return Response.json({ ok: true, citaId: cita.id });
 }

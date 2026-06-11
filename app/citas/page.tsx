@@ -5,15 +5,15 @@ import {
   EmailContactAction,
   PhoneContactActions,
 } from "@/app/contact-actions";
-import { convertirCitaEnCliente } from "@/app/citas/actions";
-import { clienteCreadoMarker } from "@/app/citas/constants";
+import { convertirCitaEnCliente } from "./actions";
+import { clienteCreadoMarker } from "./constants";
 import { getCitas } from "./data";
-import { DeleteCitaForm } from "@/app/citas/delete-cita-form";
+import { DeleteCitaForm } from "./delete-cita-form";
 import {
   citaEstados,
   isCitasPendientesFilter,
   type CitaEstadoNormalizado,
-} from "@/app/citas/helpers";
+} from "./helpers";
 import { prisma } from "@/app/lib/prisma";
 
 const servicioPrefix = "Servicio:";
