@@ -131,7 +131,7 @@ async function getHomeMetrics() {
     presupuestosPendientes,
     clientesNuevosMes,
     trabajosActivosORecientes: clientesActivos + trabajosRecientes,
-    trabajosDetalle: `${clientesActivos} activos · ${trabajosRecientes} recientes`,
+    trabajosDetalle: `${clientesActivos} aceptados · ${trabajosRecientes} recientes`,
     pendientesHoy: {
       pendienteDarPrecio,
       citasPendientes,
@@ -228,7 +228,7 @@ export default async function Home() {
       href: "/clientes?estadoComercial=PENDIENTE_DAR_PRECIO",
       count: metrics.pendientesHoy.pendienteDarPrecio,
       title: estadoComercialLabel("PENDIENTE_DAR_PRECIO"),
-      description: "Clientes pendientes de valorar.",
+      description: "Solicitudes pendientes de valorar.",
       accent: "bg-orange-500",
     },
     {
@@ -258,7 +258,7 @@ export default async function Home() {
       href: "/clientes?estadoProduccion=NO_APLICA",
       count: metrics.pendientesHoy.noAplica,
       title: estadoProduccionLabel("NO_APLICA"),
-      description: "Clientes fuera de producción hasta aceptación.",
+      description: "Contactos fuera de producción hasta aceptación.",
       accent: "bg-neutral-500",
     },
     {
@@ -401,7 +401,7 @@ export default async function Home() {
           />
           <SummaryCard
             href="/clientes?filtro=nuevos_mes"
-            label="Clientes nuevos del mes"
+            label="Contactos nuevos del mes"
             value={String(metrics.clientesNuevosMes)}
           />
           <SummaryCard
