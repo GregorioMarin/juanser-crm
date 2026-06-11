@@ -9,6 +9,7 @@ import {
 } from "@/app/clientes/estados";
 import { countCitasPendientes } from "./citas/data";
 import { prisma } from "@/app/lib/prisma";
+import { presupuestoPendienteRespuestaWhere } from "@/app/presupuestos/estado-comercial";
 
 function currentMonthRange() {
   const now = new Date();
@@ -67,7 +68,7 @@ async function getHomeMetrics() {
       _sum: { total: true },
     }),
     prisma.presupuesto.count({
-      where: { estado: "PENDIENTE", cliente: { id: { gt: 0 } } },
+      where: presupuestoPendienteRespuestaWhere(),
     }),
     prisma.cliente.count({
       where: { fechaAlta: { gte: month.from, lt: month.to } },
@@ -395,8 +396,8 @@ export default async function Home() {
             value={formatMoney(metrics.gastosMes)}
           />
           <SummaryCard
-            href="/presupuestos?estado=PENDIENTE"
-            label="Presupuestos pendientes"
+            href="/presupuestos?estado=PENDIENTE_RESPUESTA"
+            label="Presupuestos pendientes de respuesta"
             value={String(metrics.presupuestosPendientes)}
           />
           <SummaryCard

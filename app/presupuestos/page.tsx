@@ -2,21 +2,27 @@ import Link from "next/link";
 import { connection } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { DeletePresupuestoForm } from "./delete-presupuesto-form";
+import {
+  presupuestoFiltroComercialLabel,
+  presupuestoFiltroComercialWhere,
+  presupuestoFiltrosComerciales,
+  type PresupuestoFiltroComercial,
+} from "./estado-comercial";
 import { WhatsAppPresupuestoLink } from "./whatsapp-presupuesto-link";
 
-const estados = ["PENDIENTE", "ACEPTADO", "RECHAZADO", "INSTALADO"] as const;
 const inputClass =
   "w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-950 outline-none transition placeholder:text-neutral-400 focus:border-emerald-700 focus:ring-2 focus:ring-emerald-100";
-
-type PresupuestoEstado = (typeof estados)[number];
-const clienteExistenteWhere = { cliente: { id: { gt: 0 } } } as const;
 
 function estadoFromParam(value?: string | string[]) {
   const raw = Array.isArray(value) ? value[0] : value;
   const normalized = raw?.trim().toUpperCase();
 
-  if (estados.includes(normalized as PresupuestoEstado)) {
-    return normalized as PresupuestoEstado;
+  if (
+    presupuestoFiltrosComerciales.includes(
+      normalized as PresupuestoFiltroComercial,
+    )
+  ) {
+    return normalized as PresupuestoFiltroComercial;
   }
 
   return null;
@@ -32,7 +38,10 @@ function successFromParam(value?: string | string[]) {
   return raw === "1";
 }
 
-function presupuestosReturnPath(query: string, estado: PresupuestoEstado | null) {
+function presupuestosReturnPath(
+  query: string,
+  estado: PresupuestoFiltroComercial | null,
+) {
   const params = new URLSearchParams();
   if (query) {
     params.set("q", query);
@@ -45,11 +54,13 @@ function presupuestosReturnPath(query: string, estado: PresupuestoEstado | null)
   return queryString ? `/presupuestos?${queryString}` : "/presupuestos";
 }
 
-async function getPresupuestos(query: string, estado: PresupuestoEstado | null) {
+async function getPresupuestos(
+  query: string,
+  estado: PresupuestoFiltroComercial | null,
+) {
   return prisma.presupuesto.findMany({
     where: {
-      ...clienteExistenteWhere,
-      ...(estado ? { estado } : {}),
+      ...presupuestoFiltroComercialWhere(estado),
       ...(query
         ? {
             OR: [
@@ -88,21 +99,21 @@ async function getPresupuestos(query: string, estado: PresupuestoEstado | null) 
 }
 
 async function getTotales() {
-  const [total, aceptado, pendiente, rechazado] = await Promise.all([
+  const [total, aceptado, pendienteRespuesta, rechazado] = await Promise.all([
     prisma.presupuesto.aggregate({
-      where: clienteExistenteWhere,
+      where: presupuestoFiltroComercialWhere(null),
       _sum: { totalConIva: true },
     }),
     prisma.presupuesto.aggregate({
-      where: { ...clienteExistenteWhere, estado: "ACEPTADO" },
+      where: presupuestoFiltroComercialWhere("ACEPTADO"),
       _sum: { totalConIva: true },
     }),
     prisma.presupuesto.aggregate({
-      where: { ...clienteExistenteWhere, estado: "PENDIENTE" },
+      where: presupuestoFiltroComercialWhere("PENDIENTE_RESPUESTA"),
       _sum: { totalConIva: true },
     }),
     prisma.presupuesto.aggregate({
-      where: { ...clienteExistenteWhere, estado: "RECHAZADO" },
+      where: presupuestoFiltroComercialWhere("RECHAZADO"),
       _sum: { totalConIva: true },
     }),
   ]);
@@ -110,7 +121,7 @@ async function getTotales() {
   return {
     total: total._sum.totalConIva,
     aceptado: aceptado._sum.totalConIva,
-    pendiente: pendiente._sum.totalConIva,
+    pendienteRespuesta: pendienteRespuesta._sum.totalConIva,
     rechazado: rechazado._sum.totalConIva,
   };
 }
@@ -147,17 +158,14 @@ function formatDate(date: Date) {
 }
 
 function estadoClass(estado: string) {
-  const styles: Record<PresupuestoEstado, string> = {
+  const styles: Record<string, string> = {
     PENDIENTE: "bg-amber-100 text-amber-900 ring-amber-200",
     ACEPTADO: "bg-emerald-100 text-emerald-900 ring-emerald-200",
     RECHAZADO: "bg-rose-100 text-rose-900 ring-rose-200",
     INSTALADO: "bg-teal-100 text-teal-900 ring-teal-200",
   };
 
-  return (
-    styles[estado as PresupuestoEstado] ??
-    "bg-neutral-100 text-neutral-800 ring-neutral-200"
-  );
+  return styles[estado] ?? "bg-neutral-100 text-neutral-800 ring-neutral-200";
 }
 
 function estadoPago(pagado: number, pendiente: number) {
@@ -186,7 +194,7 @@ function TotalesResumen({ totales }: { totales: Totales }) {
   const items = [
     ["Total presupuestado", formatCurrency(totales.total)],
     ["Total aceptado", formatCurrency(totales.aceptado)],
-    ["Total pendiente", formatCurrency(totales.pendiente)],
+    ["Total pendiente de respuesta", formatCurrency(totales.pendienteRespuesta)],
     ["Total rechazado", formatCurrency(totales.rechazado)],
   ] as const;
 
@@ -212,7 +220,7 @@ function Filtros({
   estado,
 }: {
   query: string;
-  estado: PresupuestoEstado | null;
+  estado: PresupuestoFiltroComercial | null;
 }) {
   return (
     <form
@@ -228,10 +236,11 @@ function Filtros({
       />
       <select className={inputClass} name="estado" defaultValue={estado ?? "TODOS"}>
         <option value="TODOS">Todos</option>
-        <option value="PENDIENTE">Pendiente</option>
-        <option value="ACEPTADO">Aceptado</option>
-        <option value="RECHAZADO">Rechazado</option>
-        <option value="INSTALADO">Instalado</option>
+        {presupuestoFiltrosComerciales.map((filtro) => (
+          <option key={filtro} value={filtro}>
+            {presupuestoFiltroComercialLabel(filtro)}
+          </option>
+        ))}
       </select>
       <div className="flex gap-2">
         <button
