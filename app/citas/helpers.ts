@@ -54,16 +54,13 @@ export function normalizeCitaEstado(
 export function isCitaPendienteOFutura({
   estado,
   fechaHora,
-  clienteCreado = false,
   now = new Date(),
 }: {
   estado: CitaEstadoNormalizado;
   fechaHora: Date;
-  clienteCreado?: boolean;
   now?: Date;
 }) {
   return (
-    !clienteCreado &&
     fechaHora >= now &&
     citaEstadosPendientes.includes(estado as (typeof citaEstadosPendientes)[number])
   );
