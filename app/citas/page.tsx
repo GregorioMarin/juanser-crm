@@ -12,6 +12,7 @@ import { DeleteCitaForm } from "./delete-cita-form";
 import { EditCitaForm } from "./edit-cita-form";
 import {
   citaLines,
+  citaEstadosPendientes,
   citaEstados,
   citaNotaVisible,
   citaServicio,
@@ -380,6 +381,51 @@ function EmptyState({ pendientes }: { pendientes: boolean }) {
   );
 }
 
+function CitasDiagnostico({ citas }: { citas: Cita[] }) {
+  const now = new Date();
+
+  return (
+    <section className="rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 shadow-sm">
+      <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">
+        Diagnóstico temporal de citas
+      </h2>
+      <p className="mt-2 font-medium">now: {now.toISOString()}</p>
+      <div className="mt-3 grid gap-2">
+        {citas.map((cita) => {
+          const cumpleEstado = citaEstadosPendientes.includes(
+            cita.estado as (typeof citaEstadosPendientes)[number],
+          );
+          const cumpleFecha = cita.fechaHora >= now;
+          const motivos = [
+            cumpleEstado ? null : `estado ${cita.estado} no es PENDIENTE/CONFIRMADA`,
+            cumpleFecha ? null : "fechaHora es anterior a now",
+          ].filter(Boolean);
+
+          return (
+            <div
+              key={cita.id}
+              className="rounded-md border border-amber-200 bg-white/70 px-3 py-2"
+            >
+              <p>
+                #{cita.id} · {cita.clienteNombre}
+              </p>
+              <p>estado exacto: {cita.estado}</p>
+              <p>fechaHora ISO: {cita.fechaHora.toISOString()}</p>
+              <p>fechaHora local: {cita.fechaHora.toString()}</p>
+              <p>cumple estado pendiente: {cumpleEstado ? "sí" : "no"}</p>
+              <p>cumple fecha futura: {cumpleFecha ? "sí" : "no"}</p>
+              <p>
+                motivo exclusión:{" "}
+                {motivos.length > 0 ? motivos.join("; ") : "incluida por el filtro"}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 type CitasPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
@@ -446,6 +492,8 @@ export default async function CitasPage({ searchParams }: CitasPageProps) {
             <EmptyState pendientes={pendientes} />
           )}
         </section>
+
+        <CitasDiagnostico citas={citas} />
       </div>
     </main>
   );
