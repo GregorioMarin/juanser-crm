@@ -250,7 +250,6 @@ function normalizeTipoDocumento(value: string | null) {
 async function nextNumeroInterno(
   tx: Pick<typeof prisma, "$queryRaw">,
   tipoDocumento: string | null,
-  fecha: Date | null,
 ) {
   const prefixes: Record<string, string> = {
     ALBARAN: "ALB",
@@ -264,18 +263,17 @@ async function nextNumeroInterno(
     return null;
   }
 
-  const ano = (fecha ?? new Date()).getFullYear();
   const rows = await tx.$queryRaw<{ ultimoNumero: number }[]>`
-    INSERT INTO "DocumentoSecuencia" ("tipoDocumento", "ano", "ultimoNumero", "updatedAt")
-    VALUES (${tipoDocumento}, ${ano}, 1, CURRENT_TIMESTAMP)
-    ON CONFLICT ("tipoDocumento", "ano")
+    INSERT INTO "DocumentoSecuencia" ("tipoDocumento", "ultimoNumero", "updatedAt")
+    VALUES (${tipoDocumento}, 1, CURRENT_TIMESTAMP)
+    ON CONFLICT ("tipoDocumento")
     DO UPDATE SET "ultimoNumero" = "DocumentoSecuencia"."ultimoNumero" + 1,
                   "updatedAt" = CURRENT_TIMESTAMP
     RETURNING "ultimoNumero"
   `;
   const number = rows[0]?.ultimoNumero ?? 1;
 
-  return `${prefix}-${ano}-${String(number).padStart(4, "0")}`;
+  return `${prefix}-${String(number).padStart(4, "0")}`;
 }
 
 function optionalClienteId(formData: FormData) {
@@ -1008,11 +1006,7 @@ export async function createGasto(
     const gastoInput = gastoData(formData);
     const gasto = await prisma.$transaction(async (tx) => {
       const lineasCreate = await lineasCreateData(lineas, tx);
-      const numeroInterno = await nextNumeroInterno(
-        tx,
-        gastoInput.tipoDocumento,
-        gastoInput.fecha,
-      );
+      const numeroInterno = await nextNumeroInterno(tx, gastoInput.tipoDocumento);
 
       return tx.gasto.create({
         data: {
@@ -1064,7 +1058,7 @@ export async function updateGasto(
       }
       const numeroInterno =
         existingGasto.numeroInterno ??
-        (await nextNumeroInterno(tx, gastoInput.tipoDocumento, gastoInput.fecha));
+        (await nextNumeroInterno(tx, gastoInput.tipoDocumento));
 
       await tx.gasto.update({
         where: { id },

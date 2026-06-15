@@ -384,15 +384,10 @@ model GastoLinea {
 
 model DocumentoSecuencia {
   id            Int      @id @default(autoincrement())
-  tipoDocumento String
-  ano           Int
+  tipoDocumento String   @unique
   ultimoNumero  Int      @default(0)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
-
-  @@unique([tipoDocumento, ano])
-  @@index([tipoDocumento])
-  @@index([ano])
 }
 
 model Material {

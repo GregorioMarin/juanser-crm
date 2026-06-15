@@ -99,18 +99,13 @@ function numeroInternoPrefix(tipoDocumento: string) {
   return null;
 }
 
-function numeroInternoPreview(tipoDocumento: string, fecha: string) {
+function numeroInternoPreview(tipoDocumento: string) {
   const prefix = numeroInternoPrefix(tipoDocumento);
   if (!prefix) {
     return "Selecciona tipo de documento";
   }
 
-  const date = fecha ? new Date(`${fecha}T00:00:00`) : null;
-  const year = date && !Number.isNaN(date.getTime())
-    ? date.getFullYear()
-    : new Date().getFullYear();
-
-  return `Se generará al guardar (${prefix}-${year}-0001)`;
+  return `Se generará al guardar (${prefix}-0001)`;
 }
 
 function isSerreriaAlmeriense(proveedor: string | null) {
@@ -762,7 +757,7 @@ export function GastoForm({
   const isMateriales = tipoGasto === "Materiales";
   const showMedidaLineas = isSerreriaAlmeriense(proveedor);
   const numeroInternoDisplay =
-    values.numeroInterno || numeroInternoPreview(tipoDocumento, values.fecha);
+    values.numeroInterno || numeroInternoPreview(tipoDocumento);
 
   function calcularTotalDesdeBase() {
     const base = decimalNumber(baseImponible);
