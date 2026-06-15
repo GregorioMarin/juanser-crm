@@ -3,10 +3,12 @@ import { connection } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import {
   categoriasGasto,
+  tipoDocumentoLabels,
   tiposDocumentoGasto,
   tiposGasto,
 } from "@/app/gastos/constants";
 import { DeleteGastoForm } from "@/app/gastos/delete-gasto-form";
+import { formatCurrencyEs } from "@/app/lib/decimal-es";
 
 const inputClass =
   "w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-950 outline-none transition placeholder:text-neutral-400 focus:border-emerald-700 focus:ring-2 focus:ring-emerald-100";
@@ -22,11 +24,7 @@ function formatDate(date?: Date | null) {
 }
 
 function formatMoney(value?: { toString(): string } | null) {
-  const number = value ? Number(value.toString()) : 0;
-  return new Intl.NumberFormat("es-ES", {
-    style: "currency",
-    currency: "EUR",
-  }).format(number);
+  return formatCurrencyEs(value);
 }
 
 function dateFromInput(value?: string) {
@@ -75,6 +73,12 @@ async function getGastos(filters: {
                 { proveedor: { contains: filters.q, mode: "insensitive" } },
                 {
                   numeroDocumento: {
+                    contains: filters.q,
+                    mode: "insensitive",
+                  },
+                },
+                {
+                  numeroInterno: {
                     contains: filters.q,
                     mode: "insensitive",
                   },
@@ -212,7 +216,7 @@ function FiltersForm({
           <option value="">Todos</option>
           {tiposDocumentoGasto.map((tipo) => (
             <option key={tipo} value={tipo}>
-              {tipo}
+              {tipoDocumentoLabels[tipo]}
             </option>
           ))}
         </select>
@@ -253,7 +257,8 @@ function GastosTable({ gastos }: { gastos: Gasto[] }) {
             <th className="px-4 py-3">Proveedor</th>
             <th className="px-4 py-3">Tipo</th>
             <th className="px-4 py-3">Tipo gasto</th>
-            <th className="px-4 py-3">Número</th>
+            <th className="px-4 py-3">Nº interno</th>
+            <th className="px-4 py-3">Nº proveedor</th>
             <th className="px-4 py-3">Categoría</th>
             <th className="px-4 py-3">Líneas</th>
             <th className="px-4 py-3 text-right">Base</th>
@@ -280,8 +285,18 @@ function GastosTable({ gastos }: { gastos: Gasto[] }) {
                     <p className="mt-1 text-neutral-500">{gasto.descripcion}</p>
                   ) : null}
                 </td>
-                <td className="px-4 py-4 text-neutral-700">{gasto.tipoDocumento || "-"}</td>
+                <td className="px-4 py-4 text-neutral-700">
+                  {gasto.tipoDocumento &&
+                  gasto.tipoDocumento in tipoDocumentoLabels
+                    ? tipoDocumentoLabels[
+                        gasto.tipoDocumento as keyof typeof tipoDocumentoLabels
+                      ]
+                    : gasto.tipoDocumento || "-"}
+                </td>
                 <td className="px-4 py-4 text-neutral-700">{gasto.tipoGasto}</td>
+                <td className="px-4 py-4 text-neutral-700">
+                  {gasto.numeroInterno || "-"}
+                </td>
                 <td className="px-4 py-4 text-neutral-700">{gasto.numeroDocumento || "-"}</td>
                 <td className="px-4 py-4 text-neutral-700">{gasto.categoria || "-"}</td>
                 <td className="whitespace-nowrap px-4 py-4 text-neutral-700">
@@ -319,7 +334,7 @@ function GastosTable({ gastos }: { gastos: Gasto[] }) {
             ))
           ) : (
             <tr>
-              <td colSpan={11} className="px-4 py-8 text-center text-neutral-500">
+              <td colSpan={12} className="px-4 py-8 text-center text-neutral-500">
                 No hay gastos con esos filtros.
               </td>
             </tr>

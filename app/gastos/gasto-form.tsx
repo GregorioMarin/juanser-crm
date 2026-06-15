@@ -7,6 +7,7 @@ import {
   emptyGastoAnalizado,
   formasPagoGasto,
   GastoAnalizado,
+  tipoDocumentoLabels,
   tiposDocumentoGasto,
   tiposGasto,
 } from "@/app/gastos/constants";
@@ -15,6 +16,10 @@ import {
   categoriasMaterial,
   unidadesMaterial,
 } from "@/app/materiales/constants";
+import {
+  formatDecimalEs,
+  parseDecimalEsNumber,
+} from "@/app/lib/decimal-es";
 
 const initialGastoFormState: GastoFormState = {
   status: "idle",
@@ -38,6 +43,7 @@ type FormLinea = {
   piezas: string;
   medida: string;
   precioUnidadMedida: string;
+  descuentoPorcentaje: string;
   importe: string;
   esPorte: boolean;
   esPendienteServir: boolean;
@@ -58,7 +64,14 @@ function dateValue(date?: Date | string | null) {
 }
 
 function moneyValue(value?: { toString(): string } | string | null) {
-  return value?.toString() ?? "";
+  return formatDecimalEs(value, 2, 2);
+}
+
+function decimalValue(
+  value?: { toString(): string } | string | null,
+  scale = 2,
+) {
+  return formatDecimalEs(value, scale, scale);
 }
 
 function textValue(value?: string | null) {
@@ -83,12 +96,14 @@ function Field({
   type = "text",
   defaultValue,
   placeholder,
+  readOnly = false,
 }: {
   label: string;
   name: string;
   type?: string;
   defaultValue?: string | null;
   placeholder?: string;
+  readOnly?: boolean;
 }) {
   return (
     <label className="flex flex-col gap-1.5">
@@ -100,6 +115,7 @@ function Field({
         step={type === "number" ? "0.01" : undefined}
         defaultValue={defaultValue ?? ""}
         placeholder={placeholder}
+        readOnly={readOnly}
       />
     </label>
   );
@@ -125,7 +141,9 @@ function SelectField({
         <option value="">{emptyLabel}</option>
         {options.map((option) => (
           <option key={option} value={option}>
-            {option}
+            {option in tipoDocumentoLabels
+              ? tipoDocumentoLabels[option as keyof typeof tipoDocumentoLabels]
+              : option}
           </option>
         ))}
       </select>
@@ -140,6 +158,7 @@ type GastoEditable = Pick<
   | "proveedor"
   | "fecha"
   | "tipoDocumento"
+  | "numeroInterno"
   | "numeroDocumento"
   | "categoria"
   | "baseImponible"
@@ -165,6 +184,7 @@ function valuesFromGasto(gasto?: GastoEditable | null): GastoAnalizado {
     proveedor: gasto.proveedor ?? "",
     fecha: dateValue(gasto.fecha),
     tipoDocumento: gasto.tipoDocumento ?? "",
+    numeroInterno: gasto.numeroInterno ?? "",
     numeroDocumento: gasto.numeroDocumento ?? "",
     categoria: gasto.categoria ?? "",
     baseImponible: moneyValue(gasto.baseImponible),
@@ -183,8 +203,9 @@ function valuesFromGasto(gasto?: GastoEditable | null): GastoAnalizado {
         precioUnitario: moneyValue(linea.precioUnitario) || null,
         unidadMedidaProveedor: linea.unidadMedidaProveedor,
         piezas: moneyValue(linea.piezas) || null,
-        medida: moneyValue(linea.medida) || null,
-        precioUnidadMedida: moneyValue(linea.precioUnidadMedida) || null,
+        medida: decimalValue(linea.medida, 3) || null,
+        precioUnidadMedida: decimalValue(linea.precioUnidadMedida, 5) || null,
+        descuentoPorcentaje: moneyValue(linea.descuentoPorcentaje) || null,
         importe: moneyValue(linea.importe) || null,
         esPorte: linea.esPorte,
         esPendienteServir: linea.esPendienteServir,
@@ -210,6 +231,7 @@ function initialLineas(data?: GastoAnalizado, gasto?: GastoEditable | null) {
     piezas: textValue(linea.piezas),
     medida: textValue(linea.medida),
     precioUnidadMedida: textValue(linea.precioUnidadMedida),
+    descuentoPorcentaje: textValue(linea.descuentoPorcentaje ?? "0,00"),
     importe: textValue(linea.importe),
     esPorte: linea.esPorte,
     esPendienteServir: linea.esPendienteServir,
@@ -256,17 +278,11 @@ function PendingBadge({ pending }: { pending: boolean }) {
 }
 
 function decimalNumber(value: string) {
-  const normalized = value.trim().replace(",", ".");
-  if (!normalized) {
-    return null;
-  }
-
-  const number = Number(normalized);
-  return Number.isFinite(number) ? number : null;
+  return parseDecimalEsNumber(value, 5);
 }
 
 function decimalText(value: number) {
-  return value.toFixed(2);
+  return formatDecimalEs(value, 2, 2);
 }
 
 function initialImporteLineas(lineas: FormLinea[]) {
@@ -302,8 +318,8 @@ function LineasTable({
           return sum;
         }
 
-        const number = Number(linea.importe.replace(",", "."));
-        return Number.isFinite(number) ? sum + number : sum;
+        const number = parseDecimalEsNumber(linea.importe);
+        return number === null ? sum : sum + number;
       }, 0),
     );
   }
@@ -316,10 +332,39 @@ function LineasTable({
     });
   }
 
+  function calculateImporte(linea: FormLinea) {
+    const cantidad = parseDecimalEsNumber(linea.cantidad);
+    const precioUnitario = parseDecimalEsNumber(linea.precioUnitario);
+    const medida = parseDecimalEsNumber(linea.medida, 3);
+    const precioUnidadMedida = parseDecimalEsNumber(linea.precioUnidadMedida, 5);
+    const descuento = parseDecimalEsNumber(linea.descuentoPorcentaje) ?? 0;
+    const bruto =
+      cantidad !== null && precioUnitario !== null
+        ? cantidad * precioUnitario
+        : medida !== null && precioUnidadMedida !== null
+          ? medida * precioUnidadMedida
+          : null;
+
+    return bruto === null ? linea.importe : decimalText(bruto * (1 - descuento / 100));
+  }
+
   function updateLinea(index: number, field: keyof FormLinea, value: string | boolean) {
     updateLineas((current) =>
       current.map((linea, currentIndex) =>
-        currentIndex === index ? { ...linea, [field]: value } : linea,
+        currentIndex === index
+          ? {
+              ...linea,
+              [field]: value,
+              importe:
+                field === "cantidad" ||
+                field === "precioUnitario" ||
+                field === "medida" ||
+                field === "precioUnidadMedida" ||
+                field === "descuentoPorcentaje"
+                  ? calculateImporte({ ...linea, [field]: value })
+                  : linea.importe,
+            }
+          : linea,
       ),
     );
   }
@@ -381,6 +426,7 @@ function LineasTable({
                 piezas: "",
                 medida: "",
                 precioUnidadMedida: "",
+                descuentoPorcentaje: "0,00",
                 importe: "",
                 esPorte: false,
                 esPendienteServir: false,
@@ -399,7 +445,7 @@ function LineasTable({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1220px] border-collapse text-left text-sm">
+        <table className="w-full min-w-[1320px] border-collapse text-left text-sm">
           <thead className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
             <tr>
               <th className="px-2 py-2">Código</th>
@@ -409,6 +455,7 @@ function LineasTable({
               <th className="px-2 py-2">Piezas</th>
               {showMedida ? <th className="px-2 py-2">Medida</th> : null}
               <th className="px-2 py-2">Precio</th>
+              <th className="px-2 py-2">Dto. %</th>
               <th className="px-2 py-2">Importe</th>
               <th className="px-2 py-2">Estado</th>
               <th className="px-2 py-2">Material vinculado</th>
@@ -522,6 +569,15 @@ function LineasTable({
                     value={linea.precioUnidadMedida}
                     onChange={(value) =>
                       updateLinea(index, "precioUnidadMedida", value)
+                    }
+                  />
+                </td>
+                <td className="px-2 py-2">
+                  <DecimalInput
+                    name={`linea-${linea.key}-descuentoPorcentaje`}
+                    value={linea.descuentoPorcentaje}
+                    onChange={(value) =>
+                      updateLinea(index, "descuentoPorcentaje", value)
                     }
                   />
                 </td>
@@ -766,8 +822,16 @@ export function GastoForm({
             options={tiposDocumentoGasto}
             defaultValue={values.tipoDocumento}
           />
+          {values.numeroInterno ? (
+            <Field
+              label="Número interno"
+              name="numeroInternoVisible"
+              defaultValue={values.numeroInterno}
+              readOnly
+            />
+          ) : null}
           <Field
-            label="Número"
+            label="Número proveedor"
             name="numeroDocumento"
             defaultValue={values.numeroDocumento}
           />

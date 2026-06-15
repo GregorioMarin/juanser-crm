@@ -328,6 +328,7 @@ model Gasto {
   proveedor       String?
   fecha           DateTime?
   tipoDocumento   String?
+  numeroInterno   String?      @unique
   numeroDocumento String?
   categoria       String?
   baseImponible   Decimal?     @db.Decimal(10, 2)
@@ -347,6 +348,7 @@ model Gasto {
   @@index([tipoGasto])
   @@index([fecha])
   @@index([tipoDocumento])
+  @@index([numeroInterno])
   @@index([categoria])
   @@index([clienteId])
 }
@@ -363,6 +365,7 @@ model GastoLinea {
   piezas                  Decimal?  @db.Decimal(10, 2)
   medida                  Decimal?  @db.Decimal(10, 3)
   precioUnidadMedida      Decimal?  @db.Decimal(12, 5)
+  descuentoPorcentaje     Decimal   @default(0) @db.Decimal(5, 2)
   importe                 Decimal?  @db.Decimal(10, 2)
   esPorte                 Boolean   @default(false)
   esPendienteServir       Boolean   @default(false)
@@ -377,6 +380,19 @@ model GastoLinea {
   @@index([codigoMaterialDetectado])
   @@index([descripcion])
   @@index([pedidoProveedor])
+}
+
+model DocumentoSecuencia {
+  id            Int      @id @default(autoincrement())
+  tipoDocumento String
+  ano           Int
+  ultimoNumero  Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([tipoDocumento, ano])
+  @@index([tipoDocumento])
+  @@index([ano])
 }
 
 model Material {

@@ -27,11 +27,18 @@ export const tiposGasto = [
 ] as const;
 
 export const tiposDocumentoGasto = [
-  "factura",
-  "albaran",
-  "ticket",
-  "otro",
+  "ALBARAN",
+  "FACTURA",
+  "TICKET",
+  "OTRO",
 ] as const;
+
+export const tipoDocumentoLabels: Record<(typeof tiposDocumentoGasto)[number], string> = {
+  ALBARAN: "Albarán",
+  FACTURA: "Factura",
+  TICKET: "Ticket",
+  OTRO: "Otro",
+};
 
 export const formasPagoGasto = [
   "Transferencia",
@@ -48,6 +55,7 @@ export type GastoAnalizado = {
   proveedor: string;
   fecha: string;
   tipoDocumento: string;
+  numeroInterno?: string;
   numeroDocumento: string;
   categoria: string;
   baseImponible: string;
@@ -71,6 +79,7 @@ export type GastoLineaAnalizada = {
   piezas: string | null;
   medida: string | null;
   precioUnidadMedida: string | null;
+  descuentoPorcentaje: string | null;
   importe: string | null;
   esPorte: boolean;
   esPendienteServir: boolean;
@@ -83,6 +92,7 @@ export const emptyGastoAnalizado: GastoAnalizado = {
   proveedor: "",
   fecha: "",
   tipoDocumento: "",
+  numeroInterno: "",
   numeroDocumento: "",
   categoria: "",
   baseImponible: "",

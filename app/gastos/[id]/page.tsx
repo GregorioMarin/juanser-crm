@@ -4,6 +4,8 @@ import { connection } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { DeleteGastoForm } from "@/app/gastos/delete-gasto-form";
 import { MaterialLineaAction } from "@/app/gastos/[id]/material-linea-action";
+import { tipoDocumentoLabels } from "@/app/gastos/constants";
+import { formatCurrencyEs, formatDecimalEs } from "@/app/lib/decimal-es";
 
 function formatDate(date?: Date | null) {
   return date
@@ -26,11 +28,13 @@ function formatDateTime(date: Date) {
 }
 
 function formatMoney(value?: { toString(): string } | null) {
-  const number = value ? Number(value.toString()) : 0;
-  return new Intl.NumberFormat("es-ES", {
-    style: "currency",
-    currency: "EUR",
-  }).format(number);
+  return formatCurrencyEs(value);
+}
+
+function formatTipoDocumento(value?: string | null) {
+  return value && value in tipoDocumentoLabels
+    ? tipoDocumentoLabels[value as keyof typeof tipoDocumentoLabels]
+    : value;
 }
 
 function normalizeDetectedProviderCode(value?: string | null) {
@@ -130,7 +134,8 @@ export default async function GastoPage({ params }: GastoPageProps) {
               {gasto.proveedor || "Gasto sin proveedor"}
             </h1>
             <p className="mt-2 text-sm text-neutral-600">
-              {gasto.tipoDocumento || "Documento"} {gasto.numeroDocumento || ""}
+              {formatTipoDocumento(gasto.tipoDocumento) || "Documento"}{" "}
+              {gasto.numeroInterno || gasto.numeroDocumento || ""}
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
@@ -150,8 +155,9 @@ export default async function GastoPage({ params }: GastoPageProps) {
             <DetailItem label="Fecha" value={formatDate(gasto.fecha)} />
             <DetailItem label="Tipo de gasto" value={gasto.tipoGasto} />
             <DetailItem label="Proveedor" value={gasto.proveedor} />
-            <DetailItem label="Tipo" value={gasto.tipoDocumento} />
-            <DetailItem label="Número" value={gasto.numeroDocumento} />
+            <DetailItem label="Tipo" value={formatTipoDocumento(gasto.tipoDocumento)} />
+            <DetailItem label="Número interno" value={gasto.numeroInterno} />
+            <DetailItem label="Número proveedor" value={gasto.numeroDocumento} />
             <DetailItem label="Categoría" value={gasto.categoria} />
             <DetailItem label="Base imponible" value={formatMoney(gasto.baseImponible)} />
             <DetailItem label="IVA" value={formatMoney(gasto.iva)} />
@@ -193,7 +199,7 @@ export default async function GastoPage({ params }: GastoPageProps) {
               </span>
             </div>
             <div className="overflow-x-auto rounded-md border border-neutral-200">
-              <table className="w-full min-w-[1420px] border-collapse text-left text-sm">
+              <table className="w-full min-w-[1500px] border-collapse text-left text-sm">
                 <thead className="bg-neutral-100 text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
                   <tr>
                     <th className="px-4 py-3">Código</th>
@@ -204,6 +210,7 @@ export default async function GastoPage({ params }: GastoPageProps) {
                     <th className="px-4 py-3 text-right">Piezas</th>
                     <th className="px-4 py-3 text-right">Medida</th>
                     <th className="px-4 py-3 text-right">Precio</th>
+                    <th className="px-4 py-3 text-right">Dto. %</th>
                     <th className="px-4 py-3 text-right">Importe</th>
                     <th className="px-4 py-3 text-center">Pendiente</th>
                     <th className="px-4 py-3 text-center">Porte</th>
@@ -224,7 +231,7 @@ export default async function GastoPage({ params }: GastoPageProps) {
                           {linea.descripcion}
                         </td>
                         <td className="px-4 py-4 text-right text-neutral-700">
-                          {linea.cantidad?.toString() ?? "-"}
+                          {formatDecimalEs(linea.cantidad) || "-"}
                         </td>
                         <td className="whitespace-nowrap px-4 py-4 text-neutral-700">
                           {linea.unidadMedidaProveedor ?? "-"}
@@ -242,13 +249,20 @@ export default async function GastoPage({ params }: GastoPageProps) {
                           )}
                         </td>
                         <td className="px-4 py-4 text-right text-neutral-700">
-                          {linea.piezas?.toString() ?? "-"}
+                          {formatDecimalEs(linea.piezas) || "-"}
                         </td>
                         <td className="px-4 py-4 text-right text-neutral-700">
-                          {linea.medida?.toString() ?? "-"}
+                          {formatDecimalEs(linea.medida, 3, 3) || "-"}
                         </td>
                         <td className="px-4 py-4 text-right text-neutral-700">
-                          {linea.precioUnidadMedida?.toString() ?? "-"}
+                          {formatDecimalEs(
+                            linea.precioUnidadMedida ?? linea.precioUnitario,
+                            linea.precioUnidadMedida ? 5 : 2,
+                            linea.precioUnidadMedida ? 5 : 2,
+                          ) || "-"}
+                        </td>
+                        <td className="px-4 py-4 text-right text-neutral-700">
+                          {formatDecimalEs(linea.descuentoPorcentaje) || "0,00"}
                         </td>
                         <td className="px-4 py-4 text-right font-semibold text-neutral-950">
                           {formatMoney(linea.importe)}
@@ -276,7 +290,7 @@ export default async function GastoPage({ params }: GastoPageProps) {
                   ) : (
                     <tr>
                       <td
-                        colSpan={13}
+                        colSpan={14}
                         className="px-4 py-6 text-center text-neutral-500"
                       >
                         Este gasto todavía no tiene líneas de artículos.
