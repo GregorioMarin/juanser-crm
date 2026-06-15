@@ -252,12 +252,19 @@ async function nextNumeroInterno(
   tipoDocumento: string | null,
   fecha: Date | null,
 ) {
-  if (tipoDocumento !== "ALBARAN" && tipoDocumento !== "FACTURA") {
+  const prefixes: Record<string, string> = {
+    ALBARAN: "ALB",
+    FACTURA: "FAC",
+    TICKET: "TCK",
+    OTRO: "DOC",
+  };
+  const prefix = tipoDocumento ? prefixes[tipoDocumento] : null;
+
+  if (!tipoDocumento || !prefix) {
     return null;
   }
 
   const ano = (fecha ?? new Date()).getFullYear();
-  const prefix = tipoDocumento === "ALBARAN" ? "ALB" : "FAC";
   const rows = await tx.$queryRaw<{ ultimoNumero: number }[]>`
     INSERT INTO "DocumentoSecuencia" ("tipoDocumento", "ano", "ultimoNumero", "updatedAt")
     VALUES (${tipoDocumento}, ${ano}, 1, CURRENT_TIMESTAMP)
@@ -1048,9 +1055,23 @@ export async function updateGasto(
     const gastoInput = gastoData(formData);
     const lineas = lineasData(formData);
     await prisma.$transaction(async (tx) => {
+      const existingGasto = await tx.gasto.findUnique({
+        where: { id },
+        select: { numeroInterno: true },
+      });
+      if (!existingGasto) {
+        throw new Error("Gasto no encontrado.");
+      }
+      const numeroInterno =
+        existingGasto.numeroInterno ??
+        (await nextNumeroInterno(tx, gastoInput.tipoDocumento, gastoInput.fecha));
+
       await tx.gasto.update({
         where: { id },
-        data: gastoInput,
+        data: {
+          ...gastoInput,
+          numeroInterno,
+        },
       });
 
       if (isMaterialesTipo(gastoInput.tipoGasto)) {

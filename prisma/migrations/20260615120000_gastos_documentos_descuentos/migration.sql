@@ -24,6 +24,45 @@ CREATE TABLE "DocumentoSecuencia" (
   CONSTRAINT "DocumentoSecuencia_pkey" PRIMARY KEY ("id")
 );
 
+WITH numbered AS (
+  SELECT
+    "id",
+    "tipoDocumento",
+    EXTRACT(YEAR FROM COALESCE("fecha", "createdAt"))::INTEGER AS "ano",
+    CASE "tipoDocumento"
+      WHEN 'ALBARAN' THEN 'ALB'
+      WHEN 'FACTURA' THEN 'FAC'
+      WHEN 'TICKET' THEN 'TCK'
+      WHEN 'OTRO' THEN 'DOC'
+    END AS "prefix",
+    ROW_NUMBER() OVER (
+      PARTITION BY "tipoDocumento", EXTRACT(YEAR FROM COALESCE("fecha", "createdAt"))::INTEGER
+      ORDER BY COALESCE("fecha", "createdAt"), "createdAt", "id"
+    ) AS "seq"
+  FROM "Gasto"
+  WHERE "numeroInterno" IS NULL
+    AND "tipoDocumento" IN ('ALBARAN', 'FACTURA', 'TICKET', 'OTRO')
+)
+UPDATE "Gasto" AS g
+SET "numeroInterno" = CONCAT(numbered."prefix", '-', numbered."ano", '-', LPAD(numbered."seq"::TEXT, 4, '0'))
+FROM numbered
+WHERE g."id" = numbered."id";
+
+INSERT INTO "DocumentoSecuencia" ("tipoDocumento", "ano", "ultimoNumero", "updatedAt")
+SELECT "tipoDocumento", "ano", MAX("seq")::INTEGER, CURRENT_TIMESTAMP
+FROM (
+  SELECT
+    "tipoDocumento",
+    EXTRACT(YEAR FROM COALESCE("fecha", "createdAt"))::INTEGER AS "ano",
+    ROW_NUMBER() OVER (
+      PARTITION BY "tipoDocumento", EXTRACT(YEAR FROM COALESCE("fecha", "createdAt"))::INTEGER
+      ORDER BY COALESCE("fecha", "createdAt"), "createdAt", "id"
+    ) AS "seq"
+  FROM "Gasto"
+  WHERE "tipoDocumento" IN ('ALBARAN', 'FACTURA', 'TICKET', 'OTRO')
+) AS numbered
+GROUP BY "tipoDocumento", "ano";
+
 CREATE UNIQUE INDEX "Gasto_numeroInterno_key" ON "Gasto"("numeroInterno");
 CREATE INDEX "Gasto_numeroInterno_idx" ON "Gasto"("numeroInterno");
 CREATE UNIQUE INDEX "DocumentoSecuencia_tipoDocumento_ano_key" ON "DocumentoSecuencia"("tipoDocumento", "ano");

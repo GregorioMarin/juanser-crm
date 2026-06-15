@@ -82,6 +82,37 @@ function normalizeDetectedProviderCode(value: string) {
   return value.replace(/(\d+)\s*\.\s*(\d+)/g, "$1.$2");
 }
 
+function numeroInternoPrefix(tipoDocumento: string) {
+  if (tipoDocumento === "ALBARAN") {
+    return "ALB";
+  }
+  if (tipoDocumento === "FACTURA") {
+    return "FAC";
+  }
+  if (tipoDocumento === "TICKET") {
+    return "TCK";
+  }
+  if (tipoDocumento === "OTRO") {
+    return "DOC";
+  }
+
+  return null;
+}
+
+function numeroInternoPreview(tipoDocumento: string, fecha: string) {
+  const prefix = numeroInternoPrefix(tipoDocumento);
+  if (!prefix) {
+    return "Selecciona tipo de documento";
+  }
+
+  const date = fecha ? new Date(`${fecha}T00:00:00`) : null;
+  const year = date && !Number.isNaN(date.getTime())
+    ? date.getFullYear()
+    : new Date().getFullYear();
+
+  return `Se generará al guardar (${prefix}-${year}-0001)`;
+}
+
 function isSerreriaAlmeriense(proveedor: string | null) {
   return proveedor
     ?.normalize("NFD")
@@ -95,6 +126,7 @@ function Field({
   name,
   type = "text",
   defaultValue,
+  value,
   placeholder,
   readOnly = false,
 }: {
@@ -102,6 +134,7 @@ function Field({
   name: string;
   type?: string;
   defaultValue?: string | null;
+  value?: string;
   placeholder?: string;
   readOnly?: boolean;
 }) {
@@ -113,7 +146,8 @@ function Field({
         name={name}
         type={type}
         step={type === "number" ? "0.01" : undefined}
-        defaultValue={defaultValue ?? ""}
+        defaultValue={value === undefined ? (defaultValue ?? "") : undefined}
+        value={value}
         placeholder={placeholder}
         readOnly={readOnly}
       />
@@ -716,6 +750,7 @@ export function GastoForm({
   const [state, formAction, pending] = useActionState(action, initialGastoFormState);
   const values = data ?? valuesFromGasto(gasto);
   const [tipoGasto, setTipoGasto] = useState(values.tipoGasto || "Otros");
+  const [tipoDocumento, setTipoDocumento] = useState(values.tipoDocumento);
   const [proveedor, setProveedor] = useState(values.proveedor);
   const [baseImponible, setBaseImponible] = useState(values.baseImponible);
   const [iva, setIva] = useState(values.iva);
@@ -726,6 +761,8 @@ export function GastoForm({
   const [importeLineas, setImporteLineas] = useState(initialImporteLineas(lineas));
   const isMateriales = tipoGasto === "Materiales";
   const showMedidaLineas = isSerreriaAlmeriense(proveedor);
+  const numeroInternoDisplay =
+    values.numeroInterno || numeroInternoPreview(tipoDocumento, values.fecha);
 
   function calcularTotalDesdeBase() {
     const base = decimalNumber(baseImponible);
@@ -816,20 +853,28 @@ export function GastoForm({
             />
           </label>
           <Field label="Fecha" name="fecha" type="date" defaultValue={values.fecha} />
-          <SelectField
-            label="Tipo de documento"
-            name="tipoDocumento"
-            options={tiposDocumentoGasto}
-            defaultValue={values.tipoDocumento}
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>Tipo de documento</span>
+            <select
+              className={inputClass}
+              name="tipoDocumento"
+              value={tipoDocumento}
+              onChange={(event) => setTipoDocumento(event.target.value)}
+            >
+              <option value="">Sin especificar</option>
+              {tiposDocumentoGasto.map((tipo) => (
+                <option key={tipo} value={tipo}>
+                  {tipoDocumentoLabels[tipo]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <Field
+            label="Número interno"
+            name="numeroInternoVisible"
+            value={numeroInternoDisplay}
+            readOnly
           />
-          {values.numeroInterno ? (
-            <Field
-              label="Número interno"
-              name="numeroInternoVisible"
-              defaultValue={values.numeroInterno}
-              readOnly
-            />
-          ) : null}
           <Field
             label="Número proveedor"
             name="numeroDocumento"
