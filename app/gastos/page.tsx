@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { connection } from "next/server";
+import type { Prisma } from "@/app/generated/prisma/client";
 import { prisma } from "@/app/lib/prisma";
 import {
   categoriasGasto,
@@ -22,6 +23,8 @@ const sortOptions = [
 ] as const;
 
 type SortValue = (typeof sortOptions)[number]["value"];
+type GastoOrderDirection = "asc" | "desc";
+type GastoOrderBy = Prisma.GastoOrderByWithRelationInput[];
 
 function formatDate(date?: Date | null) {
   return date
@@ -66,24 +69,27 @@ function sortValue(value: string): SortValue {
     : "recent";
 }
 
-function gastoOrderBy(sort: SortValue) {
-  if (sort === "numero-asc") {
-    return [{ numeroInterno: "asc" as const }];
+function numeroInternoOrderBy(direction: GastoOrderDirection): GastoOrderBy {
+  return [{ numeroInterno: direction }];
+}
+
+function gastoOrderBy(sort: SortValue): GastoOrderBy {
+  if (sort === "numero-asc" || sort === "numero-desc") {
+    // El orden por numero interno debe ser estricto: sin fecha como criterio previo.
+    return numeroInternoOrderBy(sort === "numero-asc" ? "asc" : "desc");
   }
 
-  if (sort === "numero-desc") {
-    return [{ numeroInterno: "desc" as const }];
+  switch (sort) {
+    case "importe-desc":
+      return [{ total: "desc" as const }];
+    case "importe-asc":
+      return [{ total: "asc" as const }];
+    case "recent":
+      return [{ fecha: "desc" as const }, { createdAt: "desc" as const }];
   }
 
-  if (sort === "importe-desc") {
-    return [{ total: "desc" as const }];
-  }
-
-  if (sort === "importe-asc") {
-    return [{ total: "asc" as const }];
-  }
-
-  return [{ fecha: "desc" as const }, { createdAt: "desc" as const }];
+  const exhaustiveSort: never = sort;
+  return exhaustiveSort;
 }
 
 async function getGastos(filters: {
@@ -231,7 +237,11 @@ function FiltersForm({
   titularesGasto: Awaited<ReturnType<typeof getTitularesGasto>>;
 }) {
   return (
-    <form action="/gastos" className="grid gap-3 rounded-md border border-neutral-300 bg-white p-4 shadow-sm lg:grid-cols-[1.4fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_auto] lg:items-end">
+    <form
+      action="/gastos"
+      method="get"
+      className="grid gap-3 rounded-md border border-neutral-300 bg-white p-4 shadow-sm lg:grid-cols-[1.4fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_auto] lg:items-end"
+    >
       <label className="flex flex-col gap-1.5">
         <span className="text-sm font-medium text-neutral-700">Buscar</span>
         <input
