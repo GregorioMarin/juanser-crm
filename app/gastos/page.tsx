@@ -108,7 +108,7 @@ async function getGastos(filters: {
         select: { lineas: true },
       },
     },
-    orderBy: [{ fecha: "desc" }, { createdAt: "desc" }],
+    orderBy: [{ numeroInterno: "asc" }, { fecha: "desc" }, { createdAt: "desc" }],
   });
 }
 
