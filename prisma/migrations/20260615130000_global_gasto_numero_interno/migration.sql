@@ -46,7 +46,23 @@ UPDATE "Gasto" AS g
 SET "numeroInterno" = CONCAT(numbered."prefix", '-', LPAD(numbered."seq"::TEXT, 4, '0'))
 FROM numbered
 WHERE g."id" = numbered."id";
-
+WITH numbered AS (
+  SELECT
+    g."id",
+    g."tipoDocumento",
+    CASE g."tipoDocumento"
+      WHEN 'ALBARAN' THEN 'ALB'
+      WHEN 'FACTURA' THEN 'FAC'
+      WHEN 'TICKET' THEN 'TCK'
+      WHEN 'OTRO' THEN 'DOC'
+    END AS "prefix",
+    ROW_NUMBER() OVER (
+      PARTITION BY g."tipoDocumento"
+      ORDER BY g."createdAt" ASC, g."id" ASC
+    ) AS "seq"
+  FROM "Gasto" AS g
+  WHERE g."tipoDocumento" IN ('ALBARAN','FACTURA','TICKET','OTRO')
+)
 INSERT INTO "DocumentoSecuencia" ("tipoDocumento", "ultimoNumero", "updatedAt")
 SELECT "tipoDocumento", MAX("seq")::INTEGER, CURRENT_TIMESTAMP
 FROM numbered
