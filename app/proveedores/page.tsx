@@ -26,6 +26,7 @@ async function getProveedores(query: string) {
       ? {
           OR: [
             { nombre: { contains: query, mode: "insensitive" } },
+            { codigoInterno: { contains: query, mode: "insensitive" } },
             { categoria: { contains: query, mode: "insensitive" } },
             { contacto: { contains: query, mode: "insensitive" } },
             { telefono: { contains: query, mode: "insensitive" } },
@@ -107,6 +108,11 @@ function ProveedorForm({
           defaultValue={proveedor?.nombre}
           required
         />
+        <Field
+          label="Código interno"
+          name="codigoInterno"
+          defaultValue={proveedor?.codigoInterno}
+        />
         <CategoriaSelect defaultValue={proveedor?.categoria} />
         <Field
           label="Contacto"
@@ -158,7 +164,7 @@ function SearchForm({ query }: { query: string }) {
         name="q"
         type="search"
         defaultValue={query}
-        placeholder="Buscar por nombre, categoría, contacto o teléfono"
+        placeholder="Buscar por nombre, código, categoría, contacto o teléfono"
       />
       <div className="flex gap-2">
         <button
@@ -193,6 +199,10 @@ function ProveedorDetails({ proveedor }: { proveedor: Proveedor }) {
 
   return (
     <dl className="grid gap-2 text-sm text-neutral-700 sm:grid-cols-2">
+      <div>
+        <dt className="font-medium text-neutral-500">Código interno</dt>
+        <dd>{proveedor.codigoInterno || "-"}</dd>
+      </div>
       <div>
         <dt className="font-medium text-neutral-500">Categoría</dt>
         <dd>{proveedor.categoria || "-"}</dd>
@@ -241,6 +251,7 @@ function ProveedoresTable({ proveedores }: { proveedores: Proveedor[] }) {
         <thead className="bg-neutral-100 text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
           <tr>
             <th className="px-4 py-3">Proveedor</th>
+            <th className="px-4 py-3">Código interno</th>
             <th className="px-4 py-3">Categoría</th>
             <th className="px-4 py-3">Contacto</th>
             <th className="px-4 py-3">Teléfono</th>
@@ -270,6 +281,9 @@ function ProveedoresTable({ proveedores }: { proveedores: Proveedor[] }) {
                       {proveedor.observaciones}
                     </p>
                   ) : null}
+                </td>
+                <td className="px-4 py-4 text-neutral-700">
+                  {proveedor.codigoInterno || "-"}
                 </td>
                 <td className="px-4 py-4 text-neutral-700">
                   {proveedor.categoria || "-"}
@@ -395,7 +409,7 @@ function EmptyState({ hasSearch }: { hasSearch: boolean }) {
       </p>
       <p className="mt-2 text-sm text-neutral-500">
         {hasSearch
-          ? "Prueba con otro nombre, categoría, contacto o teléfono."
+          ? "Prueba con otro nombre, código, categoría, contacto o teléfono."
           : "Crea el primer proveedor desde el formulario superior."}
       </p>
     </div>

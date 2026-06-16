@@ -392,6 +392,7 @@ export default async function ProveedorPage({
             </h2>
           </div>
           <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <DetailItem label="Código interno" value={proveedor.codigoInterno} />
             <DetailItem label="Categoria" value={proveedor.categoria} />
             <DetailItem label="Contacto" value={proveedor.contacto} />
             <DetailItem label="Telefono" value={proveedor.telefono} />

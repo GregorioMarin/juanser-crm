@@ -162,7 +162,7 @@ export default async function MaterialPage({ params }: MaterialPageProps) {
                 <tr>
                   <th className="px-4 py-3">Fecha</th>
                   <th className="px-4 py-3">Proveedor</th>
-                  <th className="px-4 py-3">Número documento</th>
+                  <th className="px-4 py-3">Nº albarán proveedor</th>
                   <th className="px-4 py-3">Descripción proveedor</th>
                   <th className="px-4 py-3 text-right">Piezas</th>
                   <th className="px-4 py-3 text-right">Medida</th>

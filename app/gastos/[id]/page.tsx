@@ -157,7 +157,7 @@ export default async function GastoPage({ params }: GastoPageProps) {
             <DetailItem label="Proveedor" value={gasto.proveedor} />
             <DetailItem label="Tipo" value={formatTipoDocumento(gasto.tipoDocumento)} />
             <DetailItem label="Número interno" value={gasto.numeroInterno} />
-            <DetailItem label="Número proveedor" value={gasto.numeroDocumento} />
+            <DetailItem label="Nº albarán proveedor" value={gasto.numeroDocumento} />
             <DetailItem label="Categoría" value={gasto.categoria} />
             <DetailItem label="Base imponible" value={formatMoney(gasto.baseImponible)} />
             <DetailItem label="IVA" value={formatMoney(gasto.iva)} />

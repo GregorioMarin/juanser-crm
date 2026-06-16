@@ -91,6 +91,7 @@ function tipoDocumentoValue(formData: FormData) {
 function proveedorData(formData: FormData) {
   return {
     nombre: requiredString(formData, "nombre"),
+    codigoInterno: optionalString(formData, "codigoInterno"),
     telefono: optionalString(formData, "telefono"),
     email: optionalString(formData, "email"),
     web: optionalString(formData, "web"),

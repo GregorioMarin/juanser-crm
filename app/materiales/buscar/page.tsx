@@ -192,7 +192,7 @@ function ResultsTable({
                 <td className="px-4 py-4 text-neutral-700">
                   {linea.gasto.proveedor || "-"}
                   <p className="mt-1 text-neutral-500">
-                    {linea.gasto.numeroDocumento || "-"}
+                    Nº albarán proveedor: {linea.gasto.numeroDocumento || "-"}
                   </p>
                 </td>
                 <td className="whitespace-nowrap px-4 py-4 text-neutral-700">

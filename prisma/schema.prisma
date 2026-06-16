@@ -276,6 +276,7 @@ model ActividadCliente {
 model Proveedor {
   id            Int                  @id @default(autoincrement())
   nombre        String
+  codigoInterno String?              @unique
   telefono      String?
   email         String?
   web           String?

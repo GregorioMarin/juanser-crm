@@ -258,7 +258,7 @@ function GastosTable({ gastos }: { gastos: Gasto[] }) {
             <th className="px-4 py-3">Tipo</th>
             <th className="px-4 py-3">Tipo gasto</th>
             <th className="px-4 py-3">Nº interno</th>
-            <th className="px-4 py-3">Nº proveedor</th>
+            <th className="px-4 py-3">Nº albarán proveedor</th>
             <th className="px-4 py-3">Categoría</th>
             <th className="px-4 py-3">Líneas</th>
             <th className="px-4 py-3 text-right">Base</th>

@@ -871,7 +871,7 @@ export function GastoForm({
             readOnly
           />
           <Field
-            label="Número proveedor"
+            label="Nº albarán proveedor"
             name="numeroDocumento"
             defaultValue={values.numeroDocumento}
           />
