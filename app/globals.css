@@ -10,6 +10,8 @@
   --color-foreground: var(--foreground);
   --font-sans: Arial, Helvetica, sans-serif;
   --font-mono: "Courier New", Courier, monospace;
+  --container-6xl: 118.75rem;
+  --container-7xl: 118.75rem;
 }
 
 @media (prefers-color-scheme: dark) {
