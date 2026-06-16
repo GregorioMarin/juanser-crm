@@ -1,6 +1,7 @@
 import { readFile, stat } from "fs/promises";
 import path from "path";
 import { NextResponse } from "next/server";
+import { uploadsRootDir } from "@/app/lib/uploads";
 
 export const runtime = "nodejs";
 
@@ -29,10 +30,6 @@ const contentTypes: Record<string, string> = {
   xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 };
-
-function uploadsRootDir() {
-  return path.resolve(process.cwd(), "uploads");
-}
 
 function isSafeSegment(segment: string) {
   return (
@@ -114,11 +111,20 @@ export async function GET(_request: Request, context: UploadRouteContext) {
   const resolved = resolveUploadPath(segments);
 
   if (!resolved) {
+    console.warn("[uploads] Ruta publica no valida", {
+      segments,
+      uploadsRootDir: uploadsRootDir(),
+    });
     return new NextResponse("Archivo no encontrado", { status: 404 });
   }
 
   const fileStat = await stat(resolved.filePath).catch(() => null);
   if (!fileStat?.isFile()) {
+    console.warn("[uploads] Archivo fisico no encontrado", {
+      publicPath: `/api/uploads/${segments.join("/")}`,
+      filePath: resolved.filePath,
+      uploadsRootDir: uploadsRootDir(),
+    });
     return new NextResponse("Archivo no encontrado", { status: 404 });
   }
 

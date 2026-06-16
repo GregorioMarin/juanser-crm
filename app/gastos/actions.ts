@@ -6,6 +6,7 @@ import path from "path";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/app/lib/prisma";
+import { uploadsRootDir } from "@/app/lib/uploads";
 import { formatDecimalEs, parseDecimalEs } from "@/app/lib/decimal-es";
 import {
   categoriasGasto,
@@ -550,10 +551,6 @@ function lineasData(formData: FormData) {
       };
     })
     .filter((linea): linea is NonNullable<typeof linea> => linea !== null);
-}
-
-function uploadsRootDir() {
-  return path.resolve(process.cwd(), "uploads");
 }
 
 function gastoUploadsDir(uploadId: string) {

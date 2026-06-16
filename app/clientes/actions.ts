@@ -5,6 +5,7 @@ import path from "path";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/app/lib/prisma";
+import { uploadsRootDir } from "@/app/lib/uploads";
 
 function requiredClienteId(formData: FormData) {
   const id = Number(formData.get("clienteId"));
@@ -13,10 +14,6 @@ function requiredClienteId(formData: FormData) {
   }
 
   return id;
-}
-
-function uploadsRootDir() {
-  return path.resolve(process.cwd(), "uploads");
 }
 
 function clienteUploadsDir(clienteId: number) {

@@ -5,6 +5,7 @@ import { mkdir, stat, unlink, writeFile } from "fs/promises";
 import path from "path";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/app/lib/prisma";
+import { uploadsRootDir } from "@/app/lib/uploads";
 
 const categoriasProveedor = [
   "Tableros",
@@ -100,10 +101,6 @@ function proveedorData(formData: FormData) {
     direccion: optionalString(formData, "direccion"),
     observaciones: optionalString(formData, "observaciones"),
   };
-}
-
-function uploadsRootDir() {
-  return path.resolve(process.cwd(), "uploads");
 }
 
 function proveedorUploadsDir(proveedorId: number) {

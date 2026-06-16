@@ -42,6 +42,7 @@ import { DeleteFacturaVentaForm } from "@/app/facturas-venta/delete-factura-vent
 import { FacturaVentaForm } from "@/app/facturas-venta/factura-venta-form";
 import { registrarActividadCliente } from "@/app/lib/actividad";
 import { prisma } from "@/app/lib/prisma";
+import { uploadsRootDir } from "@/app/lib/uploads";
 import { Prisma } from "@/app/generated/prisma/client";
 import {
   defaultPresupuestoObservaciones,
@@ -435,10 +436,6 @@ function requiredMediaFile(formData: FormData) {
 
 function uploadFolder(tipo: FotoTipo) {
   return tipo === "CLIENTE" ? "cliente" : "juanser";
-}
-
-function uploadsRootDir() {
-  return path.resolve(process.cwd(), "uploads");
 }
 
 function persistentUploadsDir(clienteId: number, tipo: FotoTipo) {

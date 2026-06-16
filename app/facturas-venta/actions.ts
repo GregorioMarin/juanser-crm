@@ -6,6 +6,7 @@ import path from "path";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/app/lib/prisma";
+import { uploadsRootDir } from "@/app/lib/uploads";
 
 const estadosCobro = ["PENDIENTE", "PARCIAL", "COBRADA"] as const;
 const maxFacturaVentaPdfSize = Number(process.env.FACTURA_VENTA_MAX_PDF_SIZE ?? 20 * 1024 * 1024);
@@ -98,10 +99,6 @@ function safeReturnTo(formData: FormData, fallback: string) {
   }
 
   return `${url.pathname}${url.search}${url.hash}`;
-}
-
-function uploadsRootDir() {
-  return path.resolve(process.cwd(), "uploads");
 }
 
 function facturaUploadsDir(uploadId: string) {

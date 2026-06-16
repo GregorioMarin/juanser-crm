@@ -6,6 +6,7 @@ import path from "path";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/app/lib/prisma";
+import { uploadsRootDir } from "@/app/lib/uploads";
 
 const maxImageSize = 10 * 1024 * 1024;
 const maxVideoSize = 50 * 1024 * 1024;
@@ -92,10 +93,6 @@ function mediaCategoriaValue(formData: FormData) {
   }
 
   return value as (typeof mediaCategorias)[number];
-}
-
-function uploadsRootDir() {
-  return path.resolve(process.cwd(), "uploads");
 }
 
 function trabajoUploadsDir(trabajoId: number) {
