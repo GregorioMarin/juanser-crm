@@ -573,10 +573,10 @@ function safeFileName(name: string) {
   return safe || "gasto";
 }
 
-function requiredDocumentFile(formData: FormData) {
+function optionalDocumentFile(formData: FormData) {
   const file = formData.get("archivo");
   if (!(file instanceof File) || file.size === 0) {
-    throw new Error("Selecciona una imagen o PDF.");
+    return null;
   }
 
   if (file.size > maxDocumentSize) {
@@ -593,6 +593,15 @@ function requiredDocumentFile(formData: FormData) {
   }
 
   return { file, extension };
+}
+
+function requiredDocumentFile(formData: FormData) {
+  const documentFile = optionalDocumentFile(formData);
+  if (!documentFile) {
+    throw new Error("Selecciona una imagen o PDF.");
+  }
+
+  return documentFile;
 }
 
 async function saveGastoFile(file: File, extension: string) {
@@ -1043,7 +1052,14 @@ export async function updateGasto(
   try {
     const id = requiredGastoId(formData);
     gastoId = id;
-    const gastoInput = gastoData(formData);
+    const newDocumentFile = optionalDocumentFile(formData);
+    const savedDocument = newDocumentFile
+      ? await saveGastoFile(newDocumentFile.file, newDocumentFile.extension)
+      : null;
+    const gastoInput = {
+      ...gastoData(formData),
+      archivoUrl: savedDocument?.archivoUrl ?? optionalString(formData, "archivoUrl"),
+    };
     const lineas = lineasData(formData);
     await prisma.$transaction(async (tx) => {
       const existingGasto = await tx.gasto.findUnique({

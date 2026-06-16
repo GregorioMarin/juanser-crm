@@ -802,6 +802,7 @@ export function GastoForm({
   return (
     <form
       action={formAction}
+      encType="multipart/form-data"
       className="grid gap-5"
       onSubmit={(event) => {
         const form = event.currentTarget;
@@ -967,6 +968,40 @@ export function GastoForm({
             defaultValue={values.observaciones}
           />
         </label>
+
+        {gasto ? (
+          <div className="grid gap-3 rounded-md border border-neutral-200 bg-neutral-50 p-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h4 className="text-base font-semibold text-neutral-950">
+                  Archivo del albarán
+                </h4>
+                <p className="mt-1 text-sm text-neutral-500">
+                  Puedes subir un JPG, PNG, WEBP o PDF para reemplazar la referencia actual.
+                </p>
+              </div>
+              {fileUrl ? (
+                <a
+                  href={fileUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex h-9 w-fit items-center justify-center rounded-md border border-neutral-300 bg-white px-3 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
+                >
+                  Ver archivo actual
+                </a>
+              ) : null}
+            </div>
+            <label className="flex flex-col gap-1.5">
+              <span className={labelClass}>Nuevo archivo</span>
+              <input
+                className={inputClass}
+                name="archivo"
+                type="file"
+                accept="image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf"
+              />
+            </label>
+          </div>
+        ) : null}
       </section>
 
       {isMateriales ? (
