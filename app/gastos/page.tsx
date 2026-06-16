@@ -13,6 +13,16 @@ import { formatCurrencyEs } from "@/app/lib/decimal-es";
 const inputClass =
   "w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-950 outline-none transition placeholder:text-neutral-400 focus:border-emerald-700 focus:ring-2 focus:ring-emerald-100";
 
+const sortOptions = [
+  { value: "recent", label: "Más recientes" },
+  { value: "numero-asc", label: "Nº interno ascendente" },
+  { value: "numero-desc", label: "Nº interno descendente" },
+  { value: "importe-desc", label: "Importe mayor" },
+  { value: "importe-asc", label: "Importe menor" },
+] as const;
+
+type SortValue = (typeof sortOptions)[number]["value"];
+
 function formatDate(date?: Date | null) {
   return date
     ? new Intl.DateTimeFormat("es-ES", {
@@ -50,6 +60,32 @@ function yearRange(date = new Date()) {
   };
 }
 
+function sortValue(value: string): SortValue {
+  return sortOptions.some((option) => option.value === value)
+    ? (value as SortValue)
+    : "recent";
+}
+
+function gastoOrderBy(sort: SortValue) {
+  if (sort === "numero-asc") {
+    return [{ numeroInterno: "asc" as const }];
+  }
+
+  if (sort === "numero-desc") {
+    return [{ numeroInterno: "desc" as const }];
+  }
+
+  if (sort === "importe-desc") {
+    return [{ total: "desc" as const }];
+  }
+
+  if (sort === "importe-asc") {
+    return [{ total: "asc" as const }];
+  }
+
+  return [{ fecha: "desc" as const }, { createdAt: "desc" as const }];
+}
+
 async function getGastos(filters: {
   q: string;
   categoria: string;
@@ -58,6 +94,7 @@ async function getGastos(filters: {
   titularGastoId: string;
   desde: string;
   hasta: string;
+  sort: SortValue;
 }) {
   const desde = dateFromInput(filters.desde);
   const hastaBase = dateFromInput(filters.hasta);
@@ -108,7 +145,7 @@ async function getGastos(filters: {
         select: { lineas: true },
       },
     },
-    orderBy: [{ numeroInterno: "asc" }, { fecha: "desc" }, { createdAt: "desc" }],
+    orderBy: gastoOrderBy(filters.sort),
   });
 }
 
@@ -189,11 +226,12 @@ function FiltersForm({
     titularGastoId: string;
     desde: string;
     hasta: string;
+    sort: SortValue;
   };
   titularesGasto: Awaited<ReturnType<typeof getTitularesGasto>>;
 }) {
   return (
-    <form action="/gastos" className="grid gap-3 rounded-md border border-neutral-300 bg-white p-4 shadow-sm lg:grid-cols-[1.4fr_1fr_1fr_1fr_1fr_1fr_1fr_auto] lg:items-end">
+    <form action="/gastos" className="grid gap-3 rounded-md border border-neutral-300 bg-white p-4 shadow-sm lg:grid-cols-[1.4fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_auto] lg:items-end">
       <label className="flex flex-col gap-1.5">
         <span className="text-sm font-medium text-neutral-700">Buscar</span>
         <input
@@ -263,6 +301,16 @@ function FiltersForm({
       <label className="flex flex-col gap-1.5">
         <span className="text-sm font-medium text-neutral-700">Hasta</span>
         <input className={inputClass} name="hasta" type="date" defaultValue={filters.hasta} />
+      </label>
+      <label className="flex flex-col gap-1.5">
+        <span className="text-sm font-medium text-neutral-700">Ordenar</span>
+        <select className={inputClass} name="sort" defaultValue={filters.sort}>
+          {sortOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
       </label>
       <div className="flex gap-2">
         <button
@@ -404,6 +452,7 @@ export default async function GastosPage({ searchParams }: GastosPageProps) {
     titularGastoId: first("titularGastoId"),
     desde: first("desde"),
     hasta: first("hasta"),
+    sort: sortValue(first("sort")),
   };
   const [gastos, resumen, titularesGasto] = await Promise.all([
     getGastos(filters),
