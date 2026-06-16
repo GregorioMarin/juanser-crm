@@ -61,7 +61,7 @@ WITH numbered AS (
       ORDER BY g."createdAt" ASC, g."id" ASC
     ) AS "seq"
   FROM "Gasto" AS g
-  WHERE g."tipoDocumento" IN ('ALBARAN','FACTURA','TICKET','OTRO')
+  WHERE g."tipoDocumento" IN ('ALBARAN', 'FACTURA', 'TICKET', 'OTRO')
 )
 INSERT INTO "DocumentoSecuencia" ("tipoDocumento", "ultimoNumero", "updatedAt")
 SELECT "tipoDocumento", MAX("seq")::INTEGER, CURRENT_TIMESTAMP
