@@ -86,7 +86,7 @@ export default async function GastoPage({ params }: GastoPageProps) {
     prisma.gasto.findUnique({
       where: { id },
       include: {
-        cliente: { select: { id: true, nombre: true } },
+        titularGasto: { select: { id: true, codigoInterno: true, nombre: true } },
         lineas: {
           orderBy: { createdAt: "asc" },
           include: {
@@ -165,8 +165,12 @@ export default async function GastoPage({ params }: GastoPageProps) {
             <DetailItem label="Forma de pago" value={gasto.formaPago} />
             <DetailItem label="Descripción" value={gasto.descripcion} />
             <DetailItem
-              label="Cliente vinculado"
-              value={gasto.cliente ? `${gasto.cliente.nombre} (#${gasto.cliente.id})` : null}
+              label="Titular del gasto"
+              value={
+                gasto.titularGasto
+                  ? `${gasto.titularGasto.nombre} · ${gasto.titularGasto.codigoInterno}`
+                  : null
+              }
             />
             <DetailItem label="Creado" value={formatDateTime(gasto.createdAt)} />
             <DetailItem label="Última modificación" value={formatDateTime(gasto.updatedAt)} />

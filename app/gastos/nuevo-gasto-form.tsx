@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useMemo, useState } from "react";
-import type { Material } from "@/app/generated/prisma/client";
+import type { Material, TitularGasto } from "@/app/generated/prisma/client";
 import {
   analizarDocumentoGasto,
   createGasto,
@@ -27,7 +27,15 @@ type MaterialOption = Pick<
   "id" | "codigo" | "nombre" | "categoria" | "unidadBase"
 >;
 
-export function NuevoGastoForm({ materiales }: { materiales: MaterialOption[] }) {
+type TitularGastoOption = Pick<TitularGasto, "id" | "codigoInterno" | "nombre">;
+
+export function NuevoGastoForm({
+  materiales,
+  titularesGasto,
+}: {
+  materiales: MaterialOption[];
+  titularesGasto: TitularGastoOption[];
+}) {
   const [state, formAction, pending] = useActionState(
     analizarDocumentoGasto,
     initialAnalizarGastoState,
@@ -192,6 +200,7 @@ export function NuevoGastoForm({ materiales }: { materiales: MaterialOption[] })
             data={state.data}
             archivoUrl={state.archivoUrl}
             materiales={materiales}
+            titularesGasto={titularesGasto}
           />
         </section>
       ) : null}
@@ -212,6 +221,7 @@ export function NuevoGastoForm({ materiales }: { materiales: MaterialOption[] })
             data={emptyGastoAnalizado}
             archivoUrl=""
             materiales={materiales}
+            titularesGasto={titularesGasto}
           />
         </section>
       ) : null}

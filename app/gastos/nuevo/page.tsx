@@ -5,16 +5,23 @@ import { prisma } from "@/app/lib/prisma";
 
 export default async function NuevoGastoPage() {
   await connection();
-  const materiales = await prisma.material.findMany({
-    orderBy: [{ categoria: "asc" }, { codigo: "asc" }],
-    select: {
-      id: true,
-      codigo: true,
-      nombre: true,
-      categoria: true,
-      unidadBase: true,
-    },
-  });
+  const [materiales, titularesGasto] = await Promise.all([
+    prisma.material.findMany({
+      orderBy: [{ categoria: "asc" }, { codigo: "asc" }],
+      select: {
+        id: true,
+        codigo: true,
+        nombre: true,
+        categoria: true,
+        unidadBase: true,
+      },
+    }),
+    prisma.titularGasto.findMany({
+      where: { activo: true },
+      orderBy: [{ nombre: "asc" }],
+      select: { id: true, codigoInterno: true, nombre: true },
+    }),
+  ]);
 
   return (
     <main className="min-h-screen bg-neutral-100 px-5 py-6 text-neutral-950 sm:px-8">
@@ -34,7 +41,7 @@ export default async function NuevoGastoPage() {
           </p>
         </header>
 
-        <NuevoGastoForm materiales={materiales} />
+        <NuevoGastoForm materiales={materiales} titularesGasto={titularesGasto} />
       </div>
     </main>
   );

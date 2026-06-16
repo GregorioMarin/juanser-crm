@@ -13,7 +13,7 @@ export default async function EditarGastoPage({ params }: EditarGastoPageProps) 
   await connection();
 
   const { id } = await params;
-  const [gasto, materiales] = await Promise.all([
+  const [gasto, materiales, titularesGasto] = await Promise.all([
     prisma.gasto.findUnique({
       where: { id },
       include: {
@@ -31,6 +31,11 @@ export default async function EditarGastoPage({ params }: EditarGastoPageProps) 
         categoria: true,
         unidadBase: true,
       },
+    }),
+    prisma.titularGasto.findMany({
+      where: { activo: true },
+      orderBy: [{ nombre: "asc" }],
+      select: { id: true, codigoInterno: true, nombre: true },
     }),
   ]);
   if (!gasto) {
@@ -61,6 +66,7 @@ export default async function EditarGastoPage({ params }: EditarGastoPageProps) 
             submitLabel="Guardar cambios"
             gasto={gasto}
             materiales={materiales}
+            titularesGasto={titularesGasto}
           />
         </section>
       </div>

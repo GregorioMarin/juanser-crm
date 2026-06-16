@@ -277,15 +277,15 @@ async function nextNumeroInterno(
   return `${prefix}-${String(number).padStart(4, "0")}`;
 }
 
-function optionalClienteId(formData: FormData) {
-  const raw = optionalString(formData, "clienteId");
+function optionalTitularGastoId(formData: FormData) {
+  const raw = optionalString(formData, "titularGastoId");
   if (!raw) {
     return null;
   }
 
   const id = Number(raw);
   if (!Number.isInteger(id) || id < 1) {
-    throw new Error("Cliente no valido.");
+    throw new Error("Titular del gasto no valido.");
   }
 
   return id;
@@ -425,7 +425,7 @@ function gastoData(formData: FormData) {
     descripcion: optionalString(formData, "descripcion"),
     observaciones: optionalString(formData, "observaciones"),
     archivoUrl: optionalString(formData, "archivoUrl"),
-    clienteId: optionalClienteId(formData),
+    titularGastoId: optionalTitularGastoId(formData),
   };
 }
 

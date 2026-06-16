@@ -55,11 +55,16 @@ async function getGastos(filters: {
   categoria: string;
   tipoDocumento: string;
   tipoGasto: string;
+  titularGastoId: string;
   desde: string;
   hasta: string;
 }) {
   const desde = dateFromInput(filters.desde);
   const hastaBase = dateFromInput(filters.hasta);
+  const titularGastoId = Number(filters.titularGastoId);
+  const titularGastoFilter = Number.isInteger(titularGastoId) && titularGastoId > 0
+    ? titularGastoId
+    : null;
   const hasta = hastaBase
     ? new Date(hastaBase.getFullYear(), hastaBase.getMonth(), hastaBase.getDate() + 1)
     : undefined;
@@ -90,11 +95,15 @@ async function getGastos(filters: {
         filters.categoria ? { categoria: filters.categoria } : {},
         filters.tipoDocumento ? { tipoDocumento: filters.tipoDocumento } : {},
         filters.tipoGasto ? { tipoGasto: filters.tipoGasto } : {},
+        titularGastoFilter ? { titularGastoId: titularGastoFilter } : {},
         desde ? { fecha: { gte: desde } } : {},
         hasta ? { fecha: { lt: hasta } } : {},
       ],
     },
     include: {
+      titularGasto: {
+        select: { codigoInterno: true, nombre: true },
+      },
       _count: {
         select: { lineas: true },
       },
@@ -138,6 +147,14 @@ async function getResumen() {
   };
 }
 
+async function getTitularesGasto() {
+  return prisma.titularGasto.findMany({
+    where: { activo: true },
+    orderBy: [{ nombre: "asc" }],
+    select: { id: true, codigoInterno: true, nombre: true },
+  });
+}
+
 type Gasto = Awaited<ReturnType<typeof getGastos>>[number];
 
 function SummaryCard({
@@ -162,18 +179,21 @@ function SummaryCard({
 
 function FiltersForm({
   filters,
+  titularesGasto,
 }: {
   filters: {
     q: string;
     categoria: string;
     tipoDocumento: string;
     tipoGasto: string;
+    titularGastoId: string;
     desde: string;
     hasta: string;
   };
+  titularesGasto: Awaited<ReturnType<typeof getTitularesGasto>>;
 }) {
   return (
-    <form action="/gastos" className="grid gap-3 rounded-md border border-neutral-300 bg-white p-4 shadow-sm lg:grid-cols-[1.4fr_1fr_1fr_1fr_1fr_1fr_auto] lg:items-end">
+    <form action="/gastos" className="grid gap-3 rounded-md border border-neutral-300 bg-white p-4 shadow-sm lg:grid-cols-[1.4fr_1fr_1fr_1fr_1fr_1fr_1fr_auto] lg:items-end">
       <label className="flex flex-col gap-1.5">
         <span className="text-sm font-medium text-neutral-700">Buscar</span>
         <input
@@ -222,6 +242,21 @@ function FiltersForm({
         </select>
       </label>
       <label className="flex flex-col gap-1.5">
+        <span className="text-sm font-medium text-neutral-700">Titular</span>
+        <select
+          className={inputClass}
+          name="titularGastoId"
+          defaultValue={filters.titularGastoId}
+        >
+          <option value="">Todos</option>
+          {titularesGasto.map((titular) => (
+            <option key={titular.id} value={titular.id}>
+              {titular.nombre}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex flex-col gap-1.5">
         <span className="text-sm font-medium text-neutral-700">Desde</span>
         <input className={inputClass} name="desde" type="date" defaultValue={filters.desde} />
       </label>
@@ -257,6 +292,7 @@ function GastosTable({ gastos }: { gastos: Gasto[] }) {
             <th className="px-4 py-3">Proveedor</th>
             <th className="px-4 py-3">Tipo</th>
             <th className="px-4 py-3">Tipo gasto</th>
+            <th className="px-4 py-3">Titular</th>
             <th className="px-4 py-3">Nº interno</th>
             <th className="px-4 py-3">Nº albarán proveedor</th>
             <th className="px-4 py-3">Categoría</th>
@@ -294,6 +330,9 @@ function GastosTable({ gastos }: { gastos: Gasto[] }) {
                     : gasto.tipoDocumento || "-"}
                 </td>
                 <td className="px-4 py-4 text-neutral-700">{gasto.tipoGasto}</td>
+                <td className="px-4 py-4 text-neutral-700">
+                  {gasto.titularGasto?.nombre || "-"}
+                </td>
                 <td className="px-4 py-4 text-neutral-700">
                   {gasto.numeroInterno || "-"}
                 </td>
@@ -334,7 +373,7 @@ function GastosTable({ gastos }: { gastos: Gasto[] }) {
             ))
           ) : (
             <tr>
-              <td colSpan={12} className="px-4 py-8 text-center text-neutral-500">
+              <td colSpan={13} className="px-4 py-8 text-center text-neutral-500">
                 No hay gastos con esos filtros.
               </td>
             </tr>
@@ -362,10 +401,15 @@ export default async function GastosPage({ searchParams }: GastosPageProps) {
     categoria: first("categoria"),
     tipoDocumento: first("tipoDocumento"),
     tipoGasto: first("tipoGasto"),
+    titularGastoId: first("titularGastoId"),
     desde: first("desde"),
     hasta: first("hasta"),
   };
-  const [gastos, resumen] = await Promise.all([getGastos(filters), getResumen()]);
+  const [gastos, resumen, titularesGasto] = await Promise.all([
+    getGastos(filters),
+    getResumen(),
+    getTitularesGasto(),
+  ]);
 
   return (
     <main className="min-h-screen bg-neutral-100 px-5 py-6 text-neutral-950 sm:px-8">
@@ -406,7 +450,7 @@ export default async function GastosPage({ searchParams }: GastosPageProps) {
           />
         </section>
 
-        <FiltersForm filters={filters} />
+        <FiltersForm filters={filters} titularesGasto={titularesGasto} />
 
         <section className="overflow-x-auto">
           <GastosTable gastos={gastos} />

@@ -1,7 +1,12 @@
 "use client";
 
 import { useActionState, useMemo, useState } from "react";
-import type { Gasto, GastoLinea, Material } from "@/app/generated/prisma/client";
+import type {
+  Gasto,
+  GastoLinea,
+  Material,
+  TitularGasto,
+} from "@/app/generated/prisma/client";
 import {
   categoriasGasto,
   emptyGastoAnalizado,
@@ -58,6 +63,8 @@ type MaterialOption = Pick<
   Material,
   "id" | "codigo" | "nombre" | "categoria" | "unidadBase"
 >;
+
+type TitularGastoOption = Pick<TitularGasto, "id" | "codigoInterno" | "nombre">;
 
 function dateValue(date?: Date | string | null) {
   return date ? new Date(date).toISOString().slice(0, 10) : "";
@@ -197,7 +204,7 @@ type GastoEditable = Pick<
   | "descripcion"
   | "observaciones"
   | "archivoUrl"
-  | "clienteId"
+  | "titularGastoId"
 > & {
   lineas?: GastoLinea[];
 };
@@ -731,6 +738,7 @@ export function GastoForm({
   archivoUrl,
   gasto,
   materiales = [],
+  titularesGasto = [],
 }: {
   action: (
     state: GastoFormState,
@@ -741,6 +749,7 @@ export function GastoForm({
   archivoUrl?: string | null;
   gasto?: GastoEditable | null;
   materiales?: MaterialOption[];
+  titularesGasto?: TitularGastoOption[];
 }) {
   const [state, formAction, pending] = useActionState(action, initialGastoFormState);
   const values = data ?? valuesFromGasto(gasto);
@@ -888,13 +897,21 @@ export function GastoForm({
             options={formasPagoGasto}
             defaultValue={values.formaPago}
           />
-          <Field
-            label="Cliente vinculado"
-            name="clienteId"
-            type="number"
-            defaultValue={gasto?.clienteId?.toString() ?? ""}
-            placeholder="ID de cliente"
-          />
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>Titular del gasto</span>
+            <select
+              className={inputClass}
+              name="titularGastoId"
+              defaultValue={gasto?.titularGastoId?.toString() ?? ""}
+            >
+              <option value="">Sin titular</option>
+              {titularesGasto.map((titular) => (
+                <option key={titular.id} value={titular.id}>
+                  {titular.nombre} · {titular.codigoInterno}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
 
         <div className="grid gap-3 rounded-md border border-neutral-200 bg-neutral-50 p-4">

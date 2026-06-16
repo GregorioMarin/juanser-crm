@@ -100,7 +100,6 @@ model Cliente {
   presupuestos     Presupuesto[]
   pagosCuenta      PagoCuenta[]
   actividades      ActividadCliente[]
-  gastos           Gasto[]
   facturasVenta    FacturaVenta[]
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
@@ -323,6 +322,23 @@ model ActividadProveedor {
   @@index([fecha])
 }
 
+model TitularGasto {
+  id            Int      @id @default(autoincrement())
+  codigoInterno String   @unique
+  nombre        String
+  nif           String?
+  direccion     String?
+  telefono      String?
+  email         String?
+  activo        Boolean  @default(true)
+  gastos        Gasto[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([nombre])
+  @@index([activo])
+}
+
 model Gasto {
   id              String       @id @default(cuid())
   tipoGasto       String       @default("Otros")
@@ -339,8 +355,8 @@ model Gasto {
   descripcion     String?
   observaciones   String?
   archivoUrl      String?
-  clienteId       Int?
-  cliente         Cliente?     @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  titularGastoId  Int?
+  titularGasto    TitularGasto? @relation(fields: [titularGastoId], references: [id], onDelete: SetNull)
   lineas          GastoLinea[]
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
@@ -351,7 +367,7 @@ model Gasto {
   @@index([tipoDocumento])
   @@index([numeroInterno])
   @@index([categoria])
-  @@index([clienteId])
+  @@index([titularGastoId])
 }
 
 model GastoLinea {
