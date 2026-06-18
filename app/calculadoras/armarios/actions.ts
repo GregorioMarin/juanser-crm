@@ -4,10 +4,31 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/app/lib/prisma";
 
 const standardBoardArea = 2.44 * 1.22;
+const ivaRate = 0.21;
 const tipoPuertasOptions = ["abatibles", "correderas", "sin puertas"] as const;
 const tipoTraseraOptions = ["sin trasera", "3 mm", "10 mm", "16 mm"] as const;
 const materialOptions = ["MDF", "melamina", "rechapado", "contrachapado"] as const;
 const grosorOptions = [16, 19, 22, 30] as const;
+const tarifaNames = {
+  bisagra: "Bisagra Blum",
+  guiaCajon: "Guía cajón",
+  barraColgar: "Barra colgar",
+  soporteBarra: "Soporte barra",
+  canto: "Canto 0.8 mm",
+  horaTaller: "Hora taller",
+  horaMontaje: "Hora montaje",
+  desplazamiento: "Desplazamiento",
+  margenComercial: "Margen comercial",
+  precioArmarioM2: "Precio armario m²",
+} as const;
+
+const laborRules = {
+  horasPorTableroPrincipal: 2,
+  horasPorBisagra: 15 / 60,
+  horasPorCajon: 20 / 60,
+  horasPorPuerta: 30 / 60,
+  horasMontajePorModulo: 45 / 60,
+} as const;
 
 export type CalculoArmarioInput = {
   anchoCm: number;
@@ -36,6 +57,25 @@ export type CalculoArmarioResult = {
   guiasCajon: number;
   metrosBarra: number;
   complejidad: string;
+  costeTableroPrincipal: number;
+  costeTrasera: number;
+  costeCanto: number;
+  costeBisagras: number;
+  costeGuias: number;
+  costeBarras: number;
+  costeSoportes: number;
+  costeMateriales: number;
+  horasTaller: number;
+  horasMontaje: number;
+  costeManoObra: number;
+  costeTransporte: number;
+  costeTotal: number;
+  margenComercial: number;
+  precioCostes: number;
+  precioCostesConIva: number;
+  precioJuanser: number;
+  precioFinal: number;
+  precioFinalConIva: number;
 };
 
 export type CalculoArmarioState = {
@@ -67,8 +107,17 @@ export type CalculoArmarioState = {
     guiasCajon: number;
     metrosBarra: number;
     complejidad: string;
+    costeMateriales: number;
+    costeManoObra: number;
+    costeTransporte: number;
+    costeTotal: number;
+    precioCostes: number;
+    precioJuanser: number;
+    precioFinal: number;
   };
 };
+
+type TarifaLookup = Map<string, number>;
 
 function round(value: number, decimals: number) {
   const factor = 10 ** decimals;
@@ -82,6 +131,42 @@ function normalizeNumber(value: unknown) {
 
 function normalizeInteger(value: unknown) {
   return Math.trunc(normalizeNumber(value));
+}
+
+function tariffKey(name: string) {
+  return name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function activeTariffName(input: CalculoArmarioInput) {
+  return `${input.materialPrincipal} ${input.grosorPrincipalMm} mm`;
+}
+
+function traseraTariffName(input: CalculoArmarioInput) {
+  return input.tipoTrasera === "sin trasera" ? null : `Trasera MDF ${input.tipoTrasera}`;
+}
+
+async function getTariffLookup() {
+  const tarifas = await prisma.tarifaInterna.findMany({
+    where: { activo: true },
+    orderBy: { updatedAt: "desc" },
+  });
+
+  const lookup: TarifaLookup = new Map();
+  for (const tarifa of tarifas) {
+    const key = tariffKey(tarifa.nombre);
+    if (!lookup.has(key)) {
+      lookup.set(key, Number(tarifa.precio.toString()));
+    }
+  }
+
+  return lookup;
+}
+
+function tariff(lookup: TarifaLookup, name: string | null) {
+  return name ? lookup.get(tariffKey(name)) ?? 0 : 0;
 }
 
 function validateInput(input: CalculoArmarioInput) {
@@ -147,7 +232,10 @@ function validateInput(input: CalculoArmarioInput) {
   return data;
 }
 
-function calculate(input: CalculoArmarioInput): CalculoArmarioResult {
+function calculate(
+  input: CalculoArmarioInput,
+  tariffLookup: TarifaLookup = new Map(),
+): CalculoArmarioResult {
   const data = validateInput(input);
   const anchoM = data.anchoCm / 100;
   const altoM = data.altoCm / 100;
@@ -189,18 +277,72 @@ function calculate(input: CalculoArmarioInput): CalculoArmarioResult {
           data.numeroModulos > 2
         ? "media"
         : "baja";
+  const tablerosPrincipales = Math.ceil(metrosTableroPrincipal / standardBoardArea);
+  const tablerosTrasera = Math.ceil(metrosTrasera / standardBoardArea);
+  const costeTableroPrincipal =
+    tablerosPrincipales * tariff(tariffLookup, activeTariffName(data));
+  const costeTrasera =
+    tablerosTrasera * tariff(tariffLookup, traseraTariffName(data));
+  const costeCanto = metrosCanto * tariff(tariffLookup, tarifaNames.canto);
+  const costeBisagras = bisagras * tariff(tariffLookup, tarifaNames.bisagra);
+  const costeGuias = guiasCajon * tariff(tariffLookup, tarifaNames.guiaCajon);
+  const costeBarras = metrosBarra * tariff(tariffLookup, tarifaNames.barraColgar);
+  const costeSoportes =
+    data.numeroBarras * 2 * tariff(tariffLookup, tarifaNames.soporteBarra);
+  const costeMateriales =
+    costeTableroPrincipal +
+    costeTrasera +
+    costeCanto +
+    costeBisagras +
+    costeGuias +
+    costeBarras +
+    costeSoportes;
+  const horasTaller =
+    tablerosPrincipales * laborRules.horasPorTableroPrincipal +
+    bisagras * laborRules.horasPorBisagra +
+    data.numeroCajones * laborRules.horasPorCajon +
+    data.numeroPuertas * laborRules.horasPorPuerta;
+  const horasMontaje = data.numeroModulos * laborRules.horasMontajePorModulo;
+  const costeManoObra =
+    horasTaller * tariff(tariffLookup, tarifaNames.horaTaller) +
+    horasMontaje * tariff(tariffLookup, tarifaNames.horaMontaje);
+  const costeTransporte = tariff(tariffLookup, tarifaNames.desplazamiento);
+  const costeTotal = costeMateriales + costeManoObra + costeTransporte;
+  const margenComercial = tariff(tariffLookup, tarifaNames.margenComercial);
+  const precioCostes = costeTotal * (1 + margenComercial / 100);
+  const precioJuanser = metrosFrontales * tariff(tariffLookup, tarifaNames.precioArmarioM2);
+  const precioFinal = precioCostes;
 
   return {
     metrosFrontales: round(metrosFrontales, 3),
     metrosTableroPrincipal: round(metrosTableroPrincipal, 3),
-    tablerosPrincipales: Math.ceil(metrosTableroPrincipal / standardBoardArea),
+    tablerosPrincipales,
     metrosTrasera: round(metrosTrasera, 3),
-    tablerosTrasera: Math.ceil(metrosTrasera / standardBoardArea),
+    tablerosTrasera,
     metrosCanto: round(metrosCanto, 2),
     bisagras,
     guiasCajon,
     metrosBarra: round(metrosBarra, 2),
     complejidad,
+    costeTableroPrincipal: round(costeTableroPrincipal, 2),
+    costeTrasera: round(costeTrasera, 2),
+    costeCanto: round(costeCanto, 2),
+    costeBisagras: round(costeBisagras, 2),
+    costeGuias: round(costeGuias, 2),
+    costeBarras: round(costeBarras, 2),
+    costeSoportes: round(costeSoportes, 2),
+    costeMateriales: round(costeMateriales, 2),
+    horasTaller: round(horasTaller, 2),
+    horasMontaje: round(horasMontaje, 2),
+    costeManoObra: round(costeManoObra, 2),
+    costeTransporte: round(costeTransporte, 2),
+    costeTotal: round(costeTotal, 2),
+    margenComercial: round(margenComercial, 2),
+    precioCostes: round(precioCostes, 2),
+    precioCostesConIva: round(precioCostes * (1 + ivaRate), 2),
+    precioJuanser: round(precioJuanser, 2),
+    precioFinal: round(precioFinal, 2),
+    precioFinalConIva: round(precioFinal * (1 + ivaRate), 2),
   };
 }
 
@@ -209,7 +351,8 @@ export async function saveCalculoArmario(
 ): Promise<CalculoArmarioState> {
   try {
     const data = validateInput(input);
-    const result = calculate(input);
+    const tariffLookup = await getTariffLookup();
+    const result = calculate(input, tariffLookup);
 
     const saved = await prisma.calculoArmario.create({
       data: {
@@ -225,6 +368,13 @@ export async function saveCalculoArmario(
         guiasCajon: result.guiasCajon,
         metrosBarra: result.metrosBarra,
         complejidad: result.complejidad,
+        costeMateriales: result.costeMateriales,
+        costeManoObra: result.costeManoObra,
+        costeTransporte: result.costeTransporte,
+        costeTotal: result.costeTotal,
+        precioCostes: result.precioCostes,
+        precioJuanser: result.precioJuanser,
+        precioFinal: result.precioFinal,
       },
     });
 
@@ -259,6 +409,13 @@ export async function saveCalculoArmario(
         guiasCajon: saved.guiasCajon,
         metrosBarra: Number(saved.metrosBarra.toString()),
         complejidad: saved.complejidad,
+        costeMateriales: Number(saved.costeMateriales.toString()),
+        costeManoObra: Number(saved.costeManoObra.toString()),
+        costeTransporte: Number(saved.costeTransporte.toString()),
+        costeTotal: Number(saved.costeTotal.toString()),
+        precioCostes: Number(saved.precioCostes.toString()),
+        precioJuanser: Number(saved.precioJuanser.toString()),
+        precioFinal: Number(saved.precioFinal.toString()),
       },
     };
   } catch (error) {

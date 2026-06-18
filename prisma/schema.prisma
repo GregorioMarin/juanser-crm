@@ -468,6 +468,13 @@ model CalculoArmario {
   guiasCajon              Int
   metrosBarra             Decimal  @db.Decimal(10, 2)
   complejidad             String
+  costeMateriales         Decimal  @default(0) @db.Decimal(12, 2)
+  costeManoObra           Decimal  @default(0) @db.Decimal(12, 2)
+  costeTransporte         Decimal  @default(0) @db.Decimal(12, 2)
+  costeTotal              Decimal  @default(0) @db.Decimal(12, 2)
+  precioCostes            Decimal  @default(0) @db.Decimal(12, 2)
+  precioJuanser           Decimal  @default(0) @db.Decimal(12, 2)
+  precioFinal             Decimal  @default(0) @db.Decimal(12, 2)
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
 
@@ -475,6 +482,22 @@ model CalculoArmario {
   @@index([createdAt])
   @@index([tipoPuertas])
   @@index([complejidad])
+}
+
+model TarifaInterna {
+  id        Int      @id @default(autoincrement())
+  categoria String
+  nombre    String
+  unidad    String
+  precio    Decimal  @db.Decimal(12, 2)
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([categoria])
+  @@index([nombre])
+  @@index([activo])
+  @@index([categoria, nombre])
 }
 
 model TrabajoTerminado {

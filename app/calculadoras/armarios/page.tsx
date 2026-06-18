@@ -3,6 +3,7 @@ import { prisma } from "@/app/lib/prisma";
 import {
   CalculadoraArmariosClient,
   type SavedCalculoArmario,
+  type TarifaInternaDisponible,
 } from "./calculadora-armarios-client";
 
 function toNumber(value: { toString(): string }) {
@@ -41,13 +42,34 @@ async function getCalculos(): Promise<SavedCalculoArmario[]> {
     guiasCajon: calculo.guiasCajon,
     metrosBarra: toNumber(calculo.metrosBarra),
     complejidad: calculo.complejidad,
+    costeMateriales: toNumber(calculo.costeMateriales),
+    costeManoObra: toNumber(calculo.costeManoObra),
+    costeTransporte: toNumber(calculo.costeTransporte),
+    costeTotal: toNumber(calculo.costeTotal),
+    precioCostes: toNumber(calculo.precioCostes),
+    precioJuanser: toNumber(calculo.precioJuanser),
+    precioFinal: toNumber(calculo.precioFinal),
+  }));
+}
+
+async function getTarifas(): Promise<TarifaInternaDisponible[]> {
+  const tarifas = await prisma.tarifaInterna.findMany({
+    where: { activo: true },
+    orderBy: [{ categoria: "asc" }, { nombre: "asc" }],
+  });
+
+  return tarifas.map((tarifa) => ({
+    categoria: tarifa.categoria,
+    nombre: tarifa.nombre,
+    unidad: tarifa.unidad,
+    precio: toNumber(tarifa.precio),
   }));
 }
 
 export default async function CalculadoraArmariosPage() {
   await connection();
 
-  const calculos = await getCalculos();
+  const [calculos, tarifas] = await Promise.all([getCalculos(), getTarifas()]);
 
   return (
     <main className="min-h-screen bg-neutral-100 px-5 py-6 text-neutral-950 sm:px-8">
@@ -61,13 +83,19 @@ export default async function CalculadoraArmariosPage() {
               Calculadora de Armarios
             </h1>
             <p className="mt-2 max-w-3xl text-sm text-neutral-600">
-              Estimacion profesional de tablero, trasera, canto y herrajes para
-              fabricacion interna de armarios a medida.
+              Estimacion profesional de tablero, trasera, canto, herrajes, mano
+              de obra y precio recomendado para fabricacion interna.
             </p>
           </div>
+          <a
+            href="/configuracion/tarifas"
+            className="inline-flex h-10 w-fit items-center justify-center rounded-md border border-neutral-300 bg-white px-4 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
+          >
+            Tarifas internas
+          </a>
         </header>
 
-        <CalculadoraArmariosClient initialCalculos={calculos} />
+        <CalculadoraArmariosClient initialCalculos={calculos} tarifas={tarifas} />
       </div>
     </main>
   );
