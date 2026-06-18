@@ -69,6 +69,19 @@ export type SavedCalculoArmario = {
   guiasCajon: number;
   metrosBarra: number;
   complejidad: string;
+  precioTableroM2: number;
+  precioTraseraM2: number;
+  precioCantoMl: number;
+  precioBisagraUnidad: number;
+  precioGuiaCajonJuego: number;
+  precioBarraMl: number;
+  precioSoporteBarraUnidad: number;
+  costeHoraTaller: number;
+  horasTaller: number;
+  costeHoraMontaje: number;
+  horasMontaje: number;
+  margenComercial: number;
+  precioJuanserM2: number;
   costeMateriales: number;
   costeManoObra: number;
   costeTransporte: number;
@@ -126,46 +139,143 @@ function tariffKey(name: string) {
     .toLowerCase();
 }
 
-function activeTariffName(input: CalculoArmarioInput) {
-  return `${input.materialPrincipal} ${input.grosorPrincipalMm} mm`;
+function materialTariffName(materialPrincipal: string, grosorPrincipalMm: number) {
+  return `${materialPrincipal} ${grosorPrincipalMm} mm`;
 }
 
-function traseraTariffName(input: CalculoArmarioInput) {
-  return input.tipoTrasera === "sin trasera" ? null : `Trasera MDF ${input.tipoTrasera}`;
+function traseraTariffName(tipoTrasera: string) {
+  return tipoTrasera === "sin trasera" ? null : `Trasera MDF ${tipoTrasera}`;
 }
 
 function tarifaLookup(tarifas: TarifaInternaDisponible[]) {
-  const lookup = new Map<string, number>();
+  const lookup = new Map<string, TarifaInternaDisponible>();
   for (const tarifa of tarifas) {
     const key = tariffKey(tarifa.nombre);
     if (!lookup.has(key)) {
-      lookup.set(key, tarifa.precio);
+      lookup.set(key, tarifa);
     }
   }
 
   return lookup;
 }
 
-function tariff(lookup: Map<string, number>, name: string | null, missing: string[]) {
+function tariffPrice(
+  lookup: Map<string, TarifaInternaDisponible>,
+  name: string | null,
+  unitForM2 = false,
+) {
   if (!name) {
     return 0;
   }
 
-  const value = lookup.get(tariffKey(name));
-  if (typeof value === "number") {
-    return value;
+  const tarifa = lookup.get(tariffKey(name));
+  if (!tarifa) {
+    return 0;
   }
 
-  missing.push(name);
-  return 0;
+  if (unitForM2 && tarifa.unidad.toLowerCase() === "tablero") {
+    return round(tarifa.precio / standardBoardArea, 2);
+  }
+
+  return tarifa.precio;
 }
 
-function calculate(
-  input: CalculoArmarioInput,
+function estimatedLaborHours(input: Pick<
+  CalculoArmarioInput,
+  | "anchoCm"
+  | "altoCm"
+  | "fondoCm"
+  | "tipoPuertas"
+  | "numeroPuertas"
+  | "numeroModulos"
+  | "numeroCajones"
+  | "numeroBaldas"
+>) {
+  const anchoM = input.anchoCm / 100;
+  const altoM = input.altoCm / 100;
+  const fondoM = input.fondoCm / 100;
+  const modulos = Math.max(input.numeroModulos, 1);
+  const moduloAnchoM = anchoM / modulos;
+  const metrosFrontales = anchoM * altoM;
+  const laterales = 2 * altoM * fondoM;
+  const techoSuelo = 2 * anchoM * fondoM;
+  const divisiones = Math.max(modulos - 1, 0) * altoM * fondoM;
+  const puertas = input.tipoPuertas === "sin puertas" ? 0 : metrosFrontales;
+  const baldas = input.numeroBaldas * moduloAnchoM * fondoM;
+  const cajonesPrincipal =
+    input.numeroCajones * (2 * fondoM * 0.2 + 2 * moduloAnchoM * 0.2);
+  const metrosTableroPrincipal =
+    (laterales + techoSuelo + divisiones + puertas + baldas + cajonesPrincipal) * 1.15;
+  const tablerosPrincipales = Math.ceil(metrosTableroPrincipal / standardBoardArea);
+  const bisagras = input.tipoPuertas === "abatibles" ? input.numeroPuertas * 4 : 0;
+
+  return {
+    horasTaller: round(
+      tablerosPrincipales * laborRules.horasPorTableroPrincipal +
+        bisagras * laborRules.horasPorBisagra +
+        input.numeroCajones * laborRules.horasPorCajon +
+        input.numeroPuertas * laborRules.horasPorPuerta,
+      2,
+    ),
+    horasMontaje: round(input.numeroModulos * laborRules.horasMontajePorModulo, 2),
+  };
+}
+
+function economicDefaults(
   tarifas: TarifaInternaDisponible[],
-): CalculoResult {
+  base: Pick<
+    CalculoArmarioInput,
+    "materialPrincipal" | "grosorPrincipalMm" | "tipoTrasera"
+  >,
+) {
   const lookup = tarifaLookup(tarifas);
-  const missingTarifas: string[] = [];
+  return {
+    precioTableroM2: tariffPrice(
+      lookup,
+      materialTariffName(base.materialPrincipal, base.grosorPrincipalMm),
+      true,
+    ),
+    precioTraseraM2: tariffPrice(lookup, traseraTariffName(base.tipoTrasera), true),
+    precioCantoMl: tariffPrice(lookup, tarifaNames.canto),
+    precioBisagraUnidad: tariffPrice(lookup, tarifaNames.bisagra),
+    precioGuiaCajonJuego: tariffPrice(lookup, tarifaNames.guiaCajon),
+    precioBarraMl: tariffPrice(lookup, tarifaNames.barraColgar),
+    precioSoporteBarraUnidad: tariffPrice(lookup, tarifaNames.soporteBarra),
+    costeTransporte: tariffPrice(lookup, tarifaNames.desplazamiento),
+    costeHoraTaller: tariffPrice(lookup, tarifaNames.horaTaller),
+    costeHoraMontaje: tariffPrice(lookup, tarifaNames.horaMontaje),
+    margenComercial: tariffPrice(lookup, tarifaNames.margenComercial),
+    precioJuanserM2: tariffPrice(lookup, tarifaNames.precioArmarioM2),
+  };
+}
+
+function initialInput(tarifas: TarifaInternaDisponible[]): CalculoArmarioInput {
+  const base = {
+    anchoCm: 240,
+    altoCm: 240,
+    fondoCm: 60,
+    tipoPuertas: "abatibles",
+    numeroPuertas: 4,
+    numeroModulos: 3,
+    numeroCajones: 2,
+    numeroBaldas: 4,
+    numeroBarras: 2,
+    tipoTrasera: "10 mm",
+    materialPrincipal: "MDF",
+    grosorPrincipalMm: 19,
+    observaciones: "",
+  };
+  const labor = estimatedLaborHours(base);
+
+  return {
+    ...base,
+    ...economicDefaults(tarifas, base),
+    horasTaller: labor.horasTaller,
+    horasMontaje: labor.horasMontaje,
+  };
+}
+
+function calculate(input: CalculoArmarioInput): CalculoResult {
   const anchoM = input.anchoCm / 100;
   const altoM = input.altoCm / 100;
   const fondoM = input.fondoCm / 100;
@@ -209,16 +319,13 @@ function calculate(
         : "baja";
   const tablerosPrincipales = Math.ceil(metrosTableroPrincipal / standardBoardArea);
   const tablerosTrasera = Math.ceil(metrosTrasera / standardBoardArea);
-  const costeTableroPrincipal =
-    tablerosPrincipales * tariff(lookup, activeTariffName(input), missingTarifas);
-  const costeTrasera =
-    tablerosTrasera * tariff(lookup, traseraTariffName(input), missingTarifas);
-  const costeCanto = metrosCanto * tariff(lookup, tarifaNames.canto, missingTarifas);
-  const costeBisagras = bisagras * tariff(lookup, tarifaNames.bisagra, missingTarifas);
-  const costeGuias = guiasCajon * tariff(lookup, tarifaNames.guiaCajon, missingTarifas);
-  const costeBarras = metrosBarra * tariff(lookup, tarifaNames.barraColgar, missingTarifas);
-  const costeSoportes =
-    input.numeroBarras * 2 * tariff(lookup, tarifaNames.soporteBarra, missingTarifas);
+  const costeTableroPrincipal = metrosTableroPrincipal * input.precioTableroM2;
+  const costeTrasera = metrosTrasera * input.precioTraseraM2;
+  const costeCanto = metrosCanto * input.precioCantoMl;
+  const costeBisagras = bisagras * input.precioBisagraUnidad;
+  const costeGuias = guiasCajon * input.precioGuiaCajonJuego;
+  const costeBarras = metrosBarra * input.precioBarraMl;
+  const costeSoportes = input.numeroBarras * 2 * input.precioSoporteBarraUnidad;
   const costeMateriales =
     costeTableroPrincipal +
     costeTrasera +
@@ -227,21 +334,15 @@ function calculate(
     costeGuias +
     costeBarras +
     costeSoportes;
-  const horasTaller =
-    tablerosPrincipales * laborRules.horasPorTableroPrincipal +
-    bisagras * laborRules.horasPorBisagra +
-    input.numeroCajones * laborRules.horasPorCajon +
-    input.numeroPuertas * laborRules.horasPorPuerta;
-  const horasMontaje = input.numeroModulos * laborRules.horasMontajePorModulo;
+  const horasTaller = input.horasTaller;
+  const horasMontaje = input.horasMontaje;
   const costeManoObra =
-    horasTaller * tariff(lookup, tarifaNames.horaTaller, missingTarifas) +
-    horasMontaje * tariff(lookup, tarifaNames.horaMontaje, missingTarifas);
-  const costeTransporte = tariff(lookup, tarifaNames.desplazamiento, missingTarifas);
+    horasTaller * input.costeHoraTaller + horasMontaje * input.costeHoraMontaje;
+  const costeTransporte = input.costeTransporte;
   const costeTotal = costeMateriales + costeManoObra + costeTransporte;
-  const margenComercial = tariff(lookup, tarifaNames.margenComercial, missingTarifas);
+  const margenComercial = input.margenComercial;
   const precioCostes = costeTotal * (1 + margenComercial / 100);
-  const precioJuanser =
-    metrosFrontales * tariff(lookup, tarifaNames.precioArmarioM2, missingTarifas);
+  const precioJuanser = metrosFrontales * input.precioJuanserM2;
   const precioFinal = precioCostes;
   const diferenciaJuanser = precioCostes - precioJuanser;
   const diferenciaJuanserPorcentaje =
@@ -297,7 +398,7 @@ function calculate(
         ? null
         : round(diferenciaJuanserPorcentaje, 2),
     notas,
-    missingTarifas: [...new Set(missingTarifas)],
+    missingTarifas: [],
   };
 }
 
@@ -389,25 +490,11 @@ export function CalculadoraArmariosClient({
   initialCalculos: SavedCalculoArmario[];
   tarifas: TarifaInternaDisponible[];
 }) {
-  const [input, setInput] = useState<CalculoArmarioInput>({
-    anchoCm: 240,
-    altoCm: 240,
-    fondoCm: 60,
-    tipoPuertas: "abatibles",
-    numeroPuertas: 4,
-    numeroModulos: 3,
-    numeroCajones: 2,
-    numeroBaldas: 4,
-    numeroBarras: 2,
-    tipoTrasera: "10 mm",
-    materialPrincipal: "MDF",
-    grosorPrincipalMm: 19,
-    observaciones: "",
-  });
+  const [input, setInput] = useState<CalculoArmarioInput>(() => initialInput(tarifas));
   const [calculos, setCalculos] = useState(initialCalculos);
   const [state, setState] = useState(initialState);
   const [pending, startTransition] = useTransition();
-  const result = useMemo(() => calculate(input, tarifas), [input, tarifas]);
+  const result = useMemo(() => calculate(input), [input]);
   const validationError =
     input.anchoCm <= 0 || input.altoCm <= 0 || input.fondoCm <= 0
       ? "Ancho, alto y fondo deben ser mayores que 0."
@@ -423,7 +510,22 @@ export function CalculadoraArmariosClient({
             ? "Si no hay puertas, el numero de puertas debe ser 0."
             : input.tipoPuertas !== "sin puertas" && input.numeroPuertas <= 0
               ? "Si hay puertas, el numero de puertas debe ser mayor que 0."
-              : null;
+              : input.precioTableroM2 < 0 ||
+                  input.precioTraseraM2 < 0 ||
+                  input.precioCantoMl < 0 ||
+                  input.precioBisagraUnidad < 0 ||
+                  input.precioGuiaCajonJuego < 0 ||
+                  input.precioBarraMl < 0 ||
+                  input.precioSoporteBarraUnidad < 0 ||
+                  input.costeTransporte < 0 ||
+                  input.costeHoraTaller < 0 ||
+                  input.horasTaller < 0 ||
+                  input.costeHoraMontaje < 0 ||
+                  input.horasMontaje < 0 ||
+                  input.margenComercial < 0 ||
+                  input.precioJuanserM2 < 0
+                ? "Los valores economicos no pueden ser negativos."
+                : null;
 
   function update<K extends keyof CalculoArmarioInput>(
     key: K,
@@ -436,6 +538,36 @@ export function CalculadoraArmariosClient({
       ...(key === "tipoPuertas" && value === "sin puertas"
         ? { numeroPuertas: 0 }
         : {}),
+      ...(key === "materialPrincipal" || key === "grosorPrincipalMm"
+        ? {
+            precioTableroM2: economicDefaults(tarifas, {
+              materialPrincipal:
+                key === "materialPrincipal" ? String(value) : current.materialPrincipal,
+              grosorPrincipalMm:
+                key === "grosorPrincipalMm" ? Number(value) : current.grosorPrincipalMm,
+              tipoTrasera: current.tipoTrasera,
+            }).precioTableroM2,
+          }
+        : {}),
+      ...(key === "tipoTrasera"
+        ? {
+            precioTraseraM2: economicDefaults(tarifas, {
+              materialPrincipal: current.materialPrincipal,
+              grosorPrincipalMm: current.grosorPrincipalMm,
+              tipoTrasera: String(value),
+            }).precioTraseraM2,
+          }
+        : {}),
+    }));
+  }
+
+  function applySuggestedHours() {
+    const labor = estimatedLaborHours(input);
+    setState(initialState);
+    setInput((current) => ({
+      ...current,
+      horasTaller: labor.horasTaller,
+      horasMontaje: labor.horasMontaje,
     }));
   }
 
@@ -617,6 +749,171 @@ export function CalculadoraArmariosClient({
           </label>
         </div>
 
+        <div className="grid gap-4 border-t border-neutral-200 pt-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-neutral-950">
+                Datos economicos del calculo
+              </h2>
+              <p className="mt-1 text-sm text-neutral-500">
+                Valores precargados desde tarifas internas y editables para este trabajo.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="inline-flex h-10 items-center justify-center rounded-md border border-neutral-300 bg-white px-4 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
+              onClick={applySuggestedHours}
+            >
+              Usar horas sugeridas
+            </button>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <Field label="Precio tablero m2">
+              <input
+                className={inputClass}
+                type="number"
+                min="0"
+                step="0.01"
+                value={input.precioTableroM2}
+                onChange={(event) => update("precioTableroM2", Number(event.target.value))}
+              />
+            </Field>
+            <Field label="Precio trasera m2">
+              <input
+                className={inputClass}
+                type="number"
+                min="0"
+                step="0.01"
+                value={input.precioTraseraM2}
+                onChange={(event) => update("precioTraseraM2", Number(event.target.value))}
+              />
+            </Field>
+            <Field label="Precio canto ml">
+              <input
+                className={inputClass}
+                type="number"
+                min="0"
+                step="0.01"
+                value={input.precioCantoMl}
+                onChange={(event) => update("precioCantoMl", Number(event.target.value))}
+              />
+            </Field>
+            <Field label="Precio bisagra unidad">
+              <input
+                className={inputClass}
+                type="number"
+                min="0"
+                step="0.01"
+                value={input.precioBisagraUnidad}
+                onChange={(event) => update("precioBisagraUnidad", Number(event.target.value))}
+              />
+            </Field>
+            <Field label="Precio guia cajon juego">
+              <input
+                className={inputClass}
+                type="number"
+                min="0"
+                step="0.01"
+                value={input.precioGuiaCajonJuego}
+                onChange={(event) => update("precioGuiaCajonJuego", Number(event.target.value))}
+              />
+            </Field>
+            <Field label="Precio barra ml">
+              <input
+                className={inputClass}
+                type="number"
+                min="0"
+                step="0.01"
+                value={input.precioBarraMl}
+                onChange={(event) => update("precioBarraMl", Number(event.target.value))}
+              />
+            </Field>
+            <Field label="Precio soporte barra unidad">
+              <input
+                className={inputClass}
+                type="number"
+                min="0"
+                step="0.01"
+                value={input.precioSoporteBarraUnidad}
+                onChange={(event) =>
+                  update("precioSoporteBarraUnidad", Number(event.target.value))
+                }
+              />
+            </Field>
+            <Field label="Coste transporte">
+              <input
+                className={inputClass}
+                type="number"
+                min="0"
+                step="0.01"
+                value={input.costeTransporte}
+                onChange={(event) => update("costeTransporte", Number(event.target.value))}
+              />
+            </Field>
+            <Field label="Coste hora taller">
+              <input
+                className={inputClass}
+                type="number"
+                min="0"
+                step="0.01"
+                value={input.costeHoraTaller}
+                onChange={(event) => update("costeHoraTaller", Number(event.target.value))}
+              />
+            </Field>
+            <Field label="Horas taller">
+              <input
+                className={inputClass}
+                type="number"
+                min="0"
+                step="0.25"
+                value={input.horasTaller}
+                onChange={(event) => update("horasTaller", Number(event.target.value))}
+              />
+            </Field>
+            <Field label="Coste hora montaje">
+              <input
+                className={inputClass}
+                type="number"
+                min="0"
+                step="0.01"
+                value={input.costeHoraMontaje}
+                onChange={(event) => update("costeHoraMontaje", Number(event.target.value))}
+              />
+            </Field>
+            <Field label="Horas montaje">
+              <input
+                className={inputClass}
+                type="number"
+                min="0"
+                step="0.25"
+                value={input.horasMontaje}
+                onChange={(event) => update("horasMontaje", Number(event.target.value))}
+              />
+            </Field>
+            <Field label="Margen comercial">
+              <input
+                className={inputClass}
+                type="number"
+                min="0"
+                step="0.01"
+                value={input.margenComercial}
+                onChange={(event) => update("margenComercial", Number(event.target.value))}
+              />
+            </Field>
+            <Field label="Precio Juanser m2">
+              <input
+                className={inputClass}
+                type="number"
+                min="0"
+                step="0.01"
+                value={input.precioJuanserM2}
+                onChange={(event) => update("precioJuanserM2", Number(event.target.value))}
+              />
+            </Field>
+          </div>
+        </div>
+
         <div className="flex flex-col gap-3 border-t border-neutral-200 pt-4 sm:flex-row sm:items-center">
           <button
             type="button"
@@ -721,7 +1018,7 @@ export function CalculadoraArmariosClient({
             <MetricBlock
               label="Transporte"
               value={moneyText(result.costeTransporte)}
-              detail="Tarifa interna de desplazamiento."
+              detail="Valor editable en este calculo."
             />
             <MetricBlock
               label="Coste total"
@@ -772,7 +1069,7 @@ export function CalculadoraArmariosClient({
             <MetricBlock
               label="Sistema Juanser"
               value={moneyText(result.precioJuanser)}
-              detail="m2 frontal por tarifa Precio armario m2."
+              detail="m2 frontal por precio Juanser m2 usado."
             />
             <div
               className={`rounded-md border p-4 shadow-sm ${comparisonClass(
@@ -859,11 +1156,19 @@ export function CalculadoraArmariosClient({
                         <p className="mt-1 text-xs text-neutral-500">
                           Mat. {moneyText(calculo.costeMateriales)}
                         </p>
+                        <p className="mt-1 text-xs text-neutral-500">
+                          {numberText(calculo.horasTaller)} h taller ·{" "}
+                          {numberText(calculo.horasMontaje)} h montaje
+                        </p>
                       </td>
                       <td className="px-4 py-4 text-right text-neutral-700">
                         {moneyText(calculo.precioFinal)}
                         <p className="mt-1 text-xs text-neutral-500">
                           Juanser {moneyText(calculo.precioJuanser)}
+                        </p>
+                        <p className="mt-1 text-xs text-neutral-500">
+                          Margen {numberText(calculo.margenComercial)} % ·{" "}
+                          {moneyText(calculo.precioJuanserM2)}/m2
                         </p>
                       </td>
                       <td className="px-4 py-4 font-semibold text-neutral-950">

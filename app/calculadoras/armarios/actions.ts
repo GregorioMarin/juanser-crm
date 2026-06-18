@@ -9,27 +9,6 @@ const tipoPuertasOptions = ["abatibles", "correderas", "sin puertas"] as const;
 const tipoTraseraOptions = ["sin trasera", "3 mm", "10 mm", "16 mm"] as const;
 const materialOptions = ["MDF", "melamina", "rechapado", "contrachapado"] as const;
 const grosorOptions = [16, 19, 22, 30] as const;
-const tarifaNames = {
-  bisagra: "Bisagra Blum",
-  guiaCajon: "Guía cajón",
-  barraColgar: "Barra colgar",
-  soporteBarra: "Soporte barra",
-  canto: "Canto 0.8 mm",
-  horaTaller: "Hora taller",
-  horaMontaje: "Hora montaje",
-  desplazamiento: "Desplazamiento",
-  margenComercial: "Margen comercial",
-  precioArmarioM2: "Precio armario m²",
-} as const;
-
-const laborRules = {
-  horasPorTableroPrincipal: 2,
-  horasPorBisagra: 15 / 60,
-  horasPorCajon: 20 / 60,
-  horasPorPuerta: 30 / 60,
-  horasMontajePorModulo: 45 / 60,
-} as const;
-
 export type CalculoArmarioInput = {
   anchoCm: number;
   altoCm: number;
@@ -44,6 +23,20 @@ export type CalculoArmarioInput = {
   materialPrincipal: string;
   grosorPrincipalMm: number;
   observaciones: string;
+  precioTableroM2: number;
+  precioTraseraM2: number;
+  precioCantoMl: number;
+  precioBisagraUnidad: number;
+  precioGuiaCajonJuego: number;
+  precioBarraMl: number;
+  precioSoporteBarraUnidad: number;
+  costeTransporte: number;
+  costeHoraTaller: number;
+  horasTaller: number;
+  costeHoraMontaje: number;
+  horasMontaje: number;
+  margenComercial: number;
+  precioJuanserM2: number;
 };
 
 export type CalculoArmarioResult = {
@@ -107,6 +100,19 @@ export type CalculoArmarioState = {
     guiasCajon: number;
     metrosBarra: number;
     complejidad: string;
+    precioTableroM2: number;
+    precioTraseraM2: number;
+    precioCantoMl: number;
+    precioBisagraUnidad: number;
+    precioGuiaCajonJuego: number;
+    precioBarraMl: number;
+    precioSoporteBarraUnidad: number;
+    costeHoraTaller: number;
+    horasTaller: number;
+    costeHoraMontaje: number;
+    horasMontaje: number;
+    margenComercial: number;
+    precioJuanserM2: number;
     costeMateriales: number;
     costeManoObra: number;
     costeTransporte: number;
@@ -116,8 +122,6 @@ export type CalculoArmarioState = {
     precioFinal: number;
   };
 };
-
-type TarifaLookup = Map<string, number>;
 
 function round(value: number, decimals: number) {
   const factor = 10 ** decimals;
@@ -131,42 +135,6 @@ function normalizeNumber(value: unknown) {
 
 function normalizeInteger(value: unknown) {
   return Math.trunc(normalizeNumber(value));
-}
-
-function tariffKey(name: string) {
-  return name
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
-}
-
-function activeTariffName(input: CalculoArmarioInput) {
-  return `${input.materialPrincipal} ${input.grosorPrincipalMm} mm`;
-}
-
-function traseraTariffName(input: CalculoArmarioInput) {
-  return input.tipoTrasera === "sin trasera" ? null : `Trasera MDF ${input.tipoTrasera}`;
-}
-
-async function getTariffLookup() {
-  const tarifas = await prisma.tarifaInterna.findMany({
-    where: { activo: true },
-    orderBy: { updatedAt: "desc" },
-  });
-
-  const lookup: TarifaLookup = new Map();
-  for (const tarifa of tarifas) {
-    const key = tariffKey(tarifa.nombre);
-    if (!lookup.has(key)) {
-      lookup.set(key, Number(tarifa.precio.toString()));
-    }
-  }
-
-  return lookup;
-}
-
-function tariff(lookup: TarifaLookup, name: string | null) {
-  return name ? lookup.get(tariffKey(name)) ?? 0 : 0;
 }
 
 function validateInput(input: CalculoArmarioInput) {
@@ -184,6 +152,20 @@ function validateInput(input: CalculoArmarioInput) {
     materialPrincipal: input.materialPrincipal,
     grosorPrincipalMm: normalizeInteger(input.grosorPrincipalMm),
     observaciones: input.observaciones?.trim() ?? "",
+    precioTableroM2: normalizeNumber(input.precioTableroM2),
+    precioTraseraM2: normalizeNumber(input.precioTraseraM2),
+    precioCantoMl: normalizeNumber(input.precioCantoMl),
+    precioBisagraUnidad: normalizeNumber(input.precioBisagraUnidad),
+    precioGuiaCajonJuego: normalizeNumber(input.precioGuiaCajonJuego),
+    precioBarraMl: normalizeNumber(input.precioBarraMl),
+    precioSoporteBarraUnidad: normalizeNumber(input.precioSoporteBarraUnidad),
+    costeTransporte: normalizeNumber(input.costeTransporte),
+    costeHoraTaller: normalizeNumber(input.costeHoraTaller),
+    horasTaller: normalizeNumber(input.horasTaller),
+    costeHoraMontaje: normalizeNumber(input.costeHoraMontaje),
+    horasMontaje: normalizeNumber(input.horasMontaje),
+    margenComercial: normalizeNumber(input.margenComercial),
+    precioJuanserM2: normalizeNumber(input.precioJuanserM2),
   };
 
   if (data.anchoCm <= 0 || data.altoCm <= 0 || data.fondoCm <= 0) {
@@ -199,6 +181,26 @@ function validateInput(input: CalculoArmarioInput) {
   ];
   if (countFields.some((value) => value < 0)) {
     throw new Error("Los contadores no pueden ser negativos.");
+  }
+
+  const economicFields = [
+    data.precioTableroM2,
+    data.precioTraseraM2,
+    data.precioCantoMl,
+    data.precioBisagraUnidad,
+    data.precioGuiaCajonJuego,
+    data.precioBarraMl,
+    data.precioSoporteBarraUnidad,
+    data.costeTransporte,
+    data.costeHoraTaller,
+    data.horasTaller,
+    data.costeHoraMontaje,
+    data.horasMontaje,
+    data.margenComercial,
+    data.precioJuanserM2,
+  ];
+  if (economicFields.some((value) => value < 0)) {
+    throw new Error("Los valores economicos no pueden ser negativos.");
   }
 
   if (data.numeroModulos < 1) {
@@ -234,7 +236,6 @@ function validateInput(input: CalculoArmarioInput) {
 
 function calculate(
   input: CalculoArmarioInput,
-  tariffLookup: TarifaLookup = new Map(),
 ): CalculoArmarioResult {
   const data = validateInput(input);
   const anchoM = data.anchoCm / 100;
@@ -279,16 +280,13 @@ function calculate(
         : "baja";
   const tablerosPrincipales = Math.ceil(metrosTableroPrincipal / standardBoardArea);
   const tablerosTrasera = Math.ceil(metrosTrasera / standardBoardArea);
-  const costeTableroPrincipal =
-    tablerosPrincipales * tariff(tariffLookup, activeTariffName(data));
-  const costeTrasera =
-    tablerosTrasera * tariff(tariffLookup, traseraTariffName(data));
-  const costeCanto = metrosCanto * tariff(tariffLookup, tarifaNames.canto);
-  const costeBisagras = bisagras * tariff(tariffLookup, tarifaNames.bisagra);
-  const costeGuias = guiasCajon * tariff(tariffLookup, tarifaNames.guiaCajon);
-  const costeBarras = metrosBarra * tariff(tariffLookup, tarifaNames.barraColgar);
-  const costeSoportes =
-    data.numeroBarras * 2 * tariff(tariffLookup, tarifaNames.soporteBarra);
+  const costeTableroPrincipal = metrosTableroPrincipal * data.precioTableroM2;
+  const costeTrasera = metrosTrasera * data.precioTraseraM2;
+  const costeCanto = metrosCanto * data.precioCantoMl;
+  const costeBisagras = bisagras * data.precioBisagraUnidad;
+  const costeGuias = guiasCajon * data.precioGuiaCajonJuego;
+  const costeBarras = metrosBarra * data.precioBarraMl;
+  const costeSoportes = data.numeroBarras * 2 * data.precioSoporteBarraUnidad;
   const costeMateriales =
     costeTableroPrincipal +
     costeTrasera +
@@ -297,20 +295,15 @@ function calculate(
     costeGuias +
     costeBarras +
     costeSoportes;
-  const horasTaller =
-    tablerosPrincipales * laborRules.horasPorTableroPrincipal +
-    bisagras * laborRules.horasPorBisagra +
-    data.numeroCajones * laborRules.horasPorCajon +
-    data.numeroPuertas * laborRules.horasPorPuerta;
-  const horasMontaje = data.numeroModulos * laborRules.horasMontajePorModulo;
+  const horasTaller = data.horasTaller;
+  const horasMontaje = data.horasMontaje;
   const costeManoObra =
-    horasTaller * tariff(tariffLookup, tarifaNames.horaTaller) +
-    horasMontaje * tariff(tariffLookup, tarifaNames.horaMontaje);
-  const costeTransporte = tariff(tariffLookup, tarifaNames.desplazamiento);
+    horasTaller * data.costeHoraTaller + horasMontaje * data.costeHoraMontaje;
+  const costeTransporte = data.costeTransporte;
   const costeTotal = costeMateriales + costeManoObra + costeTransporte;
-  const margenComercial = tariff(tariffLookup, tarifaNames.margenComercial);
+  const margenComercial = data.margenComercial;
   const precioCostes = costeTotal * (1 + margenComercial / 100);
-  const precioJuanser = metrosFrontales * tariff(tariffLookup, tarifaNames.precioArmarioM2);
+  const precioJuanser = metrosFrontales * data.precioJuanserM2;
   const precioFinal = precioCostes;
 
   return {
@@ -351,8 +344,7 @@ export async function saveCalculoArmario(
 ): Promise<CalculoArmarioState> {
   try {
     const data = validateInput(input);
-    const tariffLookup = await getTariffLookup();
-    const result = calculate(input, tariffLookup);
+    const result = calculate(input);
 
     const saved = await prisma.calculoArmario.create({
       data: {
@@ -368,6 +360,19 @@ export async function saveCalculoArmario(
         guiasCajon: result.guiasCajon,
         metrosBarra: result.metrosBarra,
         complejidad: result.complejidad,
+        precioTableroM2: data.precioTableroM2,
+        precioTraseraM2: data.precioTraseraM2,
+        precioCantoMl: data.precioCantoMl,
+        precioBisagraUnidad: data.precioBisagraUnidad,
+        precioGuiaCajonJuego: data.precioGuiaCajonJuego,
+        precioBarraMl: data.precioBarraMl,
+        precioSoporteBarraUnidad: data.precioSoporteBarraUnidad,
+        costeHoraTaller: data.costeHoraTaller,
+        horasTaller: data.horasTaller,
+        costeHoraMontaje: data.costeHoraMontaje,
+        horasMontaje: data.horasMontaje,
+        margenComercial: data.margenComercial,
+        precioJuanserM2: data.precioJuanserM2,
         costeMateriales: result.costeMateriales,
         costeManoObra: result.costeManoObra,
         costeTransporte: result.costeTransporte,
@@ -409,6 +414,19 @@ export async function saveCalculoArmario(
         guiasCajon: saved.guiasCajon,
         metrosBarra: Number(saved.metrosBarra.toString()),
         complejidad: saved.complejidad,
+        precioTableroM2: Number(saved.precioTableroM2.toString()),
+        precioTraseraM2: Number(saved.precioTraseraM2.toString()),
+        precioCantoMl: Number(saved.precioCantoMl.toString()),
+        precioBisagraUnidad: Number(saved.precioBisagraUnidad.toString()),
+        precioGuiaCajonJuego: Number(saved.precioGuiaCajonJuego.toString()),
+        precioBarraMl: Number(saved.precioBarraMl.toString()),
+        precioSoporteBarraUnidad: Number(saved.precioSoporteBarraUnidad.toString()),
+        costeHoraTaller: Number(saved.costeHoraTaller.toString()),
+        horasTaller: Number(saved.horasTaller.toString()),
+        costeHoraMontaje: Number(saved.costeHoraMontaje.toString()),
+        horasMontaje: Number(saved.horasMontaje.toString()),
+        margenComercial: Number(saved.margenComercial.toString()),
+        precioJuanserM2: Number(saved.precioJuanserM2.toString()),
         costeMateriales: Number(saved.costeMateriales.toString()),
         costeManoObra: Number(saved.costeManoObra.toString()),
         costeTransporte: Number(saved.costeTransporte.toString()),
