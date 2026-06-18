@@ -385,6 +385,12 @@ export default async function Home() {
               Tarifas internas
             </Link>
             <Link
+              href="/manual"
+              className="inline-flex h-11 items-center justify-center rounded-md border border-neutral-300 bg-white px-5 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
+            >
+              Manual técnico-comercial
+            </Link>
+            <Link
               href="/trabajos"
               className="inline-flex h-11 items-center justify-center rounded-md border border-neutral-300 bg-white px-5 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
             >
