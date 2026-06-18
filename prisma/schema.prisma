@@ -442,6 +442,41 @@ model Cita {
   @@index([origen])
 }
 
+model CalculoArmario {
+  id                      Int      @id @default(autoincrement())
+  fecha                   DateTime @default(now())
+  anchoCm                 Decimal  @db.Decimal(10, 2)
+  altoCm                  Decimal  @db.Decimal(10, 2)
+  fondoCm                 Decimal  @db.Decimal(10, 2)
+  tipoPuertas             String
+  numeroPuertas           Int
+  numeroModulos           Int
+  numeroCajones           Int
+  numeroBaldas            Int
+  numeroBarras            Int
+  tipoTrasera             String
+  materialPrincipal       String
+  grosorPrincipalMm       Int
+  observaciones           String?
+  metrosFrontales         Decimal  @db.Decimal(10, 3)
+  metrosTableroPrincipal  Decimal  @db.Decimal(10, 3)
+  tablerosPrincipales     Int
+  metrosTrasera           Decimal  @db.Decimal(10, 3)
+  tablerosTrasera         Int
+  metrosCanto             Decimal  @db.Decimal(10, 2)
+  bisagras                Int
+  guiasCajon              Int
+  metrosBarra             Decimal  @db.Decimal(10, 2)
+  complejidad             String
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@index([fecha])
+  @@index([createdAt])
+  @@index([tipoPuertas])
+  @@index([complejidad])
+}
+
 model TrabajoTerminado {
   id            Int                     @id @default(autoincrement())
   titulo        String
