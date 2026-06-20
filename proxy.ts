@@ -97,7 +97,7 @@ async function isValidSessionValue(value?: string | null) {
   }
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const cookieValue = request.cookies.get(sessionCookieName)?.value;
   const isAuthenticated = await isValidSessionValue(cookieValue);
@@ -121,6 +121,7 @@ export const config = {
     "/",
     "/login",
     "/clientes/:path*",
+    "/asistente/:path*",
     "/presupuestos/:path*",
     "/proveedores/:path*",
     "/trabajos/:path*",
@@ -128,5 +129,6 @@ export const config = {
     "/kanban/:path*",
     "/api/uploads/:path*",
     "/api/amelia/webhook",
+    "/api/asistente/:path*",
   ],
 };

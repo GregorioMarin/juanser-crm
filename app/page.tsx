@@ -325,6 +325,12 @@ export default async function Home() {
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end lg:max-w-3xl">
             <Link
+              href="/asistente"
+              className="inline-flex h-11 items-center justify-center rounded-md bg-neutral-950 px-5 text-sm font-semibold text-white transition hover:bg-neutral-800"
+            >
+              🤖 Asistente IA
+            </Link>
+            <Link
               href="/clientes"
               className="inline-flex h-11 items-center justify-center rounded-md bg-emerald-700 px-5 text-sm font-semibold text-white transition hover:bg-emerald-800"
             >

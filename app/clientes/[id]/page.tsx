@@ -42,6 +42,10 @@ import { DeleteFacturaVentaForm } from "@/app/facturas-venta/delete-factura-vent
 import { FacturaVentaForm } from "@/app/facturas-venta/factura-venta-form";
 import { registrarActividadCliente } from "@/app/lib/actividad";
 import { prisma } from "@/app/lib/prisma";
+import {
+  generatePresupuestoNumero,
+  presupuestoNumeroLockKey,
+} from "@/app/lib/presupuesto-numero";
 import { uploadsRootDir } from "@/app/lib/uploads";
 import { Prisma } from "@/app/generated/prisma/client";
 import {
@@ -315,42 +319,6 @@ function clienteEditableData(formData: FormData) {
 
 function roundCurrency(value: number) {
   return Math.round(value * 100) / 100;
-}
-
-const presupuestoNumeroPrefix = "PJ";
-const presupuestoNumeroPadding = 4;
-const presupuestoNumeroLockKey = 2026060801;
-
-function incrementPresupuestoNumero(numero: string | null, fecha: Date) {
-  const prefix = `${presupuestoNumeroPrefix}-${fecha.getFullYear()}-`;
-  if (!numero) {
-    return `${prefix}${"1".padStart(presupuestoNumeroPadding, "0")}`;
-  }
-
-  const match = numero.match(/(\d+)$/);
-  if (!match) {
-    return `${prefix}${"1".padStart(presupuestoNumeroPadding, "0")}`;
-  }
-
-  const [suffix] = match;
-  const nextNumber = Number(suffix) + 1;
-  const padding = Math.max(presupuestoNumeroPadding, suffix.length);
-
-  return `${prefix}${String(nextNumber).padStart(padding, "0")}`;
-}
-
-async function generatePresupuestoNumero(
-  fecha: Date,
-  tx: Pick<typeof prisma, "presupuesto"> = prisma,
-) {
-  const lastPresupuesto = await tx.presupuesto.findFirst({
-    orderBy: { id: "desc" },
-    select: {
-      numero: true,
-    },
-  });
-
-  return incrementPresupuestoNumero(lastPresupuesto?.numero ?? null, fecha);
 }
 
 type PresupuestoLineaData = {
