@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AsistenteClient } from "./asistente-client";
+import { AsistenteWorkspace } from "./asistente-workspace";
 
 export default function AsistentePage() {
   return (
@@ -28,9 +28,8 @@ export default function AsistentePage() {
             Revisión humana antes de guardar
           </span>
         </header>
-        <AsistenteClient />
+        <AsistenteWorkspace />
       </div>
     </main>
   );
 }
-

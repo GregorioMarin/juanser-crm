@@ -1,5 +1,6 @@
 import "server-only";
 
+import { extractOpenAIText } from "@/app/lib/openai-response";
 import type { AnalisisSolicitudIA } from "./types";
 
 const stringKeys = [
@@ -16,20 +17,6 @@ const stringKeys = [
   "urgencia",
   "fechaHora",
 ] as const;
-
-function collectTextValues(value: unknown): string[] {
-  if (!value || typeof value !== "object") return [];
-  if (
-    "type" in value &&
-    value.type === "output_text" &&
-    "text" in value &&
-    typeof value.text === "string"
-  ) {
-    return [value.text];
-  }
-  if (Array.isArray(value)) return value.flatMap(collectTextValues);
-  return Object.values(value).flatMap(collectTextValues);
-}
 
 function normalize(input: Record<string, unknown>): AnalisisSolicitudIA {
   const result: AnalisisSolicitudIA = {
@@ -158,12 +145,9 @@ ${texto.trim() || "(Sin texto; analiza el archivo adjunto)"}`;
     throw new Error("OpenAI no pudo analizar la solicitud. Inténtalo de nuevo.");
   }
 
-  const payload = (await response.json()) as Record<string, unknown> & {
-    output_text?: string;
-  };
-  const output = payload.output_text ?? collectTextValues(payload)[0];
+  const payload = await response.json();
+  const output = extractOpenAIText(payload);
   if (!output) throw new Error("La IA no devolvió un análisis legible.");
 
   return normalize(JSON.parse(output) as Record<string, unknown>);
 }
-
