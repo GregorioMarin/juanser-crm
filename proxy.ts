@@ -126,6 +126,8 @@ export const config = {
     "/proveedores/:path*",
     "/trabajos/:path*",
     "/citas/:path*",
+    "/gastos/:path*",
+    "/vencimientos/:path*",
     "/kanban/:path*",
     "/api/uploads/:path*",
     "/api/amelia/webhook",

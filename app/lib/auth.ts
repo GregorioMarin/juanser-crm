@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "crypto";
+import { cookies } from "next/headers";
 import {
   sessionCookieName,
   sessionDurationSeconds,
@@ -89,6 +90,15 @@ export function isValidCredentials(user: string, password: string) {
   }
 
   return safeEqual(user, expectedUser) && safeEqual(password, expectedPassword);
+}
+
+export async function requireAuthenticatedUser() {
+  const cookieStore = await cookies();
+  const value = cookieStore.get(sessionCookieName)?.value;
+
+  if (!isValidSessionValue(value)) {
+    throw new Error("No autorizado.");
+  }
 }
 
 export function sessionCookieOptions() {

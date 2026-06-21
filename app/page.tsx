@@ -10,6 +10,7 @@ import {
 import { countCitasPendientes } from "./citas/data";
 import { prisma } from "@/app/lib/prisma";
 import { presupuestoPendienteRespuestaWhere } from "@/app/presupuestos/estado-comercial";
+import { generateVencimientosHasta } from "@/app/vencimientos/recurrence";
 
 function currentMonthRange() {
   const now = new Date();
@@ -41,6 +42,10 @@ async function getHomeMetrics() {
   const month = currentMonthRange();
   const year = currentYearRange();
   const recent = recentRange(30);
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const nextThirtyDays = new Date(today);
+  nextThirtyDays.setUTCDate(nextThirtyDays.getUTCDate() + 30);
   const [
     gastosMes,
     presupuestosPendientes,
@@ -62,6 +67,9 @@ async function getHomeMetrics() {
     facturacionTotal,
     facturacionAno,
     facturasPendientesCobro,
+    proximosVencimientos,
+    recurrentesActivos,
+    vencimientosPendientes,
   ] = await Promise.all([
     prisma.gasto.aggregate({
       where: { fecha: { gte: month.from, lt: month.to } },
@@ -125,6 +133,14 @@ async function getHomeMetrics() {
     prisma.facturaVenta.count({
       where: { estadoCobro: { in: ["PENDIENTE", "PARCIAL"] } },
     }),
+    prisma.vencimiento.count({
+      where: {
+        estado: "PENDIENTE",
+        fechaVencimiento: { gte: today, lte: nextThirtyDays },
+      },
+    }),
+    prisma.vencimientoRecurrente.count({ where: { activo: true } }),
+    prisma.vencimiento.count({ where: { estado: "PENDIENTE" } }),
   ]);
 
   return {
@@ -150,6 +166,9 @@ async function getHomeMetrics() {
     facturacionTotal: facturacionTotal._sum.total,
     facturacionAno: facturacionAno._sum.total,
     facturasPendientesCobro,
+    proximosVencimientos,
+    recurrentesActivos,
+    vencimientosPendientes,
   };
 }
 
@@ -222,6 +241,7 @@ function PendingCard({
 
 export default async function Home() {
   await connection();
+  await generateVencimientosHasta();
 
   const metrics = await getHomeMetrics();
   const comercialPendientes = [
@@ -361,6 +381,12 @@ export default async function Home() {
               Gastos y Compras
             </Link>
             <Link
+              href="/vencimientos/recurrentes"
+              className="inline-flex h-11 items-center justify-center rounded-md border border-neutral-300 bg-white px-5 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
+            >
+              Vencimientos recurrentes
+            </Link>
+            <Link
               href="/facturas-venta"
               className="inline-flex h-11 items-center justify-center rounded-md border border-neutral-300 bg-white px-5 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
             >
@@ -413,7 +439,7 @@ export default async function Home() {
           </div>
         </header>
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <SummaryCard
             href="/gastos"
             label="Gastos del mes"
@@ -442,6 +468,22 @@ export default async function Home() {
             detail={`${formatMoney(metrics.facturacionTotal)} total · ${formatMoney(
               metrics.facturacionAno,
             )} año · ${metrics.facturasPendientesCobro} pendientes`}
+          />
+          <SummaryCard
+            href="/vencimientos?estado=PENDIENTE"
+            label="Próximos vencimientos"
+            value={String(metrics.proximosVencimientos)}
+            detail="En los próximos 30 días"
+          />
+          <SummaryCard
+            href="/vencimientos/recurrentes"
+            label="Recurrentes activos"
+            value={String(metrics.recurrentesActivos)}
+          />
+          <SummaryCard
+            href="/vencimientos?estado=PENDIENTE"
+            label="Pendientes de pago"
+            value={String(metrics.vencimientosPendientes)}
           />
         </section>
 

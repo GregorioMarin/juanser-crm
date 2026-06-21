@@ -81,6 +81,26 @@ enum ManualNivel {
   TALLER
 }
 
+enum FrecuenciaVencimiento {
+  SEMANAL
+  MENSUAL
+  BIMESTRAL
+  TRIMESTRAL
+  SEMESTRAL
+  ANUAL
+}
+
+enum EstadoVencimiento {
+  PENDIENTE
+  PAGADO
+  CANCELADO
+}
+
+enum OrigenVencimiento {
+  MANUAL
+  RECURRENTE
+}
+
 model Cliente {
   id               Int                @id @default(autoincrement())
   nombre           String
@@ -329,34 +349,90 @@ model ActividadProveedor {
 }
 
 model TitularGasto {
-  id            Int      @id @default(autoincrement())
-  codigoInterno String   @unique
-  nombre        String
-  nif           String?
-  direccion     String?
-  telefono      String?
-  email         String?
-  activo        Boolean  @default(true)
-  gastos        Gasto[]
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                      Int                     @id @default(autoincrement())
+  codigoInterno           String                  @unique
+  nombre                  String
+  nif                     String?
+  direccion               String?
+  telefono                String?
+  email                   String?
+  activo                  Boolean                 @default(true)
+  gastos                  Gasto[]
+  vencimientosRecurrentes VencimientoRecurrente[]
+  vencimientos            Vencimiento[]
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
 
   @@index([nombre])
   @@index([activo])
 }
 
+model VencimientoRecurrente {
+  id                  String                @id @default(cuid())
+  titulo              String
+  descripcion         String?
+  categoria           String
+  proveedor           String?
+  titularGastoId      Int?
+  importeEstimado     Decimal               @db.Decimal(12, 2)
+  frecuencia          FrecuenciaVencimiento
+  intervalo           Int                   @default(1)
+  diaMes              Int?
+  mesAplicable        Int?
+  fechaInicio         DateTime
+  fechaFin            DateTime?
+  activo              Boolean               @default(true)
+  ultimoGeneradoHasta DateTime?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  titularGasto        TitularGasto?         @relation(fields: [titularGastoId], references: [id], onDelete: SetNull)
+  vencimientos        Vencimiento[]
+
+  @@index([activo])
+  @@index([fechaInicio])
+  @@index([fechaFin])
+  @@index([categoria])
+  @@index([titularGastoId])
+}
+
+model Vencimiento {
+  id               String                 @id @default(cuid())
+  recurrenteId     String?
+  titulo           String
+  descripcion      String?
+  categoria        String
+  proveedor        String?
+  titularGastoId   Int?
+  importe          Decimal                @db.Decimal(12, 2)
+  fechaVencimiento DateTime
+  estado           EstadoVencimiento      @default(PENDIENTE)
+  origen           OrigenVencimiento      @default(MANUAL)
+  fechaPago        DateTime?
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  recurrente       VencimientoRecurrente? @relation(fields: [recurrenteId], references: [id], onDelete: Restrict)
+  titularGasto     TitularGasto?          @relation(fields: [titularGastoId], references: [id], onDelete: SetNull)
+
+  @@unique([recurrenteId, fechaVencimiento])
+  @@index([fechaVencimiento])
+  @@index([estado])
+  @@index([origen])
+  @@index([categoria])
+  @@index([titularGastoId])
+}
+
 model Gasto {
-  id              String       @id @default(cuid())
-  tipoGasto       String       @default("Otros")
+  id              String        @id @default(cuid())
+  tipoGasto       String        @default("Otros")
   proveedor       String?
   fecha           DateTime?
   tipoDocumento   String?
-  numeroInterno   String?      @unique
+  numeroInterno   String?       @unique
   numeroDocumento String?
   categoria       String?
-  baseImponible   Decimal?     @db.Decimal(10, 2)
-  iva             Decimal?     @db.Decimal(10, 2)
-  total           Decimal?     @db.Decimal(10, 2)
+  baseImponible   Decimal?      @db.Decimal(10, 2)
+  iva             Decimal?      @db.Decimal(10, 2)
+  total           Decimal?      @db.Decimal(10, 2)
   formaPago       String?
   descripcion     String?
   observaciones   String?
@@ -364,8 +440,8 @@ model Gasto {
   titularGastoId  Int?
   titularGasto    TitularGasto? @relation(fields: [titularGastoId], references: [id], onDelete: SetNull)
   lineas          GastoLinea[]
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   @@index([proveedor])
   @@index([tipoGasto])
@@ -449,53 +525,53 @@ model Cita {
 }
 
 model CalculoArmario {
-  id                      Int      @id @default(autoincrement())
-  fecha                   DateTime @default(now())
-  anchoCm                 Decimal  @db.Decimal(10, 2)
-  altoCm                  Decimal  @db.Decimal(10, 2)
-  fondoCm                 Decimal  @db.Decimal(10, 2)
-  tipoPuertas             String
-  numeroPuertas           Int
-  numeroModulos           Int
-  numeroCajones           Int
-  numeroBaldas            Int
-  numeroBarras            Int
-  tipoTrasera             String
-  materialPrincipal       String
-  grosorPrincipalMm       Int
-  observaciones           String?
-  metrosFrontales         Decimal  @db.Decimal(10, 3)
-  metrosTableroPrincipal  Decimal  @db.Decimal(10, 3)
-  tablerosPrincipales     Int
-  metrosTrasera           Decimal  @db.Decimal(10, 3)
-  tablerosTrasera         Int
-  metrosCanto             Decimal  @db.Decimal(10, 2)
-  bisagras                Int
-  guiasCajon              Int
-  metrosBarra             Decimal  @db.Decimal(10, 2)
-  complejidad             String
-  precioTableroM2         Decimal  @default(0) @db.Decimal(12, 2)
-  precioTraseraM2         Decimal  @default(0) @db.Decimal(12, 2)
-  precioCantoMl           Decimal  @default(0) @db.Decimal(12, 2)
-  precioBisagraUnidad     Decimal  @default(0) @db.Decimal(12, 2)
-  precioGuiaCajonJuego    Decimal  @default(0) @db.Decimal(12, 2)
-  precioBarraMl           Decimal  @default(0) @db.Decimal(12, 2)
-  precioSoporteBarraUnidad Decimal @default(0) @db.Decimal(12, 2)
-  costeHoraTaller         Decimal  @default(0) @db.Decimal(12, 2)
-  horasTaller             Decimal  @default(0) @db.Decimal(10, 2)
-  costeHoraMontaje        Decimal  @default(0) @db.Decimal(12, 2)
-  horasMontaje            Decimal  @default(0) @db.Decimal(10, 2)
-  margenComercial         Decimal  @default(0) @db.Decimal(5, 2)
-  precioJuanserM2         Decimal  @default(0) @db.Decimal(12, 2)
-  costeMateriales         Decimal  @default(0) @db.Decimal(12, 2)
-  costeManoObra           Decimal  @default(0) @db.Decimal(12, 2)
-  costeTransporte         Decimal  @default(0) @db.Decimal(12, 2)
-  costeTotal              Decimal  @default(0) @db.Decimal(12, 2)
-  precioCostes            Decimal  @default(0) @db.Decimal(12, 2)
-  precioJuanser           Decimal  @default(0) @db.Decimal(12, 2)
-  precioFinal             Decimal  @default(0) @db.Decimal(12, 2)
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
+  id                       Int      @id @default(autoincrement())
+  fecha                    DateTime @default(now())
+  anchoCm                  Decimal  @db.Decimal(10, 2)
+  altoCm                   Decimal  @db.Decimal(10, 2)
+  fondoCm                  Decimal  @db.Decimal(10, 2)
+  tipoPuertas              String
+  numeroPuertas            Int
+  numeroModulos            Int
+  numeroCajones            Int
+  numeroBaldas             Int
+  numeroBarras             Int
+  tipoTrasera              String
+  materialPrincipal        String
+  grosorPrincipalMm        Int
+  observaciones            String?
+  metrosFrontales          Decimal  @db.Decimal(10, 3)
+  metrosTableroPrincipal   Decimal  @db.Decimal(10, 3)
+  tablerosPrincipales      Int
+  metrosTrasera            Decimal  @db.Decimal(10, 3)
+  tablerosTrasera          Int
+  metrosCanto              Decimal  @db.Decimal(10, 2)
+  bisagras                 Int
+  guiasCajon               Int
+  metrosBarra              Decimal  @db.Decimal(10, 2)
+  complejidad              String
+  precioTableroM2          Decimal  @default(0) @db.Decimal(12, 2)
+  precioTraseraM2          Decimal  @default(0) @db.Decimal(12, 2)
+  precioCantoMl            Decimal  @default(0) @db.Decimal(12, 2)
+  precioBisagraUnidad      Decimal  @default(0) @db.Decimal(12, 2)
+  precioGuiaCajonJuego     Decimal  @default(0) @db.Decimal(12, 2)
+  precioBarraMl            Decimal  @default(0) @db.Decimal(12, 2)
+  precioSoporteBarraUnidad Decimal  @default(0) @db.Decimal(12, 2)
+  costeHoraTaller          Decimal  @default(0) @db.Decimal(12, 2)
+  horasTaller              Decimal  @default(0) @db.Decimal(10, 2)
+  costeHoraMontaje         Decimal  @default(0) @db.Decimal(12, 2)
+  horasMontaje             Decimal  @default(0) @db.Decimal(10, 2)
+  margenComercial          Decimal  @default(0) @db.Decimal(5, 2)
+  precioJuanserM2          Decimal  @default(0) @db.Decimal(12, 2)
+  costeMateriales          Decimal  @default(0) @db.Decimal(12, 2)
+  costeManoObra            Decimal  @default(0) @db.Decimal(12, 2)
+  costeTransporte          Decimal  @default(0) @db.Decimal(12, 2)
+  costeTotal               Decimal  @default(0) @db.Decimal(12, 2)
+  precioCostes             Decimal  @default(0) @db.Decimal(12, 2)
+  precioJuanser            Decimal  @default(0) @db.Decimal(12, 2)
+  precioFinal              Decimal  @default(0) @db.Decimal(12, 2)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
 
   @@index([fecha])
   @@index([createdAt])
