@@ -440,6 +440,7 @@ model Gasto {
   titularGastoId  Int?
   titularGasto    TitularGasto? @relation(fields: [titularGastoId], references: [id], onDelete: SetNull)
   lineas          GastoLinea[]
+  archivos        GastoArchivo[]
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
@@ -450,6 +451,21 @@ model Gasto {
   @@index([numeroInterno])
   @@index([categoria])
   @@index([titularGastoId])
+}
+
+model GastoArchivo {
+  id        String   @id @default(cuid())
+  gastoId   String
+  url       String
+  filename  String
+  mimeType  String
+  size      Int
+  orden     Int
+  createdAt DateTime @default(now())
+  gasto     Gasto    @relation(fields: [gastoId], references: [id], onDelete: Cascade)
+
+  @@unique([gastoId, orden])
+  @@index([gastoId])
 }
 
 model GastoLinea {

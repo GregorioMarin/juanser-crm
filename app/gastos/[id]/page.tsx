@@ -87,6 +87,7 @@ export default async function GastoPage({ params }: GastoPageProps) {
       where: { id },
       include: {
         titularGasto: { select: { id: true, codigoInterno: true, nombre: true } },
+        archivos: { orderBy: { orden: "asc" } },
         lineas: {
           orderBy: { createdAt: "asc" },
           include: {
@@ -116,7 +117,12 @@ export default async function GastoPage({ params }: GastoPageProps) {
     notFound();
   }
 
-  const archivoEsImagen = /\.(jpe?g|png|webp)$/i.test(gasto.archivoUrl ?? "");
+  const archivos = [
+    ...(gasto.archivoUrl && !gasto.archivos.some((archivo) => archivo.url === gasto.archivoUrl)
+      ? [{ id: "legacy", url: gasto.archivoUrl, filename: gasto.archivoUrl.split("/").pop() ?? "Archivo original", mimeType: /\.pdf$/i.test(gasto.archivoUrl) ? "application/pdf" : "image/legacy", size: 0, orden: -1, createdAt: gasto.createdAt }]
+      : []),
+    ...gasto.archivos,
+  ];
   const isMateriales = gasto.tipoGasto === "Materiales";
 
   return (
@@ -164,24 +170,13 @@ export default async function GastoPage({ params }: GastoPageProps) {
             <DetailItem label="Total" value={formatMoney(gasto.total)} />
             <DetailItem label="Forma de pago" value={gasto.formaPago} />
             <DetailItem label="Descripción" value={gasto.descripcion} />
-            <DetailItem
-              label="Titular del gasto"
-              value={
-                gasto.titularGasto
-                  ? `${gasto.titularGasto.nombre} · ${gasto.titularGasto.codigoInterno}`
-                  : null
-              }
-            />
+            <DetailItem label="Titular del gasto" value={gasto.titularGasto ? `${gasto.titularGasto.nombre} · ${gasto.titularGasto.codigoInterno}` : null} />
             <DetailItem label="Creado" value={formatDateTime(gasto.createdAt)} />
             <DetailItem label="Última modificación" value={formatDateTime(gasto.updatedAt)} />
           </dl>
           <div className="mt-4 rounded-md border border-neutral-200 bg-neutral-50 px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
-              Observaciones
-            </p>
-            <p className="mt-2 whitespace-pre-wrap text-sm text-neutral-800">
-              {gasto.observaciones || "-"}
-            </p>
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">Observaciones</p>
+            <p className="mt-2 whitespace-pre-wrap text-sm text-neutral-800">{gasto.observaciones || "-"}</p>
           </div>
         </section>
 
@@ -308,44 +303,29 @@ export default async function GastoPage({ params }: GastoPageProps) {
         ) : null}
 
         <section className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
-          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h2 className="text-xl font-semibold text-neutral-950">
-                Archivo original
-              </h2>
-            </div>
-            {gasto.archivoUrl ? (
-              <a
-                href={gasto.archivoUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex h-10 items-center justify-center rounded-md bg-neutral-950 px-4 text-sm font-semibold text-white transition hover:bg-neutral-800"
-              >
-                Abrir archivo
-              </a>
-            ) : null}
+          <div className="mb-4">
+            <h2 className="text-xl font-semibold text-neutral-950">Archivos originales</h2>
+            <p className="mt-1 text-sm text-neutral-500">{archivos.length === 1 ? "1 archivo asociado" : `${archivos.length} archivos asociados`}</p>
           </div>
-
-          {gasto.archivoUrl ? (
-            archivoEsImagen ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={gasto.archivoUrl}
-                alt={`Archivo de ${gasto.proveedor ?? "gasto"}`}
-                className="max-h-[620px] w-full rounded-md border border-neutral-200 object-contain"
-              />
-            ) : (
-              <iframe
-                title={`Archivo de ${gasto.proveedor ?? "gasto"}`}
-                src={gasto.archivoUrl}
-                className="h-[620px] w-full rounded-md border border-neutral-200 bg-white"
-              />
-            )
-          ) : (
-            <p className="rounded-md border border-dashed border-neutral-300 px-4 py-6 text-sm text-neutral-500">
-              Este gasto no tiene archivo asociado.
-            </p>
-          )}
+          {archivos.length > 0 ? (
+            <div className="grid gap-5">
+              {archivos.map((archivo, index) => {
+                const esImagen = archivo.mimeType.startsWith("image/") || /\.(jpe?g|png|webp)$/i.test(archivo.url);
+                return (
+                  <article key={archivo.id} className="rounded-md border border-neutral-200 p-3">
+                    <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="text-sm font-semibold text-neutral-950">{index + 1}. {archivo.filename}</p>
+                      <a href={archivo.url} target="_blank" rel="noreferrer" className="inline-flex h-9 w-fit items-center justify-center rounded-md bg-neutral-950 px-3 text-sm font-semibold text-white hover:bg-neutral-800">Abrir archivo</a>
+                    </div>
+                    {esImagen ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={archivo.url} alt={archivo.filename} className="max-h-[620px] w-full rounded-md object-contain" />
+                    ) : <iframe title={archivo.filename} src={archivo.url} className="h-[620px] w-full rounded-md bg-white" />}
+                  </article>
+                );
+              })}
+            </div>
+          ) : <p className="rounded-md border border-dashed border-neutral-300 px-4 py-6 text-sm text-neutral-500">Este gasto no tiene archivos asociados.</p>}
         </section>
       </div>
     </main>

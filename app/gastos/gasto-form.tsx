@@ -16,7 +16,8 @@ import {
   tiposDocumentoGasto,
   tiposGasto,
 } from "@/app/gastos/constants";
-import { type GastoFormState } from "@/app/gastos/actions";
+import { type GastoArchivoPayload, type GastoFormState } from "@/app/gastos/actions";
+import { MultiFileInput } from "@/app/gastos/multi-file-input";
 import {
   categoriasMaterial,
   unidadesMaterial,
@@ -207,6 +208,7 @@ type GastoEditable = Pick<
   | "titularGastoId"
 > & {
   lineas?: GastoLinea[];
+  archivos?: GastoArchivoPayload[];
 };
 
 function valuesFromGasto(gasto?: GastoEditable | null): GastoAnalizado {
@@ -736,6 +738,7 @@ export function GastoForm({
   submitLabel,
   data,
   archivoUrl,
+  archivos = [],
   gasto,
   materiales = [],
   titularesGasto = [],
@@ -747,6 +750,7 @@ export function GastoForm({
   submitLabel: string;
   data?: GastoAnalizado;
   archivoUrl?: string | null;
+  archivos?: GastoArchivoPayload[];
   gasto?: GastoEditable | null;
   materiales?: MaterialOption[];
   titularesGasto?: TitularGastoOption[];
@@ -825,6 +829,9 @@ export function GastoForm({
     >
       {gasto ? <input type="hidden" name="gastoId" value={gasto.id} /> : null}
       <input type="hidden" name="archivoUrl" value={fileUrl} />
+      {archivos.map((archivo) => (
+        <input key={archivo.url} type="hidden" name="archivoAdjunto" value={JSON.stringify(archivo)} />
+      ))}
 
       <section className="grid gap-4">
         <h3 className="text-lg font-semibold text-neutral-950">
@@ -991,10 +998,10 @@ export function GastoForm({
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h4 className="text-base font-semibold text-neutral-950">
-                  Archivo del albarán
+                  Archivos del albarán o factura
                 </h4>
                 <p className="mt-1 text-sm text-neutral-500">
-                  Puedes subir un JPG, PNG, WEBP o PDF para reemplazar la referencia actual.
+                  Añade nuevas hojas o documentos al mismo gasto (hasta 10 en total).
                 </p>
               </div>
               {fileUrl ? (
@@ -1004,18 +1011,24 @@ export function GastoForm({
                   rel="noreferrer"
                   className="inline-flex h-9 w-fit items-center justify-center rounded-md border border-neutral-300 bg-white px-3 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
                 >
-                  Ver archivo actual
+                  Ver primer archivo
                 </a>
               ) : null}
             </div>
-            <label className="flex flex-col gap-1.5">
-              <span className={labelClass}>Nuevo archivo</span>
-              <input
-                className={inputClass}
-                name="archivo"
-                type="file"
-                accept="image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf"
-              />
+            {gasto.archivos && gasto.archivos.length > 0 ? (
+              <ol className="grid gap-2 text-sm">
+                {gasto.archivos.map((archivo, index) => (
+                  <li key={archivo.url}>
+                    <a href={archivo.url} target="_blank" rel="noreferrer" className="font-semibold text-emerald-700 hover:text-emerald-900">
+                      {index + 1}. {archivo.filename}
+                    </a>
+                  </li>
+                ))}
+              </ol>
+            ) : null}
+            <label className="grid gap-1.5">
+              <span className={labelClass}>Añadir archivos</span>
+              <MultiFileInput />
             </label>
           </div>
         ) : null}

@@ -20,6 +20,7 @@ export default async function EditarGastoPage({ params }: EditarGastoPageProps) 
         lineas: {
           orderBy: { createdAt: "asc" },
         },
+        archivos: { orderBy: { orden: "asc" } },
       },
     }),
     prisma.material.findMany({

@@ -28,7 +28,16 @@ export type AnalizarGastoState = {
   archivoUrl: string | null;
   fileName: string | null;
   mimeType: string | null;
+  archivos: GastoArchivoPayload[];
   data: GastoAnalizado;
+};
+
+export type GastoArchivoPayload = {
+  url: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  orden: number;
 };
 
 export type GastoFormState = {
@@ -42,6 +51,7 @@ export type MaterialLineaState = {
 };
 
 const maxDocumentSize = 20 * 1024 * 1024;
+const maxDocumentFiles = 10;
 const allowedExtensions = ["jpg", "jpeg", "png", "webp", "pdf"] as const;
 const allowedMimeTypes = [
   "image/jpeg",
@@ -573,56 +583,118 @@ function safeFileName(name: string) {
   return safe || "gasto";
 }
 
-function optionalDocumentFile(formData: FormData) {
-  const file = formData.get("archivo");
-  if (!(file instanceof File) || file.size === 0) {
-    return null;
-  }
-
+function validateDocumentFile(file: File, index: number) {
   if (file.size > maxDocumentSize) {
-    throw new Error("El archivo no puede superar 20 MB.");
+    throw new Error(`El archivo ${index + 1} (${file.name}) no puede superar 20 MB.`);
   }
 
   const extension = file.name.split(".").pop()?.toLowerCase();
   const validExtension =
-    extension &&
-    allowedExtensions.includes(extension as (typeof allowedExtensions)[number]);
+    extension && allowedExtensions.includes(extension as (typeof allowedExtensions)[number]);
   const validMimeType = !file.type || allowedMimeTypes.includes(file.type);
   if (!validExtension || !validMimeType) {
-    throw new Error("Solo se aceptan JPG, JPEG, PNG, WEBP o PDF.");
+    throw new Error(`El archivo ${index + 1} (${file.name}) no es válido. Solo se aceptan JPG, JPEG, PNG, WEBP o PDF.`);
   }
 
   return { file, extension };
 }
 
-function requiredDocumentFile(formData: FormData) {
-  const documentFile = optionalDocumentFile(formData);
-  if (!documentFile) {
-    throw new Error("Selecciona una imagen o PDF.");
+function documentFiles(formData: FormData) {
+  const multiple = formData
+    .getAll("archivos")
+    .filter((value): value is File => value instanceof File && value.size > 0);
+  const legacy = formData.get("archivo");
+  const files = multiple.length > 0
+    ? multiple
+    : legacy instanceof File && legacy.size > 0
+      ? [legacy]
+      : [];
+
+  if (files.length > maxDocumentFiles) {
+    throw new Error(`Has seleccionado ${files.length} archivos. El máximo por documento es 10.`);
   }
 
-  return documentFile;
+  return files.map(validateDocumentFile);
 }
 
-async function saveGastoFile(file: File, extension: string) {
+function requiredDocumentFiles(formData: FormData) {
+  const files = documentFiles(formData);
+  if (files.length === 0) {
+    throw new Error("Selecciona al menos una imagen o PDF.");
+  }
+  return files;
+}
+
+async function saveGastoFile(file: File, extension: string, orden: number) {
   const uploadId = randomUUID();
   const fileName = `${Date.now()}-${safeFileName(file.name)}.${extension}`;
   const uploadDir = gastoUploadsDir(uploadId);
   const filePath = path.join(uploadDir, fileName);
-  const archivoUrl = gastoUploadUrl(uploadId, fileName);
+  const url = gastoUploadUrl(uploadId, fileName);
 
   await mkdir(uploadDir, { recursive: true });
   const buffer = Buffer.from(await file.arrayBuffer());
   await writeFile(filePath, buffer);
-
   const savedFile = await stat(filePath);
   if (!savedFile.isFile() || savedFile.size === 0) {
-    throw new Error("El archivo no se ha guardado correctamente.");
+    throw new Error(`El archivo ${file.name} no se ha guardado correctamente.`);
   }
 
-  return { archivoUrl, buffer };
+  return {
+    buffer,
+    payload: {
+      url,
+      filename: file.name,
+      mimeType: file.type || "application/octet-stream",
+      size: savedFile.size,
+      orden,
+    } satisfies GastoArchivoPayload,
+  };
 }
 
+async function saveGastoFiles(
+  files: ReturnType<typeof documentFiles>,
+  startOrder = 0,
+) {
+  const saved: Array<Awaited<ReturnType<typeof saveGastoFile>> & { file: File }> = [];
+  for (const [index, item] of files.entries()) {
+    try {
+      saved.push({
+        ...(await saveGastoFile(item.file, item.extension, startOrder + index)),
+        file: item.file,
+      });
+    } catch (error) {
+      throw new Error(
+        `No se pudo procesar el archivo ${index + 1} (${item.file.name}): ${error instanceof Error ? error.message : "error desconocido"}`,
+      );
+    }
+  }
+  return saved;
+}
+
+function attachedFilesData(formData: FormData) {
+  const values = formData.getAll("archivoAdjunto");
+  if (values.length > maxDocumentFiles) {
+    throw new Error("El máximo por documento es 10 archivos.");
+  }
+
+  return values.map((value, index): GastoArchivoPayload => {
+    if (typeof value !== "string") throw new Error("Adjunto no válido.");
+    let parsed: Partial<GastoArchivoPayload>;
+    try {
+      parsed = JSON.parse(value) as Partial<GastoArchivoPayload>;
+    } catch {
+      throw new Error(`El adjunto ${index + 1} no es válido.`);
+    }
+    if (
+      !parsed.url || !uploadFilePathFromUrl(parsed.url) || !parsed.filename ||
+      !parsed.mimeType || typeof parsed.size !== "number" || parsed.size < 1
+    ) {
+      throw new Error(`El adjunto ${index + 1} no es válido.`);
+    }
+    return { ...parsed, orden: index } as GastoArchivoPayload;
+  });
+}
 function uploadFilePathFromUrl(url: string) {
   const prefix = "/api/uploads/gastos/";
   if (!url.startsWith(prefix) || url.includes("\\") || url.includes("..")) {
@@ -792,14 +864,12 @@ function collectTextValues(value: unknown): string[] {
   return Object.values(value).flatMap(collectTextValues);
 }
 
-async function analyzeWithOpenAI(file: File, buffer: Buffer) {
+async function analyzeWithOpenAI(files: Array<{ file: File; buffer: Buffer }>) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     throw new Error("OPENAI_API_KEY no esta configurada.");
   }
 
-  const base64 = buffer.toString("base64");
-  const isPdf = file.type === "application/pdf";
   const materialPrefixes = categoriasMaterial
     .map((categoria) => `${categoria}: ${prefijoCategoriaMaterial(categoria)}`)
     .join(", ");
@@ -821,7 +891,7 @@ async function analyzeWithOpenAI(file: File, buffer: Buffer) {
           )
           .join("; ")
       : "No hay materiales internos creados todavia.";
-  const prompt = `Extrae datos de este documento de compra de Carpinteria Juanser.
+  const prompt = `Estos archivos pertenecen al mismo albarán/factura. Analiza todas las páginas conjuntamente. Extrae proveedor, fecha, número de documento, líneas, importes, IVA, descuentos, portes y total final como un único documento.` + "\n" + `Extrae datos de este documento de compra de Carpinteria Juanser.
 Devuelve solo JSON estricto con estas claves: tipoGasto, proveedorTipo, proveedor, fecha, tipoDocumento, numeroDocumento, categoria, baseImponible, iva, total, formaPago, descripcion, observaciones, lineas.
 Reglas generales: procesa todas las paginas/hojas del PDF o imagen recibida; si varias paginas pertenecen al mismo albaran o factura, devuelve un unico documento con todas las lineas de todas las paginas en el array lineas. No inventes datos ni completes por intuicion; si un dato no se puede leer con claridad devuelve null en ese campo; fecha en YYYY-MM-DD si aparece; importes como texto decimal; tipoDocumento solo ALBARAN, FACTURA, TICKET u OTRO; si dudas entre albaran y factura devuelve null; categoria solo una de: ${categoriasGasto.join(", ")}; tipoGasto solo uno de: ${tiposGasto.join(", ")}; proveedorTipo solo SERRERIA_ALMERIENSE, VERDU o GENERICO.
 Clasificacion tipoGasto: usa Materiales para proveedores de tableros, cantos, herrajes, barnices, ferreteria o compras trazables como articulo interno. Usa Vehículos para combustible, taller o reparación de vehículo. Usa Personal para Seguridad Social, nóminas o personal. Usa Suministros para luz, agua, telefonía o energía. Usa Servicios externos, Alquileres, Impuestos, Herramientas, Maquinaria u Otros cuando corresponda.
@@ -831,17 +901,19 @@ Reglas especificas para proveedor Serrería Almeriense o Serreria Almeriense: pr
 Reglas especificas para proveedor Verdú o Verdu: proveedorTipo=VERDU. Lee la tabla respetando columnas CÓDIGO, DENOMINACIÓN, CANTIDAD, UM, BULTOS, PRECIO, DTO, IMPORTE. Conserva DTO en descuentoPorcentaje. Conserva siempre el CÓDIGO real del proveedor en codigoMaterialDetectado; nunca lo sustituyas por HER, TAB, CAN, FER, OTR, HER-MAQ ni por codigos internos. Para Verdú codigoInterno debe ser null salvo coincidencia interna realmente segura, pero codigoMaterialDetectado debe seguir siendo el codigo del proveedor. La DENOMINACIÓN completa debe ir en descripcion, sin truncar ni resumir. Si la denominacion ocupa varias lineas consecutivas del mismo articulo, unelas en una sola descripcion con espacios manteniendo todo el texto visible. Conserva sufijos finales de descripcion como "6-50 NI", "6-20 NI", "M6-8 ZN" y similares. Prioriza la descripcion completa aunque sea larga. Si UM=CIEN: unidadMedidaProveedor="CIEN", cantidad=valor original, piezas=cantidad*100, precioUnidadMedida=PRECIO, importe=IMPORTE. Si UM=UNID: unidadMedidaProveedor="UNID", cantidad=valor original, piezas=cantidad, precioUnidadMedida=PRECIO, importe=IMPORTE. Para Verdú devuelve precioUnitario=null salvo que el documento tenga una columna claramente de precio unitario distinta de PRECIO. Si descripcion contiene PORTES, esPorte=true, materialId=null, codigoInterno=null y codigoMaterialDetectado=null. Cuando aparezca una linea tipo "** ARTÍCULOS PENDIENTES DE SERVIR..." marca todas las lineas posteriores como esPendienteServir=true hasta que el documento indique otro bloque recibido. Cuando aparezca "N/PEDIDO: XXXXXXX", guarda ese numero en pedidoProveedor para las lineas siguientes hasta el proximo pedido. importeNeto/baseImponible debe coincidir con la suma de importes de lineas no pendientes; guarda baseImponible, iva y total desde el pie del documento si existen. Ejemplo Verdú: 423.33 | TUERCA EMBOLO 2T DOSTE D10-13 M6 ZN | 1,00 | CIEN | 4,77708 | 10 | 4,30 debe salir con codigoMaterialDetectado="423.33", descripcion="TUERCA EMBOLO 2T DOSTE D10-13 M6 ZN", cantidad=1.00, unidadMedidaProveedor=CIEN, piezas=100.00, precioUnidadMedida=4.77708, descuentoPorcentaje=10, importe=4.30.
 Reglas para proveedores GENERICO: no fuerces columnas de m2. Usa cantidad, unidadMedidaProveedor, precioUnidadMedida e importe si aparecen; deja piezas y medida en null salvo que sean campos evidentes del documento.`;
 
-  const fileContent = isPdf
-    ? {
-        type: "input_file",
-        filename: file.name,
-        file_data: `data:application/pdf;base64,${base64}`,
-      }
-    : {
-        type: "input_image",
-        image_url: `data:${file.type || "image/jpeg"};base64,${base64}`,
-      };
-
+  const fileContents = files.map(({ file, buffer }) => {
+    const base64 = buffer.toString("base64");
+    return file.type === "application/pdf"
+      ? {
+          type: "input_file" as const,
+          filename: file.name,
+          file_data: `data:application/pdf;base64,${base64}`,
+        }
+      : {
+          type: "input_image" as const,
+          image_url: `data:${file.type || "image/jpeg"};base64,${base64}`,
+        };
+  });
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -853,7 +925,7 @@ Reglas para proveedores GENERICO: no fuerces columnas de m2. Usa cantidad, unida
       input: [
         {
           role: "user",
-          content: [{ type: "input_text", text: prompt }, fileContent],
+          content: [{ type: "input_text", text: prompt }, ...fileContents],
         },
       ],
       text: {
@@ -961,47 +1033,46 @@ export async function analizarDocumentoGasto(
   formData: FormData,
 ): Promise<AnalizarGastoState> {
   try {
-    const { file, extension } = requiredDocumentFile(formData);
-    const { archivoUrl, buffer } = await saveGastoFile(file, extension);
+    const files = requiredDocumentFiles(formData);
+    const saved = await saveGastoFiles(files);
+    const archivos = saved.map((item) => item.payload);
 
     try {
-      const data = await analyzeWithOpenAI(file, buffer);
+      const data = await analyzeWithOpenAI(saved);
       return {
         status: "success",
-        message: "Documento analizado. Revisa los datos antes de guardar.",
-        archivoUrl,
-        fileName: file.name,
-        mimeType: file.type || null,
+        message: `${archivos.length === 1 ? "Documento analizado" : `${archivos.length} archivos analizados como un único documento`}. Revisa los datos antes de guardar.`,
+        archivoUrl: archivos[0]?.url ?? null,
+        fileName: archivos[0]?.filename ?? null,
+        mimeType: archivos[0]?.mimeType ?? null,
+        archivos,
         data,
       };
     } catch (error) {
       return {
         status: "error",
-        message:
-          error instanceof Error
-            ? `${error.message} Puedes completar el formulario manualmente.`
-            : "No se pudo analizar el documento. Puedes completar el formulario manualmente.",
-        archivoUrl,
-        fileName: file.name,
-        mimeType: file.type || null,
+        message: error instanceof Error
+          ? `${error.message} Puedes completar el formulario manualmente.`
+          : "No se pudo analizar el documento. Puedes completar el formulario manualmente.",
+        archivoUrl: archivos[0]?.url ?? null,
+        fileName: archivos[0]?.filename ?? null,
+        mimeType: archivos[0]?.mimeType ?? null,
+        archivos,
         data: emptyGastoAnalizado,
       };
     }
   } catch (error) {
     return {
       status: "error",
-      message:
-        error instanceof Error
-          ? error.message
-          : "No se pudo subir el documento.",
+      message: error instanceof Error ? error.message : "No se pudieron subir los archivos.",
       archivoUrl: null,
       fileName: null,
       mimeType: null,
+      archivos: [],
       data: emptyGastoAnalizado,
     };
   }
 }
-
 export async function createGasto(
   _state: GastoFormState,
   formData: FormData,
@@ -1009,7 +1080,11 @@ export async function createGasto(
   let gastoId: string | null = null;
   try {
     const lineas = lineasData(formData);
-    const gastoInput = gastoData(formData);
+    const archivos = attachedFilesData(formData);
+    const gastoInput = {
+      ...gastoData(formData),
+      archivoUrl: archivos[0]?.url ?? optionalString(formData, "archivoUrl"),
+    };
     const gasto = await prisma.$transaction(async (tx) => {
       const lineasCreate = await lineasCreateData(lineas, tx);
       const numeroInterno = await nextNumeroInterno(tx, gastoInput.tipoDocumento);
@@ -1024,6 +1099,7 @@ export async function createGasto(
                   create: lineasCreate,
                 }
               : undefined,
+          archivos: archivos.length > 0 ? { create: archivos } : undefined,
         },
       });
     });
@@ -1052,13 +1128,24 @@ export async function updateGasto(
   try {
     const id = requiredGastoId(formData);
     gastoId = id;
-    const newDocumentFile = optionalDocumentFile(formData);
-    const savedDocument = newDocumentFile
-      ? await saveGastoFile(newDocumentFile.file, newDocumentFile.extension)
-      : null;
+    const newDocumentFiles = documentFiles(formData);
+    const current = await prisma.gasto.findUnique({
+      where: { id },
+      select: {
+        archivoUrl: true,
+        archivos: { orderBy: { orden: "asc" }, select: { orden: true, url: true } },
+      },
+    });
+    if (!current) throw new Error("Gasto no encontrado.");
+    const legacyCount = current.archivoUrl && !current.archivos.some((item) => item.url === current.archivoUrl) ? 1 : 0;
+    if (current.archivos.length + legacyCount + newDocumentFiles.length > maxDocumentFiles) {
+      throw new Error("El gasto no puede tener más de 10 archivos.");
+    }
+    const nextOrder = Math.max(legacyCount - 1, ...current.archivos.map((item) => item.orden)) + 1;
+    const savedDocuments = await saveGastoFiles(newDocumentFiles, nextOrder);
     const gastoInput = {
       ...gastoData(formData),
-      archivoUrl: savedDocument?.archivoUrl ?? optionalString(formData, "archivoUrl"),
+      archivoUrl: current.archivoUrl ?? savedDocuments[0]?.payload.url ?? optionalString(formData, "archivoUrl"),
     };
     const lineas = lineasData(formData);
     await prisma.$transaction(async (tx) => {
@@ -1078,6 +1165,9 @@ export async function updateGasto(
         data: {
           ...gastoInput,
           numeroInterno,
+          archivos: savedDocuments.length > 0
+            ? { create: savedDocuments.map((item) => item.payload) }
+            : undefined,
         },
       });
 
@@ -1144,29 +1234,24 @@ export async function deleteGasto(formData: FormData) {
   const id = requiredGastoId(formData);
   const gasto = await prisma.gasto.findUnique({
     where: { id },
-    select: { id: true, archivoUrl: true },
+    select: { id: true, archivoUrl: true, archivos: { select: { url: true } } },
   });
   if (!gasto) {
     throw new Error("Gasto no encontrado.");
   }
 
-  if (gasto.archivoUrl) {
-    const usos = await prisma.gasto.count({
-      where: {
-        archivoUrl: gasto.archivoUrl,
-        NOT: { id },
-      },
-    });
-    const filePath = usos === 0 ? uploadFilePathFromUrl(gasto.archivoUrl) : null;
+  const urls = new Set([
+    ...(gasto.archivoUrl ? [gasto.archivoUrl] : []),
+    ...gasto.archivos.map((archivo) => archivo.url),
+  ]);
+  for (const url of urls) {
+    const filePath = uploadFilePathFromUrl(url);
     if (filePath) {
       await unlink(filePath).catch((error: NodeJS.ErrnoException) => {
-        if (error.code !== "ENOENT") {
-          throw error;
-        }
+        if (error.code !== "ENOENT") throw error;
       });
     }
   }
-
   await prisma.gasto.delete({ where: { id } });
 
   revalidatePath("/");
