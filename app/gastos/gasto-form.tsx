@@ -334,6 +334,31 @@ function initialImporteLineas(lineas: FormLinea[]) {
   }, 0);
 }
 
+function emptyLinea(key: string, id?: string): FormLinea {
+  return {
+    key,
+    id,
+    descripcion: "",
+    materialId: "",
+    codigoMaterialDetectado: "",
+    cantidad: "",
+    precioUnitario: "",
+    unidadMedidaProveedor: "",
+    piezas: "",
+    medida: "",
+    precioUnidadMedida: "",
+    descuentoPorcentaje: "0,00",
+    importe: "",
+    esPorte: false,
+    esPendienteServir: false,
+    pedidoProveedor: "",
+    newMaterialOpen: false,
+    newMaterialNombre: "",
+    newMaterialCategoria: "Otros",
+    newMaterialUnidadBase: "",
+  };
+}
+
 function LineasTable({
   initial,
   materiales,
@@ -345,11 +370,11 @@ function LineasTable({
   materiales: MaterialOption[];
   gastoId?: string;
   showMedida: boolean;
-  onImportesChange: (total: number) => void;
+  onImportesChange: (total: number, syncDocumentTotals?: boolean) => void;
 }) {
   const [lineas, setLineas] = useState<FormLinea[]>(initial);
 
-  function emitImportes(next: FormLinea[]) {
+  function emitImportes(next: FormLinea[], syncDocumentTotals = false) {
     onImportesChange(
       next.reduce((sum, linea) => {
         if (linea.esPendienteServir) {
@@ -359,15 +384,29 @@ function LineasTable({
         const number = parseDecimalEsNumber(linea.importe);
         return number === null ? sum : sum + number;
       }, 0),
+      syncDocumentTotals,
     );
   }
 
-  function updateLineas(updater: (current: FormLinea[]) => FormLinea[]) {
+  function updateLineas(
+    updater: (current: FormLinea[]) => FormLinea[],
+    syncDocumentTotals = false,
+  ) {
     setLineas((current) => {
       const next = updater(current);
-      emitImportes(next);
+      emitImportes(next, syncDocumentTotals);
       return next;
     });
+  }
+
+  function removeLinea(index: number) {
+    updateLineas(
+      (current) =>
+        current.length === 1
+          ? [emptyLinea(current[0].key, current[0].id)]
+          : current.filter((_, currentIndex) => currentIndex !== index),
+      true,
+    );
   }
 
   function calculateImporte(linea: FormLinea) {
@@ -450,30 +489,10 @@ function LineasTable({
         </div>
         <button
           type="button"
-        onClick={() => {
+          onClick={() => {
             updateLineas((current) => [
               ...current,
-              {
-                key: `nueva-${Date.now()}-${current.length}`,
-                descripcion: "",
-                materialId: "",
-                codigoMaterialDetectado: "",
-                cantidad: "",
-                precioUnitario: "",
-                unidadMedidaProveedor: "",
-                piezas: "",
-                medida: "",
-                precioUnidadMedida: "",
-                descuentoPorcentaje: "0,00",
-                importe: "",
-                esPorte: false,
-                esPendienteServir: false,
-                pedidoProveedor: "",
-                newMaterialOpen: false,
-                newMaterialNombre: "",
-                newMaterialCategoria: "Otros",
-                newMaterialUnidadBase: "",
-              },
+              emptyLinea(`nueva-${Date.now()}-${current.length}`),
             ]);
           }}
           className="inline-flex h-10 items-center justify-center rounded-md border border-neutral-300 bg-white px-4 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
@@ -708,14 +727,12 @@ function LineasTable({
                 <td className="px-2 py-2 text-right">
                   <button
                     type="button"
-                    onClick={() =>
-                      updateLineas((current) =>
-                        current.filter((_, currentIndex) => currentIndex !== index),
-                      )
-                    }
-                    className="inline-flex h-9 items-center justify-center rounded-md border border-rose-200 bg-white px-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-50"
+                    onClick={() => removeLinea(index)}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-rose-200 bg-white text-base text-rose-700 transition hover:bg-rose-50"
+                    aria-label={`Eliminar línea ${index + 1}`}
+                    title="Eliminar línea"
                   >
-                    Eliminar
+                    <span aria-hidden="true">🗑</span>
                   </button>
                 </td>
               </tr>
@@ -810,6 +827,22 @@ export function GastoForm({
     const ivaCalculado = importeLineas * (percent / 100);
     setIva(decimalText(ivaCalculado));
     setTotal(decimalText(importeLineas + ivaCalculado));
+  }
+
+  function actualizarImporteLineas(
+    importe: number,
+    syncDocumentTotals = false,
+  ) {
+    setImporteLineas(importe);
+    if (!syncDocumentTotals) {
+      return;
+    }
+
+    const percent = decimalNumber(ivaPorcentaje) ?? 21;
+    const ivaCalculado = importe * (percent / 100);
+    setBaseImponible(decimalText(importe));
+    setIva(decimalText(ivaCalculado));
+    setTotal(decimalText(importe + ivaCalculado));
   }
 
   return (
@@ -1040,7 +1073,7 @@ export function GastoForm({
           materiales={materiales}
           gastoId={gasto?.id}
           showMedida={showMedidaLineas}
-          onImportesChange={setImporteLineas}
+          onImportesChange={actualizarImporteLineas}
         />
       ) : null}
 
