@@ -274,15 +274,34 @@ async function nextNumeroInterno(
     return null;
   }
 
-  const rows = await tx.$queryRaw<{ ultimoNumero: number }[]>`
-    INSERT INTO "DocumentoSecuencia" ("tipoDocumento", "ultimoNumero", "updatedAt")
-    VALUES (${tipoDocumento}, 1, CURRENT_TIMESTAMP)
-    ON CONFLICT ("tipoDocumento")
-    DO UPDATE SET "ultimoNumero" = "DocumentoSecuencia"."ultimoNumero" + 1,
-                  "updatedAt" = CURRENT_TIMESTAMP
-    RETURNING "ultimoNumero"
+  // Serializa únicamente las asignaciones del mismo tipo hasta que termine la
+  // transacción. La restricción única de Gasto.numeroInterno sigue siendo la
+  // última barrera frente a duplicados.
+  await tx.$queryRaw`
+    SELECT pg_advisory_xact_lock(18471, hashtext(${tipoDocumento}))
   `;
-  const number = rows[0]?.ultimoNumero ?? 1;
+
+  const pattern = `^${prefix}-[0-9]+$`;
+  const rows = await tx.$queryRaw<{ numero: number }[]>`
+    WITH used_numbers AS (
+      SELECT SUBSTRING("numeroInterno" FROM ${prefix.length + 2})::INTEGER AS "numero"
+      FROM "Gasto"
+      WHERE "numeroInterno" ~ ${pattern}
+    ),
+    candidates AS (
+      SELECT generate_series(
+        1,
+        COALESCE((SELECT MAX("numero") FROM used_numbers), 0) + 1
+      ) AS "numero"
+    )
+    SELECT candidates."numero"
+    FROM candidates
+    LEFT JOIN used_numbers USING ("numero")
+    WHERE used_numbers."numero" IS NULL
+    ORDER BY candidates."numero" ASC
+    LIMIT 1
+  `;
+  const number = rows[0]?.numero ?? 1;
 
   return `${prefix}-${String(number).padStart(4, "0")}`;
 }
