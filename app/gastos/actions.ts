@@ -277,14 +277,14 @@ async function nextNumeroInterno(
   // Serializa únicamente las asignaciones del mismo tipo hasta que termine la
   // transacción. La restricción única de Gasto.numeroInterno sigue siendo la
   // última barrera frente a duplicados.
-  await tx.$queryRaw`
-    SELECT pg_advisory_xact_lock(18471, hashtext(${tipoDocumento}))
+  await tx.$queryRaw<{ lock: string }[]>`
+    SELECT pg_advisory_xact_lock(18471, hashtext(${tipoDocumento}))::TEXT AS "lock"
   `;
 
   const pattern = `^${prefix}-[0-9]+$`;
   const rows = await tx.$queryRaw<{ numero: number }[]>`
     WITH used_numbers AS (
-      SELECT SUBSTRING("numeroInterno" FROM ${prefix.length + 2})::INTEGER AS "numero"
+      SELECT SPLIT_PART("numeroInterno", '-', 2)::INTEGER AS "numero"
       FROM "Gasto"
       WHERE "numeroInterno" ~ ${pattern}
     ),
