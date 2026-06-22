@@ -610,6 +610,8 @@ function documentFiles(formData: FormData) {
       ? [legacy]
       : [];
 
+  console.info("[gastos] Archivos recibidos en backend:", files.length);
+
   if (files.length > maxDocumentFiles) {
     throw new Error(`Has seleccionado ${files.length} archivos. El máximo por documento es 10.`);
   }
@@ -869,6 +871,8 @@ async function analyzeWithOpenAI(files: Array<{ file: File; buffer: Buffer }>) {
   if (!apiKey) {
     throw new Error("OPENAI_API_KEY no esta configurada.");
   }
+
+  console.info("[gastos] Archivos enviados a IA:", files.length);
 
   const materialPrefixes = categoriasMaterial
     .map((categoria) => `${categoria}: ${prefijoCategoriaMaterial(categoria)}`)

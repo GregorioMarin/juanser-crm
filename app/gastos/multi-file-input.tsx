@@ -13,11 +13,25 @@ export function MultiFileInput({ name = "archivos", required = false }: { name?:
     next.forEach((file) => transfer.items.add(file));
     if (inputRef.current) inputRef.current.files = transfer.files;
     setFiles(next);
+    console.info("[gastos] Archivos seleccionados en frontend:", next.length);
+  }
+
+  function addFiles(selected: File[]) {
+    const next = [...files, ...selected].filter(
+      (file, index, all) =>
+        all.findIndex(
+          (candidate) =>
+            candidate.name === file.name &&
+            candidate.size === file.size &&
+            candidate.lastModified === file.lastModified,
+        ) === index,
+    );
+    replaceFiles(next);
   }
 
   return (
     <div className="grid gap-3">
-      <input ref={inputRef} className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-950 outline-none transition file:mr-3 file:rounded file:border-0 file:bg-neutral-100 file:px-3 file:py-1.5 file:font-semibold focus:border-emerald-700 focus:ring-2 focus:ring-emerald-100" name={name} type="file" accept={accept} multiple required={required} onChange={(event) => setFiles(Array.from(event.target.files ?? []))} />
+      <input ref={inputRef} className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-950 outline-none transition file:mr-3 file:rounded file:border-0 file:bg-neutral-100 file:px-3 file:py-1.5 file:font-semibold focus:border-emerald-700 focus:ring-2 focus:ring-emerald-100" name={name} type="file" accept={accept} multiple required={required} onChange={(event) => addFiles(Array.from(event.target.files ?? []))} />
       {files.length > 0 ? (
         <ol className="grid gap-2" aria-label="Archivos seleccionados">
           {files.map((file, index) => (
