@@ -223,8 +223,12 @@ function motivoRechazoValue(formData: FormData, estado: string) {
 }
 
 function localidadValue(formData: FormData) {
-  const selected =
-    optionalString(formData, "localidadSeleccionada") ?? localidades[0];
+  const selected = optionalString(formData, "localidadSeleccionada");
+  console.log("[ClienteFicha] Localidad recibida en Server Action", selected);
+  if (!selected) {
+    throw new Error("Localidad no recibida.");
+  }
+
   if (!localidades.includes(selected as (typeof localidades)[number])) {
     throw new Error("Localidad no valida.");
   }
@@ -845,17 +849,34 @@ async function updateClienteFicha(formData: FormData) {
 
   const clienteId = requiredId(formData, "clienteId");
   const data = clienteEditableData(formData);
+  console.log("[ClienteFicha] Localidad que se escribe en Prisma", {
+    clienteId,
+    localidad: data.localidad,
+  });
   const cliente = await prisma.cliente.findUnique({
     where: { id: clienteId },
-    select: { estado: true, estadoProduccion: true, motivoRechazo: true },
+    select: {
+      estado: true,
+      estadoProduccion: true,
+      motivoRechazo: true,
+      localidad: true,
+    },
   });
   if (!cliente) {
     throw new Error("Cliente no encontrado.");
   }
 
-  await prisma.cliente.update({
+  const clienteActualizado = await prisma.cliente.update({
     where: { id: clienteId },
     data,
+    select: {
+      id: true,
+      localidad: true,
+    },
+  });
+  console.log("[ClienteFicha] Localidad escrita en Prisma", {
+    clienteId: clienteActualizado.id,
+    localidad: clienteActualizado.localidad,
   });
 
   const estadoCambiado = cliente.estado !== data.estado;
@@ -1079,6 +1100,11 @@ async function getCliente(id: number) {
         orderBy: { fecha: "desc" },
       },
     },
+  });
+
+  console.log("[ClienteFicha] Localidad leída al volver a cargar el cliente", {
+    clienteId: id,
+    localidad: cliente?.localidad,
   });
 
   return cliente;
@@ -1464,6 +1490,7 @@ function ClienteEditForm({ cliente }: { cliente: ClienteDetalle }) {
             />
           </label>
           <LocalidadField
+            key={cliente.localidad ?? "localidad-vacia"}
             localidades={localidades}
             defaultValue={cliente.localidad}
           />

@@ -125,8 +125,12 @@ function motivoRechazoValue(formData: FormData, estadoComercial: string) {
 }
 
 function localidadValue(formData: FormData) {
-  const selected =
-    optionalString(formData, "localidadSeleccionada") ?? localidades[0];
+  const selected = optionalString(formData, "localidadSeleccionada");
+  console.log("[Clientes] Localidad recibida en Server Action", selected);
+  if (!selected) {
+    throw new Error("Localidad no recibida.");
+  }
+
   if (!localidades.includes(selected as (typeof localidades)[number])) {
     throw new Error("Localidad no valida.");
   }
@@ -193,8 +197,18 @@ function clienteData(formData: FormData) {
 async function createCliente(formData: FormData) {
   "use server";
 
+  const data = clienteData(formData);
+  console.log("[Clientes] Localidad que se escribe en Prisma", data.localidad);
   const cliente = await prisma.cliente.create({
-    data: clienteData(formData),
+    data,
+    select: {
+      id: true,
+      localidad: true,
+    },
+  });
+  console.log("[Clientes] Localidad escrita en Prisma", {
+    clienteId: cliente.id,
+    localidad: cliente.localidad,
   });
   await registrarActividadCliente({
     clienteId: cliente.id,
@@ -584,6 +598,7 @@ function ClienteForm({
           defaultValue={values?.direccion}
         />
         <LocalidadField
+          key={values?.localidad ?? "localidad-vacia"}
           localidades={localidades}
           defaultValue={values?.localidad}
         />
