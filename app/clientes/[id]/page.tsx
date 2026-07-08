@@ -2653,6 +2653,14 @@ export default async function ClientePage({
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
+            <Link
+              href={`/clientes/${cliente.id}/orden-trabajo`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-10 items-center justify-center rounded-md border border-neutral-300 bg-white px-4 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
+            >
+              Imprimir orden de trabajo
+            </Link>
             <a
               href="#editar-cliente"
               className="inline-flex h-10 items-center justify-center rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:bg-emerald-800"
