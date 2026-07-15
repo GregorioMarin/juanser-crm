@@ -18,22 +18,8 @@ async function getOrdenTrabajoCliente(id: number) {
       id: true,
       nombre: true,
       telefono: true,
-      email: true,
       direccion: true,
       localidad: true,
-      tipoTrabajo: true,
-      fechaMedicion: true,
-      fechaInstalacion: true,
-      observaciones: true,
-      presupuestos: {
-        orderBy: [{ fecha: "desc" }, { createdAt: "desc" }],
-        select: {
-          numero: true,
-          titulo: true,
-          descripcion: true,
-          estado: true,
-        },
-      },
     },
   });
 }
@@ -50,21 +36,15 @@ function formatDate(date?: Date | null) {
   }).format(date);
 }
 
-function firstText(...values: Array<string | null | undefined>) {
-  return values.find((value) => value && value.trim().length > 0) ?? "";
-}
-
 function Field({
   label,
   value,
-  fullWidth = false,
 }: {
   label: string;
   value?: string | null;
-  fullWidth?: boolean;
 }) {
   return (
-    <div className={`${styles.clientField} ${fullWidth ? styles.fullWidth : ""}`}>
+    <div className={styles.clientField}>
       <strong className={styles.label}>{label}</strong>
       <span>{value || "\u00a0"}</span>
     </div>
@@ -85,17 +65,7 @@ export default async function OrdenTrabajoPage({ params }: OrdenTrabajoPageProps
     notFound();
   }
 
-  const presupuestoReferencia =
-    cliente.presupuestos.find((presupuesto) => presupuesto.estado === "ACEPTADO") ??
-    cliente.presupuestos[0];
   const direccion = [cliente.direccion, cliente.localidad].filter(Boolean).join(", ");
-  const descripcionTrabajo = firstText(
-    cliente.tipoTrabajo,
-    presupuestoReferencia?.titulo,
-    presupuestoReferencia?.descripcion,
-    cliente.observaciones,
-  );
-  const fechaPrevista = cliente.fechaInstalacion ?? cliente.fechaMedicion;
 
   return (
     <main className={styles.page}>
@@ -106,7 +76,7 @@ export default async function OrdenTrabajoPage({ params }: OrdenTrabajoPageProps
 
       <article className={styles.sheet} aria-label="Orden de trabajo">
         <header className={styles.header}>
-          <div>
+          <div className={styles.logoBlock}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               className={styles.logo}
@@ -116,16 +86,11 @@ export default async function OrdenTrabajoPage({ params }: OrdenTrabajoPageProps
           </div>
           <div className={styles.titleBlock}>
             <h1>ORDEN DE TRABAJO</h1>
-            <p className={styles.company}>Carpintería Juanser</p>
           </div>
           <div className={styles.meta}>
             <div className={styles.lineField}>
               <strong className={styles.label}>Fecha</strong>
               <span>{formatDate(new Date())}</span>
-            </div>
-            <div className={styles.lineField}>
-              <strong className={styles.label}>Nº orden</strong>
-              <span>{presupuestoReferencia?.numero || "\u00a0"}</span>
             </div>
           </div>
         </header>
@@ -133,24 +98,13 @@ export default async function OrdenTrabajoPage({ params }: OrdenTrabajoPageProps
         <section className={styles.clientData} aria-label="Datos del cliente">
           <Field label="Cliente" value={cliente.nombre} />
           <Field label="Teléfono" value={cliente.telefono} />
-          <Field label="Dirección" value={direccion} fullWidth />
-          <Field label="Email" value={cliente.email} />
-          <Field label="Fecha prevista" value={formatDate(fechaPrevista)} />
-          <Field label="Tipo de trabajo" value={descripcionTrabajo} fullWidth />
+          <Field label="Dirección" value={direccion} />
         </section>
 
-        <section className={styles.sketchSection} aria-label="Boceto del trabajo">
-          <h2 className={styles.boxTitle}>Boceto del trabajo</h2>
-          <div className={styles.sketchBox} />
-        </section>
+        <section className={styles.sketchBox} aria-label="Espacio para bocetos y mediciones" />
 
-        <section className={styles.bottomBoxes} aria-label="Notas manuales">
-          <div className={styles.manualBox}>
-            <h2>Herrajes necesarios</h2>
-          </div>
-          <div className={styles.manualBox}>
-            <h2>Observaciones</h2>
-          </div>
+        <section className={styles.observationsBox} aria-label="Observaciones">
+          <h2>Observaciones</h2>
         </section>
       </article>
     </main>
