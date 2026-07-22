@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { prisma } from "@/app/lib/prisma";
+import { direccionEmpresaCompleta, empresa } from "@/lib/empresa";
 
 async function getPresupuesto(token: string) {
   if (
@@ -71,14 +72,14 @@ function ClienteBlock({ presupuesto }: { presupuesto: PresupuestoPublico }) {
     <section className="grid gap-4 md:grid-cols-2">
       <div className="rounded-md border border-neutral-300 bg-white p-5 shadow-sm">
         <h2 className="text-lg font-semibold text-neutral-950">
-          Carpintería Juanser
+          {empresa.nombre}
         </h2>
         <dl className="mt-4 grid gap-3">
           <DetailItem
             label="Dirección"
-            value="P.I. San Nicolás, Calle San Nicolás 9 Nave 21, 41500 Alcalá de Guadaíra, Sevilla"
+            value={direccionEmpresaCompleta}
           />
-          <DetailItem label="Teléfonos" value="665 13 47 46 / 655 69 39 63" />
+          <DetailItem label="Teléfono" value={empresa.telefonoPresupuestos} />
         </dl>
       </div>
 
