@@ -154,6 +154,7 @@ function formatCurrency(value: unknown) {
   return new Intl.NumberFormat("es-ES", {
     style: "currency",
     currency: "EUR",
+    useGrouping: "always",
   }).format(Number(value));
 }
 

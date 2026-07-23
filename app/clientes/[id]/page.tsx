@@ -52,6 +52,7 @@ import {
   defaultPresupuestoObservaciones,
   defaultPresupuestoValidezDias,
 } from "@/app/presupuestos/default-observaciones";
+import { CreatePresupuestoLines } from "@/app/presupuestos/create-presupuesto-lines";
 import { DeletePresupuestoForm } from "@/app/presupuestos/delete-presupuesto-form";
 import {
   pagosSinPresupuesto,
@@ -334,7 +335,16 @@ type PresupuestoLineaData = {
 };
 
 function presupuestoLineasData(formData: FormData) {
-  const lineas = Array.from({ length: 6 }, (_, index) => {
+  const lineIndexes = Array.from(
+    new Set(
+      Array.from(formData.keys())
+        .map((key) => key.match(/^lineas\[(\d+)\]\[/)?.[1])
+        .filter((value): value is string => Boolean(value))
+        .map(Number),
+    ),
+  ).sort((a, b) => a - b);
+
+  const lineas = lineIndexes.map((index) => {
     const concepto = optionalString(formData, `lineas[${index}][concepto]`);
     const cantidadRaw = optionalString(formData, `lineas[${index}][cantidad]`);
     const precioRaw = optionalString(formData, `lineas[${index}][precioUnitario]`);
@@ -1142,6 +1152,7 @@ function formatCurrency(value: unknown) {
   return new Intl.NumberFormat("es-ES", {
     style: "currency",
     currency: "EUR",
+    useGrouping: "always",
   }).format(Number(value));
 }
 
@@ -2019,18 +2030,6 @@ function PresupuestosSection({ cliente }: { cliente: ClienteDetalle }) {
               defaultValue={defaultPresupuestoValidezDias}
             />
           </label>
-          <label className="flex flex-col gap-1.5">
-            <span className={labelClass}>IVA (%)</span>
-            <input
-              className={inputClass}
-              name="ivaPorcentaje"
-              type="number"
-              step="0.01"
-              min="0"
-              defaultValue="21"
-              required
-            />
-          </label>
         </div>
         <label className="flex flex-col gap-1.5">
           <span className={labelClass}>Descripcion</span>
@@ -2040,45 +2039,7 @@ function PresupuestosSection({ cliente }: { cliente: ClienteDetalle }) {
             required
           />
         </label>
-        <div className="grid gap-3">
-          <p className={labelClass}>Lineas</p>
-          {Array.from({ length: 6 }, (_, index) => (
-            <div
-              key={index}
-              className="grid gap-3 rounded-md border border-neutral-200 bg-white p-3 lg:grid-cols-[1fr_1.4fr_120px_160px]"
-            >
-              <input
-                className={inputClass}
-                name={`lineas[${index}][concepto]`}
-                placeholder="Concepto"
-                required={index === 0}
-              />
-              <input
-                className={inputClass}
-                name={`lineas[${index}][descripcion]`}
-                placeholder="Descripcion"
-              />
-              <input
-                className={inputClass}
-                name={`lineas[${index}][cantidad]`}
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="Cantidad"
-                required={index === 0}
-              />
-              <input
-                className={inputClass}
-                name={`lineas[${index}][precioUnitario]`}
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="Precio unitario"
-                required={index === 0}
-              />
-            </div>
-          ))}
-        </div>
+        <CreatePresupuestoLines />
         <label className="flex flex-col gap-1.5">
           <span className={labelClass}>Observaciones</span>
           <textarea

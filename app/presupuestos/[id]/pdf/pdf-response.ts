@@ -72,6 +72,7 @@ function formatCurrency(value: unknown) {
     currency: "EUR",
     currencyDisplay: "symbol",
     style: "currency",
+    useGrouping: "always",
     maximumFractionDigits: 2,
     minimumFractionDigits: 2,
   }).format(Number(value ?? 0));
@@ -704,11 +705,22 @@ function drawTotals(ctx: PdfContext, presupuesto: PresupuestoPdf) {
 }
 
 function drawFooter(ctx: PdfContext, presupuesto: PresupuestoPdf) {
-  ensureSpace(ctx, 110);
-
   const observaciones = [presupuesto.observaciones, ivaIncludedText]
     .filter(Boolean)
     .join("\n\n");
+  const observationLines = wrapText(
+    observaciones,
+    ctx.fonts.regular,
+    10,
+    contentWidth,
+  );
+  const observationHeight = 18 + observationLines.length * 14 + 18;
+  const availablePageHeight = ctx.page.getHeight() - margin * 2;
+
+  ensureSpace(
+    ctx,
+    observationHeight <= availablePageHeight ? observationHeight : 110,
+  );
 
   drawText(ctx.page, "Observaciones", margin, ctx.y, ctx.fonts.bold, 11);
   ctx.y += 18;
