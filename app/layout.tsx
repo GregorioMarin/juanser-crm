@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { BackToDashboard } from "@/app/back-to-dashboard";
+import { CrmShell } from "@/app/crm-shell";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -37,8 +37,7 @@ export default function RootLayout({
   return (
     <html lang="es" className="h-full antialiased">
       <body className="min-h-full flex flex-col">
-        <BackToDashboard />
-        {children}
+        <CrmShell>{children}</CrmShell>
       </body>
     </html>
   );
