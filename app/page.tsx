@@ -1,7 +1,6 @@
 import Link from "next/link";
-import Image from "next/image";
+import { UiIcon, type IconName } from "@/app/ui-icon";
 import { connection } from "next/server";
-import { logout } from "@/app/auth/actions";
 import {
   estadoComercialLabel,
   estadoProduccionLabel,
@@ -180,65 +179,22 @@ function formatMoney(value?: { toString(): string } | null) {
   }).format(number);
 }
 
-function SummaryCard({
-  href,
-  label,
-  value,
-  detail,
-}: {
-  href: string;
-  label: string;
-  value: string;
-  detail?: string;
+function SummaryCard({ href, label, value, detail, icon = "file" }: {
+  href: string; label: string; value: string; detail?: string; icon?: IconName;
 }) {
-  return (
-    <Link
-      href={href}
-      className="block cursor-pointer rounded-md border border-neutral-300 bg-white p-5 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 focus-visible:ring-offset-neutral-100"
-    >
-      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
-        {label}
-      </p>
-      <p className="mt-2 text-2xl font-semibold text-neutral-950">{value}</p>
-      {detail ? <p className="mt-1 text-sm text-neutral-500">{detail}</p> : null}
-    </Link>
-  );
+  return <Link href={href} className="dashboard-metric">
+    <UiIcon name={icon} /><div><p>{label}</p><strong>{value}</strong>{detail && <small>{detail}</small>}</div>
+  </Link>;
 }
 
-function PendingCard({
-  href,
-  count,
-  title,
-  description,
-  accent,
-}: {
-  href: string;
-  count: number;
-  title: string;
-  description: string;
-  accent: string;
+function PendingCard({ href, count, title, description, accent, icon }: {
+  href: string; count: number; title: string; description: string; accent: string; icon: IconName;
 }) {
-  return (
-    <Link
-      href={href}
-      className="group flex min-h-36 flex-col justify-between rounded-md border border-neutral-300 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-neutral-400 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-emerald-200"
-    >
-      <div className="flex items-start justify-between gap-4">
-        <span className={`h-3 w-3 rounded-full ${accent}`} />
-        <span className="text-4xl font-semibold tabular-nums text-neutral-950">
-          {count}
-        </span>
-      </div>
-      <div>
-        <h3 className="text-base font-semibold text-neutral-950 transition group-hover:text-emerald-800">
-          {title}
-        </h3>
-        <p className="mt-1 text-sm leading-5 text-neutral-600">{description}</p>
-      </div>
-    </Link>
-  );
+  return <Link href={href} className="dashboard-pending">
+    <span className={`pending-icon ${accent.replace("bg-", "tone-")}`}><UiIcon name={icon} /></span>
+    <div><strong>{count}</strong><h3>{title}</h3><p>{description}</p></div><UiIcon name="arrow" />
+  </Link>;
 }
-
 export default async function Home() {
   await connection();
   await generateVencimientosHasta();
@@ -326,197 +282,60 @@ export default async function Home() {
     },
   ] as const;
 
-  return (
-    <main className="min-h-screen bg-neutral-100 px-5 py-6 text-neutral-950 sm:px-8">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
-        <header className="flex flex-col gap-4 border-b border-neutral-300 pb-5 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <Image
-              src="/logo-juanser.jpeg"
-              alt="Carpintería Juanser"
-              width={150}
-              height={100}
-              className="h-16 w-auto rounded-sm object-contain sm:h-[66px]"
-              sizes="100px"
-            />
-            <h1 className="text-2xl font-semibold tracking-normal text-neutral-950 sm:text-3xl">
-              CRM Carpintería Juanser
-            </h1>
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end lg:max-w-3xl">
-            <Link
-              href="/asistente"
-              className="inline-flex h-11 items-center justify-center rounded-md bg-neutral-950 px-5 text-sm font-semibold text-white transition hover:bg-neutral-800"
-            >
-              🤖 Asistente IA
-            </Link>
-            <Link
-              href="/clientes"
-              className="inline-flex h-11 items-center justify-center rounded-md bg-emerald-700 px-5 text-sm font-semibold text-white transition hover:bg-emerald-800"
-            >
-              Abrir cartera
-            </Link>
-            <Link
-              href="/presupuestos"
-              className="inline-flex h-11 items-center justify-center rounded-md border border-neutral-300 bg-white px-5 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
-            >
-              Ver presupuestos
-            </Link>
-            <Link
-              href="/citas"
-              className="inline-flex h-11 items-center justify-center rounded-md border border-neutral-300 bg-white px-5 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
-            >
-              Citas
-            </Link>
-            <Link
-              href="/proveedores"
-              className="inline-flex h-11 items-center justify-center rounded-md border border-neutral-300 bg-white px-5 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
-            >
-              Proveedores
-            </Link>
-            <Link
-              href="/gastos"
-              className="inline-flex h-11 items-center justify-center rounded-md border border-neutral-300 bg-white px-5 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
-            >
-              Gastos y Compras
-            </Link>
-            <Link
-              href="/vencimientos/recurrentes"
-              className="inline-flex h-11 items-center justify-center rounded-md border border-neutral-300 bg-white px-5 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
-            >
-              Vencimientos recurrentes
-            </Link>
-            <Link
-              href="/facturas-venta"
-              className="inline-flex h-11 items-center justify-center rounded-md border border-neutral-300 bg-white px-5 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
-            >
-              Facturas de venta
-            </Link>
-            <Link
-              href="/actividad"
-              className="inline-flex h-11 items-center justify-center rounded-md border border-neutral-300 bg-white px-5 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
-            >
-              Actividad
-            </Link>
-            <Link
-              href="/materiales"
-              className="inline-flex h-11 items-center justify-center rounded-md border border-neutral-300 bg-white px-5 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
-            >
-              Materiales
-            </Link>
-            <Link
-              href="/calculadoras/armarios"
-              className="inline-flex h-11 items-center justify-center rounded-md border border-neutral-300 bg-white px-5 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
-            >
-              Calculadora armarios
-            </Link>
-            <Link
-              href="/configuracion/tarifas"
-              className="inline-flex h-11 items-center justify-center rounded-md border border-neutral-300 bg-white px-5 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
-            >
-              Tarifas internas
-            </Link>
-            <Link
-              href="/manual"
-              className="inline-flex h-11 items-center justify-center rounded-md border border-neutral-300 bg-white px-5 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
-            >
-              Manual técnico-comercial
-            </Link>
-            <Link
-              href="/trabajos"
-              className="inline-flex h-11 items-center justify-center rounded-md border border-neutral-300 bg-white px-5 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
-            >
-              Trabajos terminados
-            </Link>
-            <form action={logout}>
-              <button
-                type="submit"
-                className="inline-flex h-11 w-full items-center justify-center rounded-md border border-neutral-300 bg-white px-5 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50 sm:w-auto"
-              >
-                Cerrar sesión
-              </button>
-            </form>
-          </div>
-        </header>
+  const pendingIcons = ["tag", "calendar", "mail", "check"] as const;
+  const quickLinks = [
+    { href: "/clientes", label: "Abrir cartera", icon: "users" },
+    { href: "/clientes", label: "Crear presupuesto", icon: "file" },
+    { href: "/materiales", label: "Consultar materiales", icon: "box" },
+    { href: "/calculadoras/armarios", label: "Calculadora armarios", icon: "calculator" },
+  ] as const;
+  const date = new Intl.DateTimeFormat("es-ES", { weekday: "long", day: "numeric", month: "long" }).format(new Date());
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <SummaryCard
-            href="/gastos"
-            label="Gastos del mes"
-            value={formatMoney(metrics.gastosMes)}
-          />
-          <SummaryCard
-            href="/presupuestos?estado=PENDIENTE_RESPUESTA"
-            label="Presupuestos pendientes de respuesta"
-            value={String(metrics.presupuestosPendientes)}
-          />
-          <SummaryCard
-            href="/clientes?filtro=nuevos_mes"
-            label="Contactos nuevos del mes"
-            value={String(metrics.clientesNuevosMes)}
-          />
-          <SummaryCard
-            href="/clientes?estadoComercial=ACEPTADO"
-            label="Trabajos activos o recientes"
-            value={String(metrics.trabajosActivosORecientes)}
-            detail={metrics.trabajosDetalle}
-          />
-          <SummaryCard
-            href="/facturas"
-            label="Facturas de venta"
-            value={String(metrics.facturasTotal)}
-            detail={`${formatMoney(metrics.facturacionTotal)} total · ${formatMoney(
-              metrics.facturacionAno,
-            )} año · ${metrics.facturasPendientesCobro} pendientes`}
-          />
-          <SummaryCard
-            href="/vencimientos?estado=PENDIENTE"
-            label="Próximos vencimientos"
-            value={String(metrics.proximosVencimientos)}
-            detail="En los próximos 30 días"
-          />
-          <SummaryCard
-            href="/vencimientos/recurrentes"
-            label="Recurrentes activos"
-            value={String(metrics.recurrentesActivos)}
-          />
-          <SummaryCard
-            href="/vencimientos?estado=PENDIENTE"
-            label="Pendientes de pago"
-            value={String(metrics.vencimientosPendientes)}
-          />
-        </section>
-
-        <section className="grid gap-4">
-          <div>
-            <h2 className="text-xl font-semibold text-neutral-950">
-              Pendientes de hoy
-            </h2>
-          </div>
-          <div className="grid gap-3">
-            <div>
-              <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-neutral-500">
-                Estado comercial
-              </h3>
-              <div className="mt-3 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                {comercialPendientes.map((item) => (
-                  <PendingCard key={item.href} {...item} />
-                ))}
-              </div>
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-neutral-500">
-                Estado de producción
-              </h3>
-              <div className="mt-3 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {produccionPendientes.map((item) => (
-                  <PendingCard key={item.href} {...item} />
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
+  return <main className="dashboard">
+    <header className="dashboard-heading">
+      <div><h1>Resumen</h1><p className="dashboard-date">{date}</p></div>
+      <div className="dashboard-actions">
+        <Link href="/presupuestos" className="crm-button"><UiIcon name="file" />Ver presupuestos</Link>
+        <Link href="/clientes" className="crm-button crm-button-primary" title="Selecciona un cliente para crear su presupuesto"><UiIcon name="plus" />Nuevo presupuesto</Link>
       </div>
-    </main>
-  );
+    </header>
+    <section className="dashboard-metrics dashboard-panel" aria-label="Indicadores principales">
+      <SummaryCard href="/gastos" label="Gastos del mes" value={formatMoney(metrics.gastosMes)} icon="wallet" />
+      <SummaryCard href="/clientes?filtro=nuevos_mes" label="Contactos nuevos del mes" value={String(metrics.clientesNuevosMes)} icon="users" />
+      <SummaryCard href="/clientes?estadoComercial=ACEPTADO" label="Trabajos activos o recientes" value={String(metrics.trabajosActivosORecientes)} detail={metrics.trabajosDetalle} icon="briefcase" />
+      <SummaryCard href="/facturas" label="Facturado este año" value={formatMoney(metrics.facturacionAno)} icon="chart" />
+    </section>
+    <section aria-labelledby="pending-title">
+      <div className="dashboard-section-heading"><h2 id="pending-title">Estado comercial</h2><span>Situación actual</span></div>
+      <div className="dashboard-pending-grid">{comercialPendientes.map((item, index) => <PendingCard key={item.href} {...item} icon={pendingIcons[index]} />)}</div>
+    </section>
+    <div className="dashboard-columns">
+      <section aria-labelledby="production-title">
+        <h2 id="production-title">Estado de producción</h2>
+        <div className="dashboard-panel dashboard-table-scroll" role="region" aria-label="Fases de producción" tabIndex={0}>
+          <table className="dashboard-table">
+            <thead><tr><th scope="col">Fase</th><th scope="col">Contactos / trabajos</th><th scope="col">Acción</th></tr></thead>
+            <tbody>{produccionPendientes.map(item => <tr key={item.href}>
+              <th scope="row"><span className={`production-dot ${item.accent}`} /><span>{item.title}<small>{item.description}</small></span></th>
+              <td>{item.count}</td><td><Link href={item.href} aria-label={`Ver detalle: ${item.title}`}>Ver detalle <UiIcon name="arrow" /></Link></td>
+            </tr>)}</tbody>
+          </table>
+        </div>
+      </section>
+      <section aria-labelledby="quick-title"><h2 id="quick-title">Accesos rápidos</h2>
+        <div className="dashboard-panel dashboard-quick">{quickLinks.map(item => <Link href={item.href} key={item.label}><UiIcon name={item.icon} /><span>{item.label}</span><UiIcon name="arrow" /></Link>)}
+          <p>Para crear un presupuesto, abre la ficha del cliente en la cartera.</p>
+          <Link href="/presupuestos?estado=PENDIENTE_RESPUESTA" className="dashboard-budget-pending"><UiIcon name="mail" /><span>Presupuestos pendientes de respuesta<strong>{metrics.presupuestosPendientes}</strong></span><UiIcon name="arrow" /></Link>
+        </div>
+      </section>
+    </div>
+    <section className="dashboard-panel dashboard-admin" aria-labelledby="admin-title"><h2 id="admin-title">Administración</h2>
+      <div className="dashboard-metrics">
+        <SummaryCard href="/facturas" label="Facturas de venta" value={String(metrics.facturasTotal)} detail={`${formatMoney(metrics.facturacionTotal)} total · ${metrics.facturasPendientesCobro} pendientes de cobro`} icon="file" />
+        <SummaryCard href="/vencimientos?estado=PENDIENTE" label="Próximos vencimientos" value={String(metrics.proximosVencimientos)} detail="En los próximos 30 días" icon="clock" />
+        <SummaryCard href="/vencimientos/recurrentes" label="Recurrentes activos" value={String(metrics.recurrentesActivos)} icon="repeat" />
+        <SummaryCard href="/vencimientos?estado=PENDIENTE" label="Pendientes de pago" value={String(metrics.vencimientosPendientes)} icon="wallet" />
+      </div>
+    </section>
+  </main>;
 }
