@@ -47,6 +47,7 @@ function formatCurrency(value: number) {
   return new Intl.NumberFormat("es-ES", {
     style: "currency",
     currency: "EUR",
+    useGrouping: "always",
   }).format(value);
 }
 
@@ -92,7 +93,7 @@ export function EditPresupuestoForm({
   function deleteLinea(key: string) {
     setLineas((current) => {
       if (current.length === 1) {
-        return current;
+        return [emptyLinea()];
       }
 
       return current.filter((linea) => linea.key !== key);
@@ -175,19 +176,12 @@ export function EditPresupuestoForm({
       <div className="grid gap-3">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <p className={labelClass}>Lineas</p>
-          <button
-            type="button"
-            onClick={() => setLineas((current) => [...current, emptyLinea()])}
-            className="inline-flex h-9 w-fit items-center justify-center rounded-md border border-neutral-300 px-3 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
-          >
-            Añadir linea
-          </button>
         </div>
 
         {lineas.map((linea, index) => (
           <div
             key={linea.key}
-            className="grid gap-3 rounded-md border border-neutral-200 bg-neutral-50 p-3 lg:grid-cols-[1fr_1.4fr_120px_160px_auto]"
+            className="grid gap-3 rounded-md border border-neutral-200 bg-neutral-50 p-3 lg:grid-cols-[1fr_1.4fr_120px_160px_130px_auto]"
           >
             <input
               className={inputClass}
@@ -234,16 +228,29 @@ export function EditPresupuestoForm({
               placeholder="Precio unitario"
               required
             />
+            <output className="flex h-10 items-center justify-end whitespace-nowrap px-2 text-sm font-semibold text-neutral-950">
+              {formatCurrency(
+                parseAmount(linea.cantidad) * parseAmount(linea.precioUnitario),
+              )}
+            </output>
             <button
               type="button"
               onClick={() => deleteLinea(linea.key)}
-              disabled={lineas.length === 1}
-              className="inline-flex h-10 items-center justify-center rounded-md border border-rose-200 px-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label={`Eliminar línea ${index + 1}`}
+              title="Eliminar línea"
+              className="inline-flex h-10 items-center justify-center rounded-md border border-rose-200 px-3 text-lg text-rose-700 transition hover:bg-rose-50"
             >
-              Eliminar
+              🗑️
             </button>
           </div>
         ))}
+        <button
+          type="button"
+          onClick={() => setLineas((current) => [...current, emptyLinea()])}
+          className="inline-flex h-9 w-fit items-center justify-center rounded-md border border-neutral-300 px-3 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
+        >
+          ➕ Añadir línea
+        </button>
       </div>
 
       <label className="flex flex-col gap-1.5">

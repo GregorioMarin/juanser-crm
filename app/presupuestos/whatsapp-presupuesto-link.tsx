@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { empresa } from "@/lib/empresa";
 import { ensurePresupuestoPublicToken } from "./actions";
 
 type WhatsAppPresupuestoLinkProps = {
@@ -59,8 +60,8 @@ Importe total: ${formatAmount(totalConIva)} € IVA incluido.
 
 Quedamos a tu disposición para cualquier consulta.
 
-Carpintería Juanser
-665 13 47 46`;
+${empresa.nombre}
+${empresa.telefonoPresupuestos}`;
 }
 
 export function WhatsAppPresupuestoLink(props: WhatsAppPresupuestoLinkProps) {

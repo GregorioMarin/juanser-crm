@@ -10,6 +10,7 @@ import { readFile } from "fs/promises";
 import path from "path";
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
+import { empresa } from "@/lib/empresa";
 
 const pageSize: [number, number] = [595.28, 841.89];
 const margin = 48;
@@ -71,6 +72,7 @@ function formatCurrency(value: unknown) {
     currency: "EUR",
     currencyDisplay: "symbol",
     style: "currency",
+    useGrouping: "always",
     maximumFractionDigits: 2,
     minimumFractionDigits: 2,
   }).format(Number(value ?? 0));
@@ -300,13 +302,18 @@ function drawHeader(
   const companyX = margin;
   let companyY = margin + logoSize.height + 12;
   const companyLines = [
-    ["Carpintería Juanser", fonts.bold, 12, colors.dark],
-    ["P.I. San Nicolás", fonts.regular, 9, colors.muted],
-    ["Calle San Nicolás 9 Nave 21", fonts.regular, 9, colors.muted],
-    ["41500 Alcalá de Guadaíra (Sevilla)", fonts.regular, 9, colors.muted],
-    ["Teléfono: 665 13 47 46", fonts.regular, 9, colors.muted],
-    ["Email: info@juanser.es", fonts.regular, 9, colors.muted],
-    ["Web: https://juanser.es", fonts.regular, 9, colors.muted],
+    [empresa.nombre, fonts.bold, 12, colors.dark],
+    [empresa.direccion.poligono, fonts.regular, 9, colors.muted],
+    [empresa.direccion.calle, fonts.regular, 9, colors.muted],
+    [
+      `${empresa.direccion.codigoPostal} ${empresa.direccion.localidad} (${empresa.direccion.provincia})`,
+      fonts.regular,
+      9,
+      colors.muted,
+    ],
+    [`Teléfono: ${empresa.telefonoPresupuestos}`, fonts.regular, 9, colors.muted],
+    [`Email: ${empresa.email}`, fonts.regular, 9, colors.muted],
+    [`Web: ${empresa.web}`, fonts.regular, 9, colors.muted],
   ] as const;
 
   companyLines.forEach(([line, font, size, color], index) => {
@@ -698,11 +705,22 @@ function drawTotals(ctx: PdfContext, presupuesto: PresupuestoPdf) {
 }
 
 function drawFooter(ctx: PdfContext, presupuesto: PresupuestoPdf) {
-  ensureSpace(ctx, 110);
-
   const observaciones = [presupuesto.observaciones, ivaIncludedText]
     .filter(Boolean)
     .join("\n\n");
+  const observationLines = wrapText(
+    observaciones,
+    ctx.fonts.regular,
+    10,
+    contentWidth,
+  );
+  const observationHeight = 18 + observationLines.length * 14 + 18;
+  const availablePageHeight = ctx.page.getHeight() - margin * 2;
+
+  ensureSpace(
+    ctx,
+    observationHeight <= availablePageHeight ? observationHeight : 110,
+  );
 
   drawText(ctx.page, "Observaciones", margin, ctx.y, ctx.fonts.bold, 11);
   ctx.y += 18;
